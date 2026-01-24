@@ -1,0 +1,264 @@
+"""Authentication views.
+
+Provides login, logout, and registration routes with security protections.
+"""
+
+import time
+from datetime import datetime, timezone
+from urllib.parse import urlparse, urljoin
+
+from argon2.exceptions import VerifyMismatchError, InvalidHashError
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, jsonify
+from flask_login import login_required, current_user, login_user
+
+from core.extensions import db
+from core.settings_manager import settings_manager
+from utils.session_navigation import is_ajax_request, get_return_url
+from .forms import LoginForm, RegistrationForm, ChangePasswordForm
+from .models import User, UserStatus, UserRole
+from .services import (
+    authenticate_user,
+    login_admin,
+    logout_admin,
+    is_account_locked,
+    record_failed_attempt,
+    clear_failed_attempts,
+    calculate_login_delay,
+    hash_password,
+    ph
+)
+
+bp = Blueprint('auth', __name__, url_prefix='/auth')
+
+
+@bp.before_app_request
+def check_force_password_change():
+    """Enforce password change and session version before allowing access.
+
+    Checks:
+    1. Session version for USER role - logout if version mismatch
+    2. Force password change redirect for all authenticated users
+
+    Redirects authenticated users with force_password_change=True to the
+    change-password page, except for logout and change-password endpoints.
+    API requests receive JSON error response instead of redirect.
+    """
+    if not current_user.is_authenticated:
+        return None
+
+    # Check session version for USER role (invalidated on mode switch to single_user)
+    if current_user.role == UserRole.USER:
+        session_version = session.get('_session_version')
+        current_version = settings_manager.get('user_session_version')
+        if session_version is None or session_version != current_version:
+            logout_admin()
+            return redirect(url_for('auth.login'))
+
+    if not current_user.force_password_change:
+        return None
+
+    allowed_endpoints = ('auth.change_password', 'auth.logout', 'static')
+    if request.endpoint in allowed_endpoints:
+        return None
+
+    # Return JSON for API and AJAX requests
+    if '/api/' in request.path or is_ajax_request():
+        return jsonify({
+            'error': 'Password change required',
+            'message': 'Passwortänderung erforderlich.'
+        }), 403
+
+    return redirect(url_for('auth.change_password'))
+
+
+def is_safe_redirect_url(target):
+    """Validate redirect URL to prevent open redirect attacks.
+
+    Args:
+        target: URL to validate.
+
+    Returns:
+        True if URL is safe (same host), False otherwise.
+    """
+    if not target:
+        return False
+
+    ref_url = urlparse(request.host_url)
+    test_url = urlparse(urljoin(request.host_url, target))
+
+    return (
+        test_url.scheme in ('http', 'https') and
+        ref_url.netloc == test_url.netloc
+    )
+
+
+@bp.route('/login', methods=['GET', 'POST'])
+def login():
+    """Handle user login with account lockout protection."""
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+
+    form = LoginForm()
+    self_registration_enabled = settings_manager.get('self_registration_enabled')
+
+    if form.validate_on_submit():
+        username = form.username.data.strip().lower()
+        password = form.password.data
+        lockout_duration = settings_manager.get('lockout_duration_minutes')
+        lockout_threshold = settings_manager.get('lockout_threshold')
+
+        if is_account_locked(username):
+            flash(f'Konto temporär gesperrt. Bitte warten Sie {lockout_duration} Minuten.', 'danger')
+            return render_template(
+                'auth/login.html',
+                form=form,
+                self_registration_enabled=self_registration_enabled
+            )
+
+        user, error_message = authenticate_user(username, password)
+
+        if user:
+            clear_failed_attempts(username)
+            login_admin(user, remember=form.remember.data)
+
+            # Check if password change is required
+            if user.force_password_change:
+                flash('Bitte ändern Sie Ihr Passwort.', 'warning')
+                return redirect(url_for('auth.change_password'))
+
+            flash('Erfolgreich angemeldet.', 'success')
+
+            next_page = request.args.get('next')
+            if not is_safe_redirect_url(next_page):
+                next_page = url_for('dashboard.index')
+            return redirect(next_page)
+
+        # Show status-specific message if provided
+        # Still record failed attempt to prevent password enumeration
+        if error_message:
+            record_failed_attempt(username)
+            delay = calculate_login_delay(username)
+            if delay > 0:
+                time.sleep(delay)
+            flash(error_message, 'warning')
+            return render_template(
+                'auth/login.html',
+                form=form,
+                self_registration_enabled=self_registration_enabled
+            )
+
+        result = record_failed_attempt(username)
+
+        # Apply progressive delay before responding
+        delay = calculate_login_delay(username)
+        if delay > 0:
+            time.sleep(delay)
+
+        if result['locked_until']:
+            flash(f'Zu viele Fehlversuche. Bitte warten Sie {lockout_duration} Minuten.', 'danger')
+        else:
+            remaining_attempts = lockout_threshold - result['count']
+            if remaining_attempts > 0:
+                flash(f'Ungültiger Benutzername oder Passwort. Noch {remaining_attempts} Versuch(e).', 'danger')
+            else:
+                flash('Ungültiger Benutzername oder Passwort.', 'danger')
+
+    return render_template(
+        'auth/login.html',
+        form=form,
+        self_registration_enabled=self_registration_enabled
+    )
+
+
+@bp.route('/logout')
+@login_required
+def logout():
+    """Handle user logout."""
+    logout_admin()
+    flash('Sie wurden abgemeldet.', 'info')
+    return redirect(url_for('auth.login'))
+
+
+@bp.route('/register', methods=['GET', 'POST'])
+def register():
+    """Handle user self-registration (when enabled)."""
+    if not settings_manager.get('self_registration_enabled'):
+        flash('Die Selbstregistrierung ist deaktiviert.', 'warning')
+        return redirect(url_for('auth.login'))
+
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard.index'))
+
+    form = RegistrationForm()
+
+    if form.validate_on_submit():
+        user = User(
+            username=form.username.data.strip().lower(),
+            name=form.name.data.strip(),
+            email=form.email.data.strip().lower() if form.email.data else None,
+            password_hash=hash_password(form.password.data),
+            status=UserStatus.PENDING
+        )
+        db.session.add(user)
+        db.session.commit()
+
+        flash(
+            'Registrierung erfolgreich! Ihr Konto muss von einem Administrator '
+            'freigeschaltet werden, bevor Sie sich anmelden können.',
+            'success'
+        )
+        return redirect(url_for('auth.login'))
+
+    return render_template('auth/register.html', form=form)
+
+
+@bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    """Handle forced password change."""
+    form = ChangePasswordForm()
+
+    if form.validate_on_submit():
+        # Verify current password (constant-time)
+        try:
+            ph.verify(current_user.password_hash, form.current_password.data)
+            password_valid = True
+        except (VerifyMismatchError, InvalidHashError):
+            password_valid = False
+
+        if not password_valid:
+            # Simulate successful path timing (verify + hash + overhead)
+            hash_password("dummy_password_for_timing")
+            flash('Aktuelles Passwort ist falsch.', 'danger')
+            return render_template('auth/change_password.html', form=form)
+
+        # Prevent reuse of current password
+        if form.current_password.data == form.new_password.data:
+            flash('Das neue Passwort darf nicht mit dem aktuellen übereinstimmen.', 'danger')
+            return render_template('auth/change_password.html', form=form)
+
+        # Update password
+        current_user.password_hash = hash_password(form.new_password.data)
+        current_user.force_password_change = False
+        current_user.has_real_password = True
+        db.session.commit()
+
+        # Cache user reference and role before clearing session
+        user = current_user._get_current_object()
+        user_role = user.role
+        return_url = get_return_url('dashboard.index')
+
+        # Regenerate session with same metadata as login_admin()
+        session.clear()
+        login_user(user)
+        session.permanent = True
+        session['_created_at'] = datetime.now(timezone.utc).isoformat()
+        session['user_role'] = user_role.value
+
+        if user_role == UserRole.USER:
+            session['_session_version'] = settings_manager.get('user_session_version')
+
+        flash('Passwort erfolgreich geändert.', 'success')
+        return redirect(return_url)
+
+    return render_template('auth/change_password.html', form=form)

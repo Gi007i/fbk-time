@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Neuer Mitarbeitender - FBK-Time{% endblock %}
+
+{% block content %}
+<h1>Neuer Mitarbeitender</h1>
+
+<article>
+    <form method="POST" action="{{ url_for('users.create') }}" data-ajax-form>
+        {{ form.hidden_tag() }}
+
+        <label for="username">
+            Benutzername *
+            {{ form.username(id="username", placeholder="z.B. mmustermann",
+               **{'aria-invalid': 'true' if form.username.errors else none}) }}
+            {% if form.username.errors %}
+            <small>{{ form.username.errors[0] }}</small>
+            {% endif %}
+        </label>
+
+        {% if not hide_password %}
+        <label for="password" id="password-field"{% if single_user_mode %} class="hidden"{% endif %}>
+            Passwort *
+            {{ form.password(id="password", placeholder=password_policy.placeholder,
+               **{'aria-invalid': 'true' if form.password.errors or password_error else none}) }}
+            {% if form.password.errors %}
+            <small>{{ form.password.errors[0] }}</small>
+            {% elif password_error %}
+            <small>{{ password_error }}</small>
+            {% else %}
+            <small>{% for req in password_policy.requirements %}{{ req }}{% if not loop.last %} · {% endif %}{% endfor %}</small>
+            {% endif %}
+        </label>
+        {% endif %}
+
+        <label for="name">
+            Anzeigename *
+            {{ form.name(id="name", placeholder="z.B. Max Mustermann",
+               **{'aria-invalid': 'true' if form.name.errors else none}) }}
+            {% if form.name.errors %}
+            <small>{{ form.name.errors[0] }}</small>
+            {% endif %}
+        </label>
+
+        <label for="email">
+            E-Mail
+            {{ form.email(id="email", type="email", placeholder="z.B. max.mustermann@firma.de",
+               **{'aria-invalid': 'true' if form.email.errors else none}) }}
+            {% if form.email.errors %}
+            <small>{{ form.email.errors[0] }}</small>
+            {% else %}
+            <small>Optional. Wird für Benachrichtigungen verwendet.</small>
+            {% endif %}
+        </label>
+
+        {% if current_user.is_admin %}
+        <label for="role">
+            Rolle
+            {{ form.role(id="role",
+               **{'aria-invalid': 'true' if form.role.errors else none}) }}
+            {% if form.role.errors %}
+            <small>{{ form.role.errors[0] }}</small>
+            {% else %}
+            <small>User: Kann nur eigene Abwesenheiten verwalten. Manager: Kann alle Abwesenheiten verwalten. Admin: Vollzugriff.</small>
+            {% endif %}
+        </label>
+        {% endif %}
+
+        <hr>
+
+        <div class="grid">
+            <button type="submit" class="outline">Mitarbeitenden erstellen</button>
+            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <div></div>
+        </div>
+    </form>
+</article>
+{% endblock %}
+
+{% if single_user_mode %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/user-form.js') }}"></script>
+{% endblock %}
+{% endif %}

@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Mitarbeitende - FBK-Time{% endblock %}
+
+{% block content %}
+<div class="grid page-header">
+    <h1>Mitarbeitende</h1>
+    <nav><ul><li><a href="{{ url_for('users.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+</div>
+
+<details id="filter-panel">
+    <summary><strong>Filter</strong></summary>
+    <form method="GET">
+        <fieldset class="grid">
+            <label>
+                Suche
+                <input type="text" name="search" value="{{ search }}" placeholder="Name, Benutzername oder E-Mail">
+            </label>
+            <label>
+                Status
+                <select name="status">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Alle</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Aktiv</option>
+                    <option value="disabled" {% if status_filter == 'disabled' %}selected{% endif %}>Deaktiviert</option>
+                    <option value="locked" {% if status_filter == 'locked' %}selected{% endif %}>Gesperrt</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Ausstehend</option>
+                </select>
+            </label>
+            <label>
+                Rolle
+                <select name="role">
+                    <option value="all" {% if role_filter == 'all' %}selected{% endif %}>Alle</option>
+                    <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>Admin</option>
+                    <option value="manager" {% if role_filter == 'manager' %}selected{% endif %}>Manager</option>
+                    <option value="user" {% if role_filter == 'user' %}selected{% endif %}>User</option>
+                </select>
+            </label>
+        </fieldset>
+        <div class="grid">
+            <button type="submit" class="outline">Filtern</button>
+            <button type="button" data-href="{{ url_for('users.list_users') }}" class="outline secondary">Zurücksetzen</button>
+            <div></div>
+        </div>
+    </form>
+</details>
+
+{% if users %}
+{% for user in users %}
+<details>
+    <summary>
+        <strong>{{ user.name }}</strong>
+        <small>({{ user.username }})</small>
+        {% if user.role == UserRole.ADMIN %}<kbd>Admin</kbd>{% elif user.role == UserRole.MANAGER %}<kbd>Manager</kbd>{% endif %}
+        {% if user.status == UserStatus.DISABLED %}<del>Deaktiviert</del>{% elif user.status == UserStatus.LOCKED %}<mark>Gesperrt</mark>{% elif user.status == UserStatus.PENDING %}<mark>Ausstehend</mark>{% elif user.status == UserStatus.MANAGED %}<ins>Verwaltet</ins>{% endif %}
+    </summary>
+
+    <figure>
+        <table>
+            <tbody>
+                <tr>
+                    <th>Benutzername</th>
+                    <td>{{ user.username }}</td>
+                </tr>
+                <tr>
+                    <th>E-Mail</th>
+                    <td>{{ user.email or '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Rolle</th>
+                    <td>{{ user.role.value | capitalize }}</td>
+                </tr>
+                <tr>
+                    <th>Status</th>
+                    <td>{{ user.status.value | capitalize }}</td>
+                </tr>
+                <tr>
+                    <th>Erstellt</th>
+                    <td>{{ user.created_at|format_date(include_time=True) if user.created_at else '-' }}</td>
+                </tr>
+                <tr>
+                    <th>Letzter Login</th>
+                    <td>{{ user.last_login|format_date(include_time=True) if user.last_login else '-' }}</td>
+                </tr>
+                {% if user.status != UserStatus.MANAGED and failed_attempts.get(user.username, 0) > 0 %}
+                <tr>
+                    <th>Fehlversuche</th>
+                    <td><mark>{{ failed_attempts[user.username] }}</mark></td>
+                </tr>
+                {% endif %}
+                <tr>
+                    <td colspan="2">
+                        <div class="grid">
+                            {% if current_user.is_admin or user.role == UserRole.USER %}
+                            <a href="{{ url_for('users.edit', id=user.id) }}" role="button" class="outline secondary">Bearbeiten</a>
+                            {% else %}
+                            <div></div>
+                            {% endif %}
+                            {% if user.id != current_user.id %}
+                            {% if user.status == UserStatus.ACTIVE and (current_user.is_admin or user.role == UserRole.USER) %}
+                            <button type="button"
+                                    class="outline contrast"
+                                    data-action="toggle"
+                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                Deaktivieren
+                            </button>
+                            {% elif user.status == UserStatus.DISABLED and (current_user.is_admin or user.role == UserRole.USER) %}
+                            <button type="button"
+                                    class="outline"
+                                    data-action="toggle"
+                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                Aktivieren
+                            </button>
+                            {% elif user.status == UserStatus.LOCKED and current_user.is_admin %}
+                            <button type="button"
+                                    class="outline"
+                                    data-action="toggle"
+                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                Entsperren
+                            </button>
+                            {% elif user.status == UserStatus.PENDING and current_user.is_admin %}
+                            <button type="button"
+                                    class="outline"
+                                    data-action="toggle"
+                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                Aktivieren
+                            </button>
+                            {% elif user.status == UserStatus.MANAGED and current_user.is_admin %}
+                            <a href="{{ url_for('users.edit', id=user.id, activate_login=1) }}"
+                               role="button"
+                               class="outline">
+                                Login aktivieren
+                            </a>
+                            {% endif %}
+                            {% if current_user.is_admin %}
+                            <button type="button"
+                                    class="outline contrast"
+                                    data-action="delete"
+                                    data-url="{{ url_for('users.delete', id=user.id) }}"
+                                    data-confirm="Benutzer wirklich löschen? Alle Abwesenheiten werden ebenfalls gelöscht!">
+                                Löschen
+                            </button>
+                            {% else %}
+                            <div></div>
+                            {% endif %}
+                            {% else %}
+                            <div></div>
+                            <div></div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </figure>
+</details>
+{% endfor %}
+
+{% if pagination.total_pages > 1 %}
+<nav class="pagination" aria-label="Seitennavigation">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('users.list_users', page=pagination.page-1, search=search, status=status_filter, role=role_filter) }}">&laquo; Zurück</a>
+    {% else %}
+    <span>&laquo; Zurück</span>
+    {% endif %}
+
+    {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}
+        <span class="current">{{ p }}</span>
+        {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+        <a href="{{ url_for('users.list_users', page=p, search=search, status=status_filter, role=role_filter) }}">{{ p }}</a>
+        {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+        <span>...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if pagination.has_next %}
+    <a href="{{ url_for('users.list_users', page=pagination.page+1, search=search, status=status_filter, role=role_filter) }}">Weiter &raquo;</a>
+    {% else %}
+    <span>Weiter &raquo;</span>
+    {% endif %}
+</nav>
+<p><small>Seite {{ pagination.page }} von {{ pagination.total_pages }} ({{ pagination.total }} Einträge gesamt)</small></p>
+{% endif %}
+{% else %}
+<p><small>Keine Mitarbeitenden gefunden.</small></p>
+{% endif %}
+{% endblock %}

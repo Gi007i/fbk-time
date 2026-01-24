@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Abwesenheit Details - FBK-Time{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="{{ origin.url }}">{{ origin.label }}</a></li>
+        <li>Details</li>
+    </ul>
+</nav>
+
+<h1>Abwesenheit Details</h1>
+
+<article>
+    <dl>
+        <dt><strong>Person</strong></dt>
+        <dd>{{ absence.user.name if absence.user else '-' }}</dd>
+
+        <dt><strong>Kategorie</strong></dt>
+        <dd>
+            {% if absence.category %}
+            <span class="category-badge category-{{ absence.category.id }}">
+                {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span> {% endif %}{{ absence.category.name }}
+            </span>
+            {% else %}
+            -
+            {% endif %}
+        </dd>
+
+        <dt><strong>Typ</strong></dt>
+        <dd>
+            {% if absence.category %}
+                {% if absence.category.is_present %}
+                <span class="text-positive">Anwesend (A)</span>
+                {% else %}
+                <span class="text-negative">Abwesend (X)</span>
+                {% endif %}
+            {% else %}
+            -
+            {% endif %}
+        </dd>
+
+        <dt><strong>Zeitraum</strong></dt>
+        <dd>
+            {{ absence.start_date|format_date }}{% if absence.start_date != absence.end_date %} - {{ absence.end_date|format_date }}{% endif %}
+            {% if absence.is_half_day_morning %}
+            <small>(Vormittag)</small>
+            {% elif absence.is_half_day_afternoon %}
+            <small>(Nachmittag)</small>
+            {% elif absence.start_time and absence.end_time %}
+            <small>({{ absence.start_time.strftime('%H:%M') }} - {{ absence.end_time.strftime('%H:%M') }})</small>
+            {% endif %}
+        </dd>
+
+        <dt><strong>Dauer</strong></dt>
+        <dd>{{ absence.duration_days }} Tag{% if absence.duration_days != 1 %}e{% endif %}</dd>
+
+        <dt><strong>Vertretung</strong></dt>
+        <dd>{{ absence.substitute.name if absence.substitute else '-' }}</dd>
+
+        <dt><strong>Notizen</strong></dt>
+        <dd>{{ absence.notes or '-' }}</dd>
+
+        {% if absence.is_recurring and recurrence_info %}
+        <dt><strong>Serie</strong></dt>
+        <dd>🔁 {{ recurrence_info.description }}</dd>
+
+        <dt><strong>Termine</strong></dt>
+        <dd>
+            {{ recurrence_info.occurrence_count }} Termine
+            {% if recurrence_info.deleted_count > 0 %}
+            <small>({{ recurrence_info.deleted_count }} gelöscht)</small>
+            {% endif %}
+            {% if recurrence_info.modified_count > 0 %}
+            <small>({{ recurrence_info.modified_count }} geändert)</small>
+            {% endif %}
+        </dd>
+        {% endif %}
+    </dl>
+
+    {% if occurrences %}
+    <details>
+        <summary><strong>Alle Termine anzeigen</strong> <small>({{ occurrences|length }})</small></summary>
+        <figure>
+            <table class="striped">
+                <thead>
+                    <tr>
+                        <th>Datum</th>
+                        <th>Kategorie</th>
+                        <th>Zeit</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for occ in occurrences %}
+                    <tr>
+                        <td>
+                            <a href="{{ url_for('absences.occurrence_detail', id=absence.id, date_str=occ.date.strftime('%Y-%m-%d')) }}">
+                                {{ occ.date|format_date }}
+                            </a>
+                        </td>
+                        <td>
+                            <span class="category-badge category-{{ occ.category.id }}">
+                                {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if occ.is_half_day_morning %}Vormittag{% elif occ.is_half_day_afternoon %}Nachmittag{% else %}Ganztags{% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </figure>
+    </details>
+    {% endif %}
+
+    <hr>
+
+    <div class="grid">
+        <button type="button" data-href="{{ url_for('absences.edit', id=absence.id) }}" class="outline">
+            {% if absence.is_recurring %}Serie bearbeiten{% else %}Bearbeiten{% endif %}
+        </button>
+        <button type="button"
+                class="outline contrast"
+                data-action="delete"
+                data-url="{{ url_for('absences.delete', id=absence.id) }}"
+                data-confirm="{% if absence.is_recurring %}Diese Serie und alle Termine wirklich löschen?{% else %}Diese Abwesenheit wirklich löschen?{% endif %}">
+            {% if absence.is_recurring %}Serie löschen{% else %}Löschen{% endif %}
+        </button>
+        <div></div>
+    </div>
+</article>
+
+{% if history %}
+<details>
+    <summary><strong>Änderungshistorie</strong> <small>({{ history|length }})</small></summary>
+    <ul>
+        {% for entry in history %}
+        <li>
+            <small><u>{{ entry.changed_at|format_date(include_time=True) }}</u></small><br>
+            <small>{{ entry.field_name }}: {% if entry.old_value %}{{ entry.old_value }} → {% endif %}{{ entry.new_value or '-' }}</small>
+        </li>
+        {% endfor %}
+    </ul>
+</details>
+{% endif %}
+{% endblock %}

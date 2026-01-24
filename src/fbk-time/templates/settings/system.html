@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Systemeinstellungen - FBK-Time{% endblock %}
+
+{% block content %}
+<h1>Systemeinstellungen</h1>
+
+<article>
+    <form method="POST" action="{{ url_for('settings.system_settings') }}" data-ajax-form>
+        {{ form.hidden_tag() }}
+
+        <details>
+            <summary>Kontosperrung</summary>
+
+            <div class="grid">
+                <label for="lockout_threshold">
+                    {{ form.lockout_threshold.label.text }}
+                    {{ form.lockout_threshold(id="lockout_threshold",
+                       **{'aria-invalid': 'true' if form.lockout_threshold.errors else none}) }}
+                    {% if form.lockout_threshold.errors %}
+                    <small>{{ form.lockout_threshold.errors[0] }}</small>
+                    {% else %}
+                    <small>Nach wie vielen Fehlversuchen wird das Konto gesperrt?</small>
+                    {% endif %}
+                </label>
+
+                <label for="lockout_duration_minutes">
+                    {{ form.lockout_duration_minutes.label.text }}
+                    {{ form.lockout_duration_minutes(id="lockout_duration_minutes",
+                       **{'aria-invalid': 'true' if form.lockout_duration_minutes.errors else none}) }}
+                    {% if form.lockout_duration_minutes.errors %}
+                    <small>{{ form.lockout_duration_minutes.errors[0] }}</small>
+                    {% else %}
+                    <small>Wie lange bleibt das Konto gesperrt?</small>
+                    {% endif %}
+                </label>
+            </div>
+
+            <label>
+                {{ form.lockout_delay_enabled(id="lockout_delay_enabled") }}
+                {{ form.lockout_delay_enabled.label.text }}
+            </label>
+
+            <div class="grid">
+                <label for="lockout_delay_base_seconds">
+                    {{ form.lockout_delay_base_seconds.label.text }}
+                    {{ form.lockout_delay_base_seconds(id="lockout_delay_base_seconds",
+                       **{'aria-invalid': 'true' if form.lockout_delay_base_seconds.errors else none}) }}
+                    {% if form.lockout_delay_base_seconds.errors %}
+                    <small>{{ form.lockout_delay_base_seconds.errors[0] }}</small>
+                    {% else %}
+                    <small>Startverzögerung (verdoppelt sich bei jedem Fehlversuch)</small>
+                    {% endif %}
+                </label>
+
+                <label for="lockout_delay_max_seconds">
+                    {{ form.lockout_delay_max_seconds.label.text }}
+                    {{ form.lockout_delay_max_seconds(id="lockout_delay_max_seconds",
+                       **{'aria-invalid': 'true' if form.lockout_delay_max_seconds.errors else none}) }}
+                    {% if form.lockout_delay_max_seconds.errors %}
+                    <small>{{ form.lockout_delay_max_seconds.errors[0] }}</small>
+                    {% else %}
+                    <small>Maximale Verzögerung zwischen Versuchen</small>
+                    {% endif %}
+                </label>
+            </div>
+
+            <label for="lockout_attempt_retention_hours">
+                {{ form.lockout_attempt_retention_hours.label.text }}
+                {{ form.lockout_attempt_retention_hours(id="lockout_attempt_retention_hours",
+                   **{'aria-invalid': 'true' if form.lockout_attempt_retention_hours.errors else none}) }}
+                {% if form.lockout_attempt_retention_hours.errors %}
+                <small>{{ form.lockout_attempt_retention_hours.errors[0] }}</small>
+                {% else %}
+                <small>Wie lange werden Fehlversuche gespeichert?</small>
+                {% endif %}
+            </label>
+
+            <label>
+                {{ form.lockout_cleanup_enabled(id="lockout_cleanup_enabled") }}
+                {{ form.lockout_cleanup_enabled.label.text }}
+            </label>
+
+            <label for="lockout_cleanup_interval_hours">
+                {{ form.lockout_cleanup_interval_hours.label.text }}
+                {{ form.lockout_cleanup_interval_hours(id="lockout_cleanup_interval_hours",
+                   **{'aria-invalid': 'true' if form.lockout_cleanup_interval_hours.errors else none}) }}
+                {% if form.lockout_cleanup_interval_hours.errors %}
+                <small>{{ form.lockout_cleanup_interval_hours.errors[0] }}</small>
+                {% else %}
+                <small>Wie oft wird die Datenbank bereinigt?</small>
+                {% endif %}
+            </label>
+        </details>
+
+        <details>
+            <summary>Passwort-Richtlinie</summary>
+
+            <div class="grid">
+                <label for="password_min_length">
+                    {{ form.password_min_length.label.text }}
+                    {{ form.password_min_length(id="password_min_length",
+                       **{'aria-invalid': 'true' if form.password_min_length.errors else none}) }}
+                    {% if form.password_min_length.errors %}
+                    <small>{{ form.password_min_length.errors[0] }}</small>
+                    {% endif %}
+                </label>
+
+                <label for="password_max_length">
+                    {{ form.password_max_length.label.text }}
+                    {{ form.password_max_length(id="password_max_length",
+                       **{'aria-invalid': 'true' if form.password_max_length.errors else none}) }}
+                    {% if form.password_max_length.errors %}
+                    <small>{{ form.password_max_length.errors[0] }}</small>
+                    {% endif %}
+                </label>
+            </div>
+
+            <fieldset>
+                <legend>Zeichenanforderungen</legend>
+                <label>
+                    {{ form.password_require_uppercase(id="password_require_uppercase") }}
+                    {{ form.password_require_uppercase.label.text }}
+                </label>
+                <label>
+                    {{ form.password_require_lowercase(id="password_require_lowercase") }}
+                    {{ form.password_require_lowercase.label.text }}
+                </label>
+                <label>
+                    {{ form.password_require_numbers(id="password_require_numbers") }}
+                    {{ form.password_require_numbers.label.text }}
+                </label>
+                <label>
+                    {{ form.password_require_symbols(id="password_require_symbols") }}
+                    {{ form.password_require_symbols.label.text }}
+                </label>
+            </fieldset>
+
+            <label>
+                {{ form.password_force_change_on_first_login(id="password_force_change_on_first_login") }}
+                {{ form.password_force_change_on_first_login.label.text }}
+            </label>
+        </details>
+
+        <details>
+            <summary>Kontoverwaltung</summary>
+
+            <label>
+                {{ form.inactive_account_auto_disable(id="inactive_account_auto_disable") }}
+                {{ form.inactive_account_auto_disable.label.text }}
+            </label>
+
+            <label for="inactive_account_days">
+                {{ form.inactive_account_days.label.text }}
+                {{ form.inactive_account_days(id="inactive_account_days",
+                   **{'aria-invalid': 'true' if form.inactive_account_days.errors else none}) }}
+                {% if form.inactive_account_days.errors %}
+                <small>{{ form.inactive_account_days.errors[0] }}</small>
+                {% else %}
+                <small>Nach wie vielen Tagen Inaktivität wird ein Konto deaktiviert?</small>
+                {% endif %}
+            </label>
+
+            <div class="form-group">
+                <label>
+                    {{ form.self_registration_enabled(id="self_registration_enabled") }}
+                    {{ form.self_registration_enabled.label.text }}
+                </label>
+                <small>Nur im Mehrbenutzermodus verfügbar. Registrierte Benutzer erhalten die Rolle 'User' und müssen freigeschaltet werden.</small>
+            </div>
+
+            <label for="operation_mode">
+                {{ form.operation_mode.label.text }}
+                {{ form.operation_mode(id="operation_mode",
+                   **{'aria-invalid': 'true' if form.operation_mode.errors else none}) }}
+                {% if form.operation_mode.errors %}
+                <small>{{ form.operation_mode.errors[0] }}</small>
+                {% else %}
+                <small>Mehrbenutzer: Alle können sich anmelden. Einzelbenutzer: Nur Admin/Manager, User werden verwaltet.</small>
+                {% endif %}
+            </label>
+        </details>
+
+        <details>
+            <summary>Standardwerte für neue Benutzer</summary>
+
+            <div class="grid">
+                <label for="user_default_theme">
+                    {{ form.user_default_theme.label.text }}
+                    {{ form.user_default_theme(id="user_default_theme",
+                       **{'aria-invalid': 'true' if form.user_default_theme.errors else none}) }}
+                    {% if form.user_default_theme.errors %}
+                    <small>{{ form.user_default_theme.errors[0] }}</small>
+                    {% endif %}
+                </label>
+
+                <label for="user_default_date_format">
+                    {{ form.user_default_date_format.label.text }}
+                    {{ form.user_default_date_format(id="user_default_date_format",
+                       **{'aria-invalid': 'true' if form.user_default_date_format.errors else none}) }}
+                    {% if form.user_default_date_format.errors %}
+                    <small>{{ form.user_default_date_format.errors[0] }}</small>
+                    {% endif %}
+                </label>
+            </div>
+
+            <div class="grid">
+                <label for="user_default_items_per_page">
+                    {{ form.user_default_items_per_page.label.text }}
+                    {{ form.user_default_items_per_page(id="user_default_items_per_page",
+                       **{'aria-invalid': 'true' if form.user_default_items_per_page.errors else none}) }}
+                    {% if form.user_default_items_per_page.errors %}
+                    <small>{{ form.user_default_items_per_page.errors[0] }}</small>
+                    {% endif %}
+                </label>
+
+                <label for="user_default_holiday_region">
+                    {{ form.user_default_holiday_region.label.text }}
+                    {{ form.user_default_holiday_region(id="user_default_holiday_region",
+                       **{'aria-invalid': 'true' if form.user_default_holiday_region.errors else none}) }}
+                    {% if form.user_default_holiday_region.errors %}
+                    <small>{{ form.user_default_holiday_region.errors[0] }}</small>
+                    {% endif %}
+                </label>
+            </div>
+
+            <label for="user_default_text_color">
+                {{ form.user_default_text_color.label.text }}
+                <div class="grid">
+                    {{ form.user_default_text_color(id="user_default_text_color", type="color",
+                       **{'aria-invalid': 'true' if form.user_default_text_color.errors else none}) }}
+                    <div></div>
+                    <div></div>
+                </div>
+                {% if form.user_default_text_color.errors %}
+                <small>{{ form.user_default_text_color.errors[0] }}</small>
+                {% endif %}
+            </label>
+        </details>
+
+        <div class="grid">
+            <button type="submit" class="outline">Speichern</button>
+            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <div></div>
+        </div>
+    </form>
+</article>
+{% endblock %}

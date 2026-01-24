@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Termin bearbeiten - FBK-Time{% endblock %}
+
+{% block content %}
+<h1>Termin bearbeiten</h1>
+
+<article>
+    <form id="absence-form" method="POST" action="{{ url_for('absences.occurrence_edit', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" data-ajax-form>
+        {{ form.hidden_tag() }}
+
+        <label>
+            Person
+            <input type="text" value="{{ absence.user.name }}" readonly>
+        </label>
+
+        <label>
+            Datum
+            <input type="text" value="{{ occurrence_date|format_date }}" readonly>
+        </label>
+
+        <label>
+            Kategorie
+            {{ form.category_id(**{'aria-invalid': 'true' if form.category_id.errors else none}) }}
+            {% if form.category_id.errors %}
+            <small>{{ form.category_id.errors[0] }}</small>
+            {% endif %}
+        </label>
+
+        <fieldset>
+            <legend>Zeittyp</legend>
+            <label>
+                <input type="radio" name="time_type" value="all_day" {% if form.time_type.data == 'all_day' %}checked{% endif %}>
+                Ganztags
+            </label>
+            <label>
+                <input type="radio" name="time_type" value="half_day_morning" {% if form.time_type.data == 'half_day_morning' %}checked{% endif %}>
+                Halbtags Vormittag
+            </label>
+            <label>
+                <input type="radio" name="time_type" value="half_day_afternoon" {% if form.time_type.data == 'half_day_afternoon' %}checked{% endif %}>
+                Halbtags Nachmittag
+            </label>
+        </fieldset>
+
+        <label>
+            Vertretung
+            {{ form.substitute_id(id="substitute_id", **{'aria-invalid': 'true' if form.substitute_id.errors else none}) }}
+            {% if form.substitute_id.errors %}
+            <small>{{ form.substitute_id.errors[0] }}</small>
+            {% else %}
+            <small>Optional - wer übernimmt die Aufgaben?</small>
+            {% endif %}
+        </label>
+
+        <label>
+            Notizen
+            {{ form.notes(rows="3", placeholder="Optionale Notizen für diesen Termin...",
+               **{'aria-invalid': 'true' if form.notes.errors else none}) }}
+            {% if form.notes.errors %}
+            <small>{{ form.notes.errors[0] }}</small>
+            {% endif %}
+        </label>
+
+        <hr>
+
+        <div class="grid">
+            <button type="submit" class="outline">Änderungen speichern</button>
+            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <div></div>
+        </div>
+    </form>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/absence-form.js') }}"></script>
+{% endblock %}

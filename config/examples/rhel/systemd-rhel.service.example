@@ -1,0 +1,51 @@
+# FBK-Time Gunicorn Service for RHEL 9
+# /etc/systemd/system/fbk-time.service
+#
+# Install:
+#   1. Create service user: useradd -r -s /sbin/nologin fbktime
+#   2. Set ownership: chown -R fbktime:fbktime /var/www/fbk-time
+#   3. Copy this file: cp systemd-rhel9.service.example /etc/systemd/system/fbk-time.service
+#   4. Reload systemd: systemctl daemon-reload
+#   5. Enable service: systemctl enable --now fbk-time
+
+[Unit]
+Description=FBK-Time Gunicorn Application Server
+Documentation=https://gunicorn.org/
+After=network.target
+
+[Service]
+Type=notify
+User=fbktime
+Group=fbktime
+WorkingDirectory=/var/www/fbk-time
+Environment=PYTHONPATH=/var/www/fbk-time
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/fbk-time/venv/bin/gunicorn --config gunicorn.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fbk-time
+
+# Security hardening (RHEL 9 systemd)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/www/fbk-time/data
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target

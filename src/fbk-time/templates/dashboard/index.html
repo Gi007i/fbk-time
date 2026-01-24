@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - FBK-Time{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+
+<details open>
+    <summary>
+        <strong>Heute</strong> <small>{{ today|format_date }}</small>
+        {% if today_holiday %}<mark>{{ today_holiday }}</mark>{% endif %}
+    </summary>
+
+    <p><strong class="text-negative">Abwesend ({{ today_absent|length }})</strong></p>
+    {% if today_absent %}
+    <ul>
+        {% for absence in today_absent %}
+        <li>
+            <span class="category-badge category-{{ absence.category.id }}">
+                {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span> {% endif %}{{ absence.category.name }}
+            </span>
+            <strong>{{ absence.user.name }}</strong>
+            {% if absence.is_half_day_morning %}
+            <small>(Vormittag)</small>
+            {% elif absence.is_half_day_afternoon %}
+            <small>(Nachmittag)</small>
+            {% elif absence.start_time and absence.end_time %}
+            <small>({{ absence.start_time.strftime('%H:%M') }} - {{ absence.end_time.strftime('%H:%M') }})</small>
+            {% endif %}
+            {% if absence.substitute %}
+            <small>Vertretung: {{ absence.substitute.name }}</small>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p><small>Niemand abwesend</small></p>
+    {% endif %}
+
+    <p><strong class="text-positive">Anwesend ({{ today_present|length }})</strong></p>
+    {% if today_present %}
+    <ul>
+        {% for absence in today_present %}
+        <li>
+            <span class="category-badge category-{{ absence.category.id }}">
+                {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span> {% endif %}{{ absence.category.name }}
+            </span>
+            <strong>{{ absence.user.name }}</strong>
+            {% if absence.is_half_day_morning %}
+            <small>(Vormittag)</small>
+            {% elif absence.is_half_day_afternoon %}
+            <small>(Nachmittag)</small>
+            {% elif absence.start_time and absence.end_time %}
+            <small>({{ absence.start_time.strftime('%H:%M') }} - {{ absence.end_time.strftime('%H:%M') }})</small>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <p><small>Niemand anwesend</small></p>
+    {% endif %}
+</details>
+
+<details open>
+    <summary>
+        <strong>Diese Woche</strong> <small>{{ week_start|format_date(short=True) }} - {{ week_end|format_date(short=True) }}</small>
+    </summary>
+    {% if week_absences %}
+    <figure>
+        <table>
+            <thead>
+                <tr>
+                    <th>Datum</th>
+                    <th>Name</th>
+                    <th>Kategorie</th>
+                    <th>Typ</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for absence in week_absences %}
+                <tr>
+                    <td>{{ absence.start_date|format_date(short=True) }}</td>
+                    <td><strong>{{ absence.user.name }}</strong></td>
+                    <td>{{ absence.category.name }}</td>
+                    <td>{{ 'A' if absence.category.is_present else 'X' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </figure>
+    <small><strong>A</strong> = Anwesend | <strong>X</strong> = Abwesend</small>
+    {% else %}
+    <p><small>Keine Einträge diese Woche</small></p>
+    {% endif %}
+</details>
+
+<details{% if warnings %} open{% endif %}>
+    <summary><strong>Konflikte &amp; Warnungen</strong> <small>({{ warnings|length }})</small></summary>
+    {% if warnings %}
+    <figure>
+        <table>
+            <tbody>
+                {% for warning in warnings %}
+                <tr>
+                    <td>
+                        <strong>{{ warning.user }}</strong><br>
+                        <small>
+                            {% if warning.type == 'missing_substitute' %}
+                            Vertretung fehlt für {{ warning.category }}
+                            {% elif warning.type == 'user_overlap' %}
+                            Überlappende Einträge: {{ warning.absence1_category }}
+                            <span class="nowrap">({{ warning.absence1_start|format_date(short=True) }} - {{ warning.absence1_end|format_date(short=True) }})</span>
+                            und {{ warning.absence2_category }}
+                            <span class="nowrap">({{ warning.absence2_start|format_date(short=True) }} - {{ warning.absence2_end|format_date(short=True) }})</span>
+                            {% elif warning.type == 'substitute_conflict' %}
+                            Vertretung {{ warning.substitute }} ist selbst abwesend
+                            <span class="nowrap">({{ warning.conflict_start|format_date(short=True) }} - {{ warning.conflict_end|format_date(short=True) }})</span>
+                            {% elif warning.type == 'substitute_double_assignment' %}
+                            {{ warning.substitute }} vertritt bereits {{ warning.other_user }}
+                            <span class="nowrap">({{ warning.other_start|format_date(short=True) }} - {{ warning.other_end|format_date(short=True) }})</span>
+                            {% endif %}
+                        </small>
+                    </td>
+                    <td><a href="{{ url_for('absences.edit', id=warning.absence_id) }}">Bearbeiten</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </figure>
+    {% else %}
+    <p><small class="text-positive">Keine Konflikte gefunden</small></p>
+    {% endif %}
+</details>
+{% endblock %}

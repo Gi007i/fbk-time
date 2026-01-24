@@ -1,0 +1,29 @@
+# FBK-Time Gunicorn Service for Ubuntu/Debian
+# /etc/systemd/system/fbk-time.service
+#
+# Install:
+#   1. Set ownership: chown -R www-data:www-data /var/www/fbk-time
+#   2. Copy this file: cp systemd-ubuntu.service.example /etc/systemd/system/fbk-time.service
+#   3. Reload systemd: systemctl daemon-reload
+#   4. Enable service: systemctl enable --now fbk-time
+
+[Unit]
+Description=FBK-Time Gunicorn Application Server
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/fbk-time
+Environment=FLASK_ENV=production
+Environment=PYTHONPATH=/var/www/fbk-time
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/var/www/fbk-time/venv/bin/gunicorn --config gunicorn.conf.py app:app
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=fbk-time
+
+[Install]
+WantedBy=multi-user.target

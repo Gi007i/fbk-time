@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Serverfehler - FBK-Time{% endblock %}
+
+{% block content %}
+<center>
+    <article>
+        <h1 class="text-negative">⚠️ 500</h1>
+        <p><strong>Serverfehler</strong></p>
+        <small>Ein unerwarteter Fehler ist aufgetreten. Bitte versuchen Sie es später erneut.</small>
+    </article>
+    <p><a href="{{ url_for('dashboard.index') }}" role="button">Zur Startseite</a></p>
+</center>
+{% endblock %}

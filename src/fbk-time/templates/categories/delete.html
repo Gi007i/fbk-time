@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+
+{% block title %}Kategorie löschen - FBK-Time{% endblock %}
+
+{% block content %}
+<hgroup>
+    <h1>Kategorie löschen</h1>
+    <p>
+        <span class="category-badge category-{{ category.id }}">{% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}</span>
+    </p>
+</hgroup>
+
+<article>
+    {% if absences_count > 0 %}
+    <form method="POST" action="{{ url_for('categories.delete', id=category.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <fieldset>
+            <legend>Was möchten Sie tun?</legend>
+
+            <label>
+                <input type="radio" name="action" value="transfer" checked>
+                Abwesenheiten übertragen an:
+            </label>
+            <select name="new_category_id">
+                {% for cat in other_categories %}
+                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                {% endfor %}
+            </select>
+
+            <label>
+                <input type="radio" name="action" value="delete_all">
+                Alle {{ absences_count }} Abwesenheit(en) unwiderruflich löschen
+            </label>
+        </fieldset>
+
+        <hr>
+
+        <div class="grid">
+            <button type="submit" class="outline contrast">Kategorie löschen</button>
+            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <div></div>
+        </div>
+    </form>
+
+    {% else %}
+    <p>Diese Kategorie hat keine zugeordneten Abwesenheiten.</p>
+
+    <form method="POST" action="{{ url_for('categories.delete', id=category.id) }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <hr>
+
+        <div class="grid">
+            <button type="submit" class="outline contrast">Kategorie löschen</button>
+            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <div></div>
+        </div>
+    </form>
+    {% endif %}
+</article>
+{% endblock %}

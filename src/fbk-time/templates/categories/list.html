@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}Kategorien - FBK-Time{% endblock %}
+
+{% block content %}
+<div class="grid page-header">
+    <h1>Kategorien</h1>
+    <nav><ul><li><a href="{{ url_for('categories.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+</div>
+
+<article>
+    <form method="GET">
+        <label>
+            <input type="checkbox" role="switch" name="show_inactive" value="true" {% if show_inactive %}checked{% endif %} data-autosubmit>
+            Inaktive anzeigen
+        </label>
+    </form>
+</article>
+
+{% if categories %}
+{% for category in categories %}
+<details>
+    <summary>
+        <span class="category-badge category-{{ category.id }}">{% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}</span>
+        {% if category.active %}<ins>Aktiv</ins>{% else %}<del>Inaktiv</del>{% endif %}
+    </summary>
+
+    <figure>
+        <table>
+            <tbody>
+                <tr>
+                    <th>Typ</th>
+                    <td>{% if category.is_present %}<span class="text-positive">Anwesend</span>{% else %}<span class="text-negative">Abwesend</span>{% endif %}</td>
+                </tr>
+                <tr>
+                    <th>Vertretung</th>
+                    <td>{{ 'Erforderlich' if category.requires_substitute else 'Nicht erforderlich' }}</td>
+                </tr>
+                <tr>
+                    <td colspan="2">
+                        <div class="grid">
+                            <a href="{{ url_for('categories.edit', id=category.id) }}" role="button" class="outline secondary">Bearbeiten</a>
+                            <button type="button"
+                                    class="outline"
+                                    data-action="toggle"
+                                    data-url="{{ url_for('categories.toggle_active', id=category.id) }}">
+                                {% if category.active %}Deaktivieren{% else %}Aktivieren{% endif %}
+                            </button>
+                            <button type="button"
+                                    class="outline contrast"
+                                    data-action="delete"
+                                    data-url="{{ url_for('categories.delete', id=category.id) }}"
+                                    data-confirm="Kategorie wirklich löschen?">
+                                Löschen
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </figure>
+</details>
+{% endfor %}
+
+{% if pagination.total_pages > 1 %}
+<nav class="pagination" aria-label="Seitennavigation">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('categories.list_categories', page=pagination.page-1, show_inactive='true' if show_inactive else '') }}">&laquo; Zurück</a>
+    {% else %}
+    <span>&laquo; Zurück</span>
+    {% endif %}
+
+    {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}
+        <span class="current">{{ p }}</span>
+        {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+        <a href="{{ url_for('categories.list_categories', page=p, show_inactive='true' if show_inactive else '') }}">{{ p }}</a>
+        {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+        <span>...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if pagination.has_next %}
+    <a href="{{ url_for('categories.list_categories', page=pagination.page+1, show_inactive='true' if show_inactive else '') }}">Weiter &raquo;</a>
+    {% else %}
+    <span>Weiter &raquo;</span>
+    {% endif %}
+</nav>
+<p><small>Seite {{ pagination.page }} von {{ pagination.total_pages }} ({{ pagination.total }} Einträge gesamt)</small></p>
+{% endif %}
+{% else %}
+<p><small>Noch keine Kategorien vorhanden.</small></p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+
+{% block title %}Registrieren - FBK-Time{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div></div>
+    <article>
+        <hgroup>
+            <h1>Registrieren</h1>
+            <p>Neues Konto erstellen</p>
+        </hgroup>
+
+        <form method="POST" action="{{ url_for('auth.register') }}">
+            {{ form.hidden_tag() }}
+
+            <label>
+                Benutzername
+                {% if form.username.errors %}
+                {{ form.username(autocomplete="username", autofocus=true, **{'aria-invalid': 'true'}) }}
+                <small>{{ form.username.errors[0] }}</small>
+                {% else %}
+                {{ form.username(autocomplete="username", autofocus=true) }}
+                {% endif %}
+            </label>
+
+            <label>
+                Vollständiger Name
+                {% if form.name.errors %}
+                {{ form.name(autocomplete="name", **{'aria-invalid': 'true'}) }}
+                <small>{{ form.name.errors[0] }}</small>
+                {% else %}
+                {{ form.name(autocomplete="name") }}
+                {% endif %}
+            </label>
+
+            <label>
+                E-Mail (optional)
+                {% if form.email.errors %}
+                {{ form.email(autocomplete="email", **{'aria-invalid': 'true'}) }}
+                <small>{{ form.email.errors[0] }}</small>
+                {% else %}
+                {{ form.email(autocomplete="email") }}
+                {% endif %}
+            </label>
+
+            <label>
+                Passwort
+                {% if form.password.errors %}
+                {{ form.password(autocomplete="new-password", placeholder=password_policy.placeholder, **{'aria-invalid': 'true'}) }}
+                <small>{{ form.password.errors[0] }}</small>
+                {% else %}
+                {{ form.password(autocomplete="new-password", placeholder=password_policy.placeholder) }}
+                <small>{% for req in password_policy.requirements %}{{ req }}{% if not loop.last %} · {% endif %}{% endfor %}</small>
+                {% endif %}
+            </label>
+
+            <label>
+                Passwort bestätigen
+                {% if form.password_confirm.errors %}
+                {{ form.password_confirm(autocomplete="new-password", **{'aria-invalid': 'true'}) }}
+                <small>{{ form.password_confirm.errors[0] }}</small>
+                {% else %}
+                {{ form.password_confirm(autocomplete="new-password") }}
+                {% endif %}
+            </label>
+
+            <button type="submit">Registrieren</button>
+        </form>
+
+        <hr>
+        <p>Bereits registriert? <a href="{{ url_for('auth.login') }}">Anmelden</a></p>
+    </article>
+    <div></div>
+</div>
+{% endblock %}

@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fbk-time"
+version = "1.0.0"
+description = "Web-based absence management with substitute tracking and holiday integration"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    {name = "FBK-Time"}
+]
+keywords = ["absence", "management", "flask", "calendar", "holidays"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Web Environment",
+    "Framework :: Flask",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Scheduling",
+]
+
+dependencies = [
+    "Flask==3.1.2",
+    "Flask-SQLAlchemy==3.1.1",
+    "Flask-Login==0.6.3",
+    "Flask-WTF==1.2.2",
+    "Jinja2>=3.1.6",
+    "SQLAlchemy==2.0.45",
+    "argon2-cffi==25.1.0",
+    "holidays==0.87",
+    "reportlab==4.4.7",
+    "icalendar==6.3.2",
+    "gunicorn==23.0.0",
+    "pip-licenses==5.5.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/Gi007i/fbk-time"
+Repository = "https://github.com/Gi007i/fbk-time"
+
+[tool.setuptools]
+py-modules = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["modules*", "core*", "utils*", "cli*"]

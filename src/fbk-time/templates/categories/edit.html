@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Kategorie bearbeiten - FBK-Time{% endblock %}
+
+{% block content %}
+<hgroup>
+    <h1>Kategorie bearbeiten</h1>
+    <p>
+        <span class="category-badge category-{{ category.id }}">{% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}</span>
+    </p>
+</hgroup>
+
+<article>
+    <form method="POST" action="{{ url_for('categories.edit', id=category.id) }}" data-ajax-form>
+        {{ form.hidden_tag() }}
+
+        <label for="name">
+            Name *
+            {{ form.name(id="name", placeholder="z.B. Urlaub, Krankheit, Homeoffice",
+               **{'aria-invalid': 'true' if form.name.errors else none}) }}
+            {% if form.name.errors %}
+            <small>{{ form.name.errors[0] }}</small>
+            {% endif %}
+        </label>
+
+        <fieldset class="grid">
+            <label for="color">
+                Hintergrundfarbe *
+                {{ form.color(id="color", type="color",
+                   **{'aria-invalid': 'true' if form.color.errors else none}) }}
+                {% if form.color.errors %}
+                <small>{{ form.color.errors[0] }}</small>
+                {% endif %}
+            </label>
+
+            <label for="text_color">
+                Schriftfarbe *
+                {{ form.text_color(id="text_color", type="color",
+                   **{'aria-invalid': 'true' if form.text_color.errors else none}) }}
+                {% if form.text_color.errors %}
+                <small>{{ form.text_color.errors[0] }}</small>
+                {% endif %}
+            </label>
+
+            <label for="icon">
+                Emoji
+                <div class="emoji-picker-wrapper">
+                    {{ form.icon(class="emoji-input", id="icon", readonly=true,
+                       **{'aria-invalid': 'true' if form.icon.errors else none}) }}
+                    <button type="button" class="outline emoji-picker-btn" aria-label="Emoji auswählen">😀</button>
+                    <button type="button" class="outline emoji-clear-btn" aria-label="Emoji entfernen">✕</button>
+                    <div class="emoji-picker hidden">
+                        <div class="emoji-grid"></div>
+                    </div>
+                </div>
+                {% if form.icon.errors %}
+                <small>{{ form.icon.errors[0] }}</small>
+                {% endif %}
+            </label>
+        </fieldset>
+
+        <div class="form-group">
+            <label>
+                Vorschau
+                <div>
+                    <span class="category-badge category-preview" id="category-preview">
+                        <span class="category-icon" id="preview-icon">{% if category.icon %}{{ category.icon }} {% endif %}</span>
+                        <span id="preview-name">{{ category.name }}</span>
+                    </span>
+                </div>
+            </label>
+            <small>So wird die Kategorie im Kalender und in Listen angezeigt.</small>
+        </div>
+
+        <label for="sort_order">
+            Sortierung
+            {{ form.sort_order(id="sort_order", type="number", min="0", max="999",
+               **{'aria-invalid': 'true' if form.sort_order.errors else none}) }}
+            {% if form.sort_order.errors %}
+            <small>{{ form.sort_order.errors[0] }}</small>
+            {% else %}
+            <small>Niedrigere Werte erscheinen weiter oben in Listen.</small>
+            {% endif %}
+        </label>
+
+        <div class="form-group">
+            <label>
+                {{ form.requires_substitute(id="requires_substitute") }}
+                Vertretung erforderlich
+            </label>
+            <small>Bei dieser Kategorie muss eine Vertretung angegeben werden.</small>
+        </div>
+
+        <div class="form-group">
+            <label>
+                {{ form.is_present(id="is_present") }}
+                Anwesend
+            </label>
+            <small>Diese Kategorie bedeutet, dass die Person arbeitet (z.B. Home Office), aber nicht vor Ort ist.</small>
+        </div>
+
+        <div class="form-group">
+            <label>
+                {{ form.active(id="active") }}
+                Aktiv
+            </label>
+            <small>Inaktive Kategorien erscheinen nicht in Auswahllisten.</small>
+        </div>
+
+        <hr>
+
+        <div class="grid">
+            <button type="submit" class="outline">Änderungen speichern</button>
+            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <div></div>
+        </div>
+    </form>
+</article>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/emoji-picker.js') }}"></script>
+<script src="{{ url_for('static', filename='js/category-preview.js') }}"></script>
+{% endblock %}

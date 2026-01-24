@@ -1,0 +1,547 @@
+/**
+ * FBK-Time Custom CSS Extensions
+ *
+ * Custom extensions for Pico CSS 2.1.1 framework.
+ *
+ * @license MIT
+ * @copyright 2026 FBK-Time
+ * @see https://github.com/Gi007i/fbk-time
+ */
+
+/* =============================================
+   UTILITIES
+   ============================================= */
+.hidden { display: none !important; }
+.text-negative { color: var(--pico-del-color); }
+.text-positive { color: var(--pico-ins-color); }
+.nowrap { white-space: nowrap; }
+
+.page-header {
+    grid-template-columns: auto auto;
+    justify-content: start;
+    align-items: center;
+}
+
+/* =============================================
+   TABLE VERTICAL ALIGNMENT
+   ============================================= */
+/* Buttons in tables: remove margin that causes misalignment */
+figure table button,
+figure table [type="submit"],
+figure table [type="button"] {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+/* =============================================
+   STICKY FOOTER
+   ============================================= */
+html, body {
+    height: 100vh;
+}
+
+body > footer {
+    position: sticky;
+    top: 100vh;
+}
+
+/* =============================================
+   NAVIGATION
+   ============================================= */
+.main-nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--pico-background-color);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+/* =============================================
+   BULK ACTIONS BAR
+   ============================================= */
+.bulk-actions-bar button {
+    white-space: nowrap;
+}
+
+/* =============================================
+   PAGINATION
+   ============================================= */
+.pagination {
+    display: flex;
+    gap: 0.25rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.pagination a,
+.pagination span {
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--pico-border-radius);
+    text-decoration: none;
+}
+
+.pagination .current {
+    background: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+    border-color: var(--pico-primary);
+}
+
+/* =============================================
+   CALENDAR
+   ============================================= */
+.calendar {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.calendar th,
+.calendar td {
+    border: 1px solid var(--pico-muted-border-color);
+    padding: 0.25rem;
+    vertical-align: top;
+}
+
+.calendar td {
+    height: auto;
+    min-height: 60px;
+}
+
+.calendar th {
+    text-align: center;
+    font-weight: 600;
+}
+
+/* Desktop calendar: uniform cell height and larger text */
+@media (min-width: 768px) {
+    .calendar td {
+        height: 100px;
+    }
+
+    .calendar .absence-item {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.375rem;
+    }
+}
+
+.calendar .day-number {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.calendar .day-today .day-number {
+    background: var(--pico-primary);
+    color: var(--pico-primary-inverse);
+    border-radius: 50%;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.calendar mark {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+/* Hide weekend columns on mobile (5-day week view) */
+.calendar .calendar-weekend-col {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .calendar .calendar-weekend-col {
+        display: table-cell;
+    }
+}
+
+/* Hide detail columns on mobile (absence list) */
+.list-desktop-col {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .list-desktop-col {
+        display: table-cell;
+    }
+
+    .list-mobile-col {
+        display: none;
+    }
+}
+
+tr[data-href] {
+    cursor: pointer;
+}
+
+/* Generic day state styles (applies to calendar and team-matrix) */
+.day-header {
+    background: var(--pico-card-sectioning-background-color);
+}
+
+.day-weekend {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="dark"] .day-weekend {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.day-holiday {
+    background: var(--pico-mark-background-color);
+}
+
+.calendar .absence-item {
+    display: block;
+    padding: 0.125rem 0.25rem;
+    margin-bottom: 0.125rem;
+    border-radius: 0.25rem;
+    font-size: 0.65rem;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* =============================================
+   TEAM MATRIX
+   ============================================= */
+.team-matrix table {
+    min-width: 100%;
+    border-collapse: collapse;
+}
+
+.team-matrix th,
+.team-matrix td {
+    border: 1px solid var(--pico-muted-border-color);
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+    min-width: 44px;
+}
+
+.team-matrix th small {
+    display: block;
+    margin-top: 0;
+}
+
+.team-matrix .user-name {
+    position: sticky;
+    left: 0;
+    background: var(--pico-background-color);
+    text-align: left;
+    padding-left: 0.5rem;
+    font-weight: 500;
+    z-index: 1;
+}
+
+/* Desktop optimization: Fit 31 days without horizontal scrolling */
+@media (min-width: 768px) {
+    .team-matrix-month .team-matrix table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .team-matrix-month .team-matrix th.user-name,
+    .team-matrix-month .team-matrix td.user-name {
+        width: 120px;
+        min-width: 120px;
+        max-width: 120px;
+    }
+
+    .team-matrix-month .team-matrix th:not(.user-name),
+    .team-matrix-month .team-matrix td:not(.user-name) {
+        min-width: 0;
+        width: auto;
+        padding: 0.25rem 0.1rem;
+        font-size: 0.625rem;
+    }
+
+    .team-matrix-month .team-matrix th small {
+        font-size: 0.5rem;
+    }
+}
+
+.team-matrix th.day-today {
+    border: 2px solid var(--pico-primary);
+    border-bottom: 0;
+}
+
+.team-matrix td.day-today {
+    border-left: 2px solid var(--pico-primary);
+    border-right: 2px solid var(--pico-primary);
+}
+
+.team-matrix tr:last-child td.day-today {
+    border-bottom: 2px solid var(--pico-primary);
+}
+
+/* =============================================
+   CATEGORY COLORS (dynamic from backend)
+   ============================================= */
+/* .category-{id} classes are generated by /css/categories.css */
+
+.category-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.25rem;
+    font-weight: 500;
+}
+
+.category-icon {
+    /* Preserve native emoji colors */
+    -webkit-text-fill-color: initial;
+    color: initial;
+    font-style: normal;
+}
+
+/* =============================================
+   EMOJI PICKER
+   ============================================= */
+.emoji-picker-wrapper {
+    position: relative;
+    display: flex;
+    gap: 0.25rem;
+    align-items: stretch;
+}
+
+.emoji-picker-wrapper input.emoji-input {
+    flex: 1;
+    text-align: center;
+    font-size: 1.25rem;
+}
+
+.emoji-picker-wrapper button {
+    padding: 0.5rem 0.75rem;
+    min-width: 44px;
+}
+
+.emoji-picker {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 200;
+    background: var(--pico-background-color);
+    border: 1px solid var(--pico-muted-border-color);
+    border-radius: var(--pico-border-radius);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    padding: 0.5rem;
+    max-height: 250px;
+    overflow-y: auto;
+}
+
+.emoji-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(36px, 1fr));
+    gap: 0.25rem;
+}
+
+.emoji-grid button {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: var(--pico-border-radius);
+    cursor: pointer;
+}
+
+.emoji-grid button:hover,
+.emoji-grid button:focus {
+    background: var(--pico-secondary-background);
+    border-color: var(--pico-muted-border-color);
+}
+
+[data-theme="dark"] .emoji-picker {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* =============================================
+   CATEGORY PREVIEW
+   ============================================= */
+.category-preview {
+    background: var(--preview-bg, #3b82f6);
+    color: var(--preview-color, #ffffff);
+}
+
+/* =============================================
+   PAGE NAVIGATION
+   ============================================= */
+/* Mobile: Stack layout (title on top, buttons below) */
+.page-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.page-nav h2 {
+    text-align: center;
+}
+
+.page-nav ul {
+    justify-content: center;
+}
+
+/* Desktop: Title left, buttons right (horizontal) */
+@media (min-width: 768px) {
+    .page-nav {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .page-nav h2 {
+        text-align: left;
+    }
+
+    .page-nav ul {
+        justify-content: flex-start;
+        justify-self: end;
+    }
+}
+
+/* =============================================
+   LEGEND
+   ============================================= */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: center;
+}
+
+/* =============================================
+   FORM GROUPS
+   ============================================= */
+.form-group {
+    margin-bottom: var(--pico-spacing);
+}
+
+.form-group > label {
+    margin-bottom: 0;
+}
+
+.form-group > small {
+    display: block;
+    margin-top: 0;
+    color: var(--pico-muted-color);
+}
+
+/* =============================================
+   TOAST NOTIFICATIONS
+   ============================================= */
+#toast-container {
+    position: fixed;
+    top: 80px;
+    right: 1rem;
+    z-index: 1000;
+    max-width: 400px;
+    width: calc(100% - 2rem);
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    pointer-events: none;
+}
+
+#toast-container:empty {
+    display: none;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-left: 4px solid var(--pico-primary);
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-card-background-color);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    pointer-events: auto;
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.toast.toast-fadeout {
+    opacity: 0;
+    transform: translateX(100%);
+}
+
+.toast span {
+    flex: 1;
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    margin: 0;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--pico-muted-color);
+    width: auto;
+}
+
+.toast-close:hover {
+    color: var(--pico-color);
+}
+
+[data-theme="dark"] .toast {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* =============================================
+   INLINE ALERTS (form context warnings)
+   ============================================= */
+.inline-alert {
+    border-left: 4px solid var(--pico-primary);
+    background: var(--pico-card-background-color);
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: var(--pico-border-radius);
+}
+
+/* =============================================
+   ALERT COLOR VARIANTS (used by .toast and .inline-alert)
+   ============================================= */
+.alert-success {
+    border-left-color: var(--pico-ins-color);
+}
+
+.alert-danger {
+    border-left-color: var(--pico-del-color);
+}
+
+.alert-warning {
+    border-left-color: #f0ad4e;
+}
+
+.alert-info {
+    border-left-color: var(--pico-primary);
+}
+
+/* =============================================
+   TABLE SORTING
+   ============================================= */
+th[data-sort] {
+    cursor: pointer;
+}
+
+/* =============================================
+   FORM VALIDATION ERRORS
+   ============================================= */
+/* Error messages inside labels should be red when field is invalid */
+label [aria-invalid="true"] ~ small,
+label:has([aria-invalid="true"]) > small:last-child,
+fieldset[aria-invalid="true"] > small {
+    color: var(--pico-del-color);
+}

@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}Licenses - FBK-Time{% endblock %}
+
+{% block content %}
+<hgroup>
+    <h1>Open Source Licenses</h1>
+    <p>FBK-Time uses the following open source packages</p>
+</hgroup>
+
+{% if summary.total > 0 %}
+<article>
+    <p>
+        <strong>{{ summary.total }}</strong> packages |
+        {% for license_type, count in summary.by_type.items() %}
+            {% if loop.index <= 5 %}
+                <mark>{{ license_type }} ({{ count }})</mark>{% if loop.index < 5 and not loop.last %} {% endif %}
+            {% endif %}
+        {% endfor %}
+        {% if summary.by_type|length > 5 %}
+            <small>+{{ summary.by_type|length - 5 }} more</small>
+        {% endif %}
+    </p>
+
+    <label>
+        Search packages
+        <input type="text" id="license-search" placeholder="Filter by name or license...">
+    </label>
+</article>
+
+{% for pkg in licenses %}
+<article data-name="{{ pkg.Name|lower }}" data-license="{{ pkg.License|lower }}">
+    <header>
+        <strong>{{ pkg.Name }}</strong> <small>{{ pkg.Version }}</small>
+        <mark>{{ pkg.License }}</mark>
+    </header>
+    {% if pkg.Description %}
+    <p><small>{{ pkg.Description }}</small></p>
+    {% endif %}
+    {% if pkg.Author or pkg.URL %}
+    <footer>
+        {% if pkg.Author %}
+        <small>{{ pkg.Author }}</small>
+        {% endif %}
+        {% if pkg.URL %}
+        <small><a href="{{ pkg.URL }}" target="_blank" rel="noopener noreferrer">Homepage</a></small>
+        {% endif %}
+    </footer>
+    {% endif %}
+    {% if pkg.LicenseText %}
+    <hr>
+    <details>
+        <summary><small>Lizenztext anzeigen</small></summary>
+        <p><code>{{ pkg.LicenseText }}</code></p>
+    </details>
+    {% endif %}
+</article>
+{% endfor %}
+
+<p id="no-results" class="hidden"><small>No packages found matching your search.</small></p>
+
+{% else %}
+<article>
+    <p><small>License information not available. Run the application setup to generate license data.</small></p>
+</article>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/license-search.js') }}"></script>
+{% endblock %}
