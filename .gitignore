@@ -1,0 +1,90 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environments
+venv/
+ENV/
+env/
+.venv/
+
+# SQLite Database (WAL mode files included)
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+
+# DEV files
+.claude
+claude.md
+
+
+# Data directory (keep template)
+data/*
+
+# Logs
+*.log
+logs/
+
+# Gunicorn
+*.pid
+*.sock
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Environment / Secrets
+.env
+.env.*
+*.pem
+*.key
+config/local.py
+instance/
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# ReportLab temporary files
+*.rlout
+
+# Byte-compiled / optimized
+*.pyc
+*.pyo
+*.pyd
+
+# Distribution / packaging
+MANIFEST
