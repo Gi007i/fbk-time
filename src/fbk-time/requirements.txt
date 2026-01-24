@@ -1,0 +1,30 @@
+# FBK-Time Dependencies
+# Production-ready absence management system
+
+# Core Framework
+Flask==3.1.2
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+Flask-WTF==1.2.2
+
+# Template Engine
+Jinja2>=3.1.6
+
+# Database
+SQLAlchemy==2.0.45
+
+# Security - Argon2id password hashing (RFC 9106 LOW_MEMORY profile)
+argon2-cffi==25.1.0
+
+# German Holidays (offline-capable)
+holidays==0.87
+
+# Export
+reportlab==4.4.7
+icalendar==6.3.2
+
+# Production WSGI Server
+gunicorn==23.0.0
+
+# License Management
+pip-licenses==5.5.0

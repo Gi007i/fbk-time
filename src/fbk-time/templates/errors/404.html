@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Seite nicht gefunden - FBK-Time{% endblock %}
+
+{% block content %}
+<center>
+    <article>
+        <h1 class="text-negative">🔍 404</h1>
+        <p><strong>Seite nicht gefunden</strong></p>
+        <small>Die angeforderte Seite existiert nicht oder wurde verschoben.</small>
+    </article>
+    <p><a href="{{ url_for('dashboard.index') }}" role="button">Zur Startseite</a></p>
+</center>
+{% endblock %}

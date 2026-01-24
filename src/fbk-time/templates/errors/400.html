@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Ungültige Anfrage - FBK-Time{% endblock %}
+
+{% block content %}
+<center>
+    <article>
+        <h1 class="text-negative">❌ 400</h1>
+        <p><strong>Ungültige Anfrage</strong></p>
+        <small>Die Anfrage konnte nicht verarbeitet werden. Bitte prüfen Sie Ihre Eingabe.</small>
+    </article>
+    <p><a href="{{ url_for('dashboard.index') }}" role="button">Zur Startseite</a></p>
+</center>
+{% endblock %}

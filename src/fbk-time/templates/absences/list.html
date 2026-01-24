@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Abwesenheiten - FBK-Time{% endblock %}
+
+{% block content %}
+<div class="grid page-header">
+    <h1>Liste</h1>
+    <nav><ul><li><a href="{{ url_for('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+</div>
+
+<details id="filter-panel">
+    <summary><strong>Filter</strong></summary>
+    <form method="GET">
+        <fieldset class="grid">
+            <label>
+                Von
+                <input type="date" name="date_from" value="{{ filters.date_from }}">
+            </label>
+            <label>
+                Bis
+                <input type="date" name="date_to" value="{{ filters.date_to }}">
+            </label>
+            <label>
+                Person
+                <select name="user_id">
+                    <option value="">Alle</option>
+                    {% for u in users %}
+                    <option value="{{ u.id }}" {% if filters.user_id == u.id %}selected{% endif %}>{{ u.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Kategorie
+                <select name="category_id">
+                    <option value="">Alle</option>
+                    {% for c in categories %}
+                    <option value="{{ c.id }}" {% if filters.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>
+                Vertretung
+                <select name="has_substitute">
+                    <option value="">Alle</option>
+                    <option value="yes" {% if filters.has_substitute == 'yes' %}selected{% endif %}>Mit Vertretung</option>
+                    <option value="no" {% if filters.has_substitute == 'no' %}selected{% endif %}>Ohne Vertretung</option>
+                </select>
+            </label>
+        </fieldset>
+        <div class="grid">
+            <button type="submit" class="outline">Filtern</button>
+            <button type="button" data-href="{{ url_for('absences.list_absences') }}" class="outline secondary">Zurücksetzen</button>
+            <div></div>
+        </div>
+    </form>
+</details>
+
+<nav class="bulk-actions-bar hidden">
+    <ul>
+        <li><strong id="selection-count">0</strong> ausgewählt</li>
+        <li><button type="button" id="bulk-delete-btn" class="outline">Löschen</button></li>
+        <li><button type="button" id="clear-selection-btn" class="outline secondary">Auswahl aufheben</button></li>
+    </ul>
+</nav>
+
+{% if occurrences %}
+<figure>
+    <table class="striped">
+        <thead>
+            <tr>
+                <th><input type="checkbox" id="select-all"></th>
+                <th>Person</th>
+                <th class="list-mobile-col">Kategorie</th>
+                <th class="list-desktop-col">Kategorie</th>
+                <th class="list-desktop-col">Typ</th>
+                <th>Datum</th>
+                <th class="list-desktop-col">Zeitraum</th>
+                <th class="list-desktop-col">Vertretung</th>
+                <th class="list-desktop-col">Serie</th>
+                <th class="list-desktop-col">Aktionen</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for occ in occurrences %}
+            <tr data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
+                <td>
+                    <input type="checkbox" data-bulk-item
+                           value="{{ occ.absence.id }}{% if occ.is_recurring %}:{{ occ.date }}{% endif %}">
+                </td>
+                <td><strong>{{ occ.user.name }}</strong></td>
+                <td class="list-mobile-col">{{ occ.category.name }} ({{ 'A' if occ.category.is_present else 'X' }})</td>
+                <td class="list-desktop-col">
+                    <span class="category-badge category-{{ occ.category.id }}">
+                        {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
+                    </span>
+                </td>
+                <td class="list-desktop-col">
+                    {% if occ.category.is_present %}
+                    <span class="text-positive">A</span>
+                    {% else %}
+                    <span class="text-negative">X</span>
+                    {% endif %}
+                </td>
+                <td>{{ occ.date|format_date }}</td>
+                <td class="list-desktop-col">
+                    {% if occ.is_half_day_morning %}
+                    Vormittag
+                    {% elif occ.is_half_day_afternoon %}
+                    Nachmittag
+                    {% else %}
+                    Ganztags
+                    {% endif %}
+                </td>
+                <td class="list-desktop-col">{{ occ.absence.substitute.name if occ.absence.substitute else '-' }}</td>
+                <td class="list-desktop-col">
+                    {% if occ.is_recurring %}
+                    <mark>Serie{% if occ.is_exception %} (geändert){% endif %}</mark>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+                <td class="list-desktop-col">
+                    {% if occ.is_recurring %}
+                    <a href="{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}" role="button" class="outline">Details</a>
+                    {% else %}
+                    <a href="{{ url_for('absences.detail', id=occ.absence.id) }}" role="button" class="outline">Details</a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</figure>
+
+<p><small><strong>A</strong> = Anwesend | <strong>X</strong> = Abwesend</small></p>
+
+{% if pagination.total_pages > 1 %}
+<nav class="pagination" aria-label="Seitennavigation">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('absences.list_absences', page=pagination.page-1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_id, category_id=filters.category_id, has_substitute=filters.has_substitute) }}">&laquo; Zurück</a>
+    {% else %}
+    <span>&laquo; Zurück</span>
+    {% endif %}
+
+    {% for p in range(1, pagination.total_pages + 1) %}
+        {% if p == pagination.page %}
+        <span class="current">{{ p }}</span>
+        {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+        <a href="{{ url_for('absences.list_absences', page=p, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_id, category_id=filters.category_id, has_substitute=filters.has_substitute) }}">{{ p }}</a>
+        {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+        <span>...</span>
+        {% endif %}
+    {% endfor %}
+
+    {% if pagination.has_next %}
+    <a href="{{ url_for('absences.list_absences', page=pagination.page+1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_id, category_id=filters.category_id, has_substitute=filters.has_substitute) }}">Weiter &raquo;</a>
+    {% else %}
+    <span>Weiter &raquo;</span>
+    {% endif %}
+</nav>
+
+<p><small>Seite {{ pagination.page }} von {{ pagination.total_pages }} ({{ pagination.total }} Einträge gesamt)</small></p>
+{% endif %}
+{% else %}
+<p><small>Keine Abwesenheiten im gewählten Zeitraum.</small></p>
+{% endif %}
+
+<nav aria-label="Abwesenheits-Ansichten">
+    <div role="group">
+        <a href="{{ url_for('dashboard.team_overview') }}" role="button" class="outline">Team</a>
+        <a href="{{ url_for('absences.calendar') }}" role="button" class="outline">Kalender</a>
+        <a href="{{ url_for('absences.list_absences') }}" role="button" aria-current="page">Liste</a>
+    </div>
+</nav>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/absence-list.js') }}"></script>
+{% endblock %}

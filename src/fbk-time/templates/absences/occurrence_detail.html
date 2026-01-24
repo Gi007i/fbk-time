@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Termin Details - FBK-Time{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="{{ origin.url }}">{{ origin.label }}</a></li>
+        <li><a href="{{ url_for('absences.detail', id=absence.id) }}">Serie</a></li>
+        <li>Termin</li>
+    </ul>
+</nav>
+
+<hgroup>
+    <h1>Termin Details</h1>
+    <p>
+        Teil der Serie: {{ absence.user.name }} - {{ absence.category.name }}
+        {% if occurrence.is_exception %}<mark>Geändert</mark>{% endif %}
+    </p>
+</hgroup>
+
+<article>
+    <dl>
+        <dt><strong>Person</strong></dt>
+        <dd>{{ occurrence.user.name }}</dd>
+
+        <dt><strong>Kategorie</strong></dt>
+        <dd>
+            <span class="category-badge category-{{ occurrence.category.id }}">
+                {% if occurrence.category.icon %}<span class="category-icon">{{ occurrence.category.icon }}</span> {% endif %}{{ occurrence.category.name }}
+            </span>
+        </dd>
+
+        <dt><strong>Typ</strong></dt>
+        <dd>
+            {% if occurrence.category.is_present %}
+            <span class="text-positive">Anwesend (A)</span>
+            {% else %}
+            <span class="text-negative">Abwesend (X)</span>
+            {% endif %}
+        </dd>
+
+        <dt><strong>Datum</strong></dt>
+        <dd>
+            {{ occurrence_date|format_date }}
+            {% if occurrence.is_half_day_morning %}
+            <small>(Vormittag)</small>
+            {% elif occurrence.is_half_day_afternoon %}
+            <small>(Nachmittag)</small>
+            {% endif %}
+        </dd>
+
+        <dt><strong>Vertretung</strong></dt>
+        <dd>{{ occurrence.substitute.name if occurrence.substitute else '-' }}</dd>
+
+        <dt><strong>Notizen</strong></dt>
+        <dd>{{ occurrence.notes or '-' }}</dd>
+
+        <dt><strong>Serie</strong></dt>
+        <dd>
+            🔁 <a href="{{ url_for('absences.detail', id=absence.id) }}">Zur Serien-Übersicht</a>
+        </dd>
+    </dl>
+
+    <hr>
+
+    <div class="grid">
+        <button type="button" data-href="{{ url_for('absences.occurrence_edit', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" class="outline">
+            Termin bearbeiten
+        </button>
+        <button type="button" data-href="{{ url_for('absences.edit', id=absence.id) }}" class="outline secondary">
+            Serie bearbeiten
+        </button>
+        <button type="button"
+                class="outline contrast"
+                data-action="delete"
+                data-url="{{ url_for('absences.occurrence_delete', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
+                data-confirm="Diesen Termin aus der Serie entfernen?">
+            Termin löschen
+        </button>
+    </div>
+</article>
+{% endblock %}

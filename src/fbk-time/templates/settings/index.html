@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+
+{% block title %}Meine Einstellungen - FBK-Time{% endblock %}
+
+{% block content %}
+<h1>Meine Einstellungen</h1>
+
+<article>
+    <form method="POST" action="{{ url_for('settings.index') }}" data-ajax-form>
+        {{ form.hidden_tag() }}
+
+        <label>
+            {{ form.holiday_region.label.text }}
+            {{ form.holiday_region(**{'aria-invalid': 'true' if form.holiday_region.errors else none}) }}
+            {% if form.holiday_region.errors %}
+            <small>{{ form.holiday_region.errors[0] }}</small>
+            {% else %}
+            <small>Welche Feiertage sollen im Kalender angezeigt werden?</small>
+            {% endif %}
+        </label>
+
+        <fieldset{% if form.theme.errors %} aria-invalid="true"{% endif %}>
+            <legend>{{ form.theme.label.text }}</legend>
+            {% for subfield in form.theme %}
+            <label>
+                {{ subfield() }}
+                {{ subfield.label.text }}
+            </label>
+            {% endfor %}
+            {% if form.theme.errors %}
+            <small>{{ form.theme.errors[0] }}</small>
+            {% else %}
+            <small>Automatisch wählt basierend auf Systemeinstellung</small>
+            {% endif %}
+        </fieldset>
+
+        <label>
+            {{ form.date_format.label.text }}
+            {{ form.date_format(**{'aria-invalid': 'true' if form.date_format.errors else none}) }}
+            {% if form.date_format.errors %}
+            <small>{{ form.date_format.errors[0] }}</small>
+            {% endif %}
+        </label>
+
+        <label>
+            {{ form.pagination.label.text }}
+            {{ form.pagination(**{'aria-invalid': 'true' if form.pagination.errors else none}) }}
+            {% if form.pagination.errors %}
+            <small>{{ form.pagination.errors[0] }}</small>
+            {% else %}
+            <small>Anzahl der Einträge pro Seite in Listen</small>
+            {% endif %}
+        </label>
+
+        {% if current_user.is_manager %}
+        <label>
+            {{ form.default_text_color.label.text }}
+            <div class="grid">
+                {{ form.default_text_color(type="color", **{'aria-invalid': 'true' if form.default_text_color.errors else none}) }}
+                <div></div>
+                <div></div>
+            </div>
+            {% if form.default_text_color.errors %}
+            <small>{{ form.default_text_color.errors[0] }}</small>
+            {% else %}
+            <small>Diese Farbe wird als Standard für neue Kategorien verwendet</small>
+            {% endif %}
+        </label>
+        {% endif %}
+
+        <div class="grid">
+            <button type="submit" class="outline">Speichern</button>
+            <div></div>
+            <div></div>
+        </div>
+    </form>
+</article>
+{% endblock %}
