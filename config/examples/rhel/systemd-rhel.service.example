@@ -2,11 +2,10 @@
 # /etc/systemd/system/fbk-time.service
 #
 # Install:
-#   1. Create service user: useradd -r -s /sbin/nologin fbktime
-#   2. Set ownership: chown -R fbktime:fbktime /var/www/fbk-time
-#   3. Copy this file: cp systemd-rhel9.service.example /etc/systemd/system/fbk-time.service
-#   4. Reload systemd: systemctl daemon-reload
-#   5. Enable service: systemctl enable --now fbk-time
+#   1. Set ownership: chown -R nginx:nginx /var/www/fbk-time
+#   2. Copy this file: cp systemd-rhel.service.example /etc/systemd/system/fbk-time.service
+#   3. Reload systemd: systemctl daemon-reload
+#   4. Enable service: systemctl enable --now fbk-time
 
 [Unit]
 Description=FBK-Time Gunicorn Application Server
@@ -15,8 +14,8 @@ After=network.target
 
 [Service]
 Type=notify
-User=fbktime
-Group=fbktime
+User=nginx
+Group=nginx
 WorkingDirectory=/var/www/fbk-time
 Environment=PYTHONPATH=/var/www/fbk-time
 Environment=PYTHONUNBUFFERED=1
@@ -37,7 +36,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/var/www/fbk-time/data
+ReadWritePaths=/var/www/fbk-time
 ProtectKernelTunables=true
 ProtectKernelModules=true
 ProtectControlGroups=true

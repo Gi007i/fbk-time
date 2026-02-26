@@ -5,7 +5,7 @@
  *
  * @license MIT
  * @copyright 2026 FBK-Time
- * @see https://github.com/Gi007i/fbk-time
+ * @see https://gitlab.com/Gi007i/fbk-time
  */
 
 /* =============================================
@@ -113,7 +113,6 @@ body > footer {
     font-weight: 600;
 }
 
-/* Desktop calendar: uniform cell height and larger text */
 @media (min-width: 768px) {
     .calendar td {
         height: 100px;
@@ -500,18 +499,7 @@ tr[data-href] {
 }
 
 /* =============================================
-   INLINE ALERTS (form context warnings)
-   ============================================= */
-.inline-alert {
-    border-left: 4px solid var(--pico-primary);
-    background: var(--pico-card-background-color);
-    padding: 0.75rem 1rem;
-    margin-bottom: 0.5rem;
-    border-radius: var(--pico-border-radius);
-}
-
-/* =============================================
-   ALERT COLOR VARIANTS (used by .toast and .inline-alert)
+   ALERT COLOR VARIANTS (used by .toast)
    ============================================= */
 .alert-success {
     border-left-color: var(--pico-ins-color);

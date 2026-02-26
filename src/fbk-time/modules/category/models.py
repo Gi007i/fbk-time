@@ -14,8 +14,7 @@ def _utc_now():
 
 
 class Category(db.Model):
-    """
-    Absence category with visual styling and substitute requirement.
+    """Absence category with visual styling and substitute requirement.
 
     Deletion is restricted if absences exist (handled in application logic).
     """
@@ -30,7 +29,7 @@ class Category(db.Model):
     requires_substitute = db.Column(db.Boolean, default=False, nullable=False)
     is_present = db.Column(db.Boolean, default=False, nullable=False)  # True = working remotely, False = absent
     sort_order = db.Column(db.Integer, default=0)
-    active = db.Column(db.Boolean, default=True, nullable=False)
+    active = db.Column(db.Boolean, default=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=_utc_now)
 
     # Relationship - RESTRICT delete behavior handled in application

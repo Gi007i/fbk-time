@@ -10,7 +10,7 @@ from wtforms import (
     SelectField, TextAreaField, DateField, TimeField, BooleanField,
     SelectMultipleField
 )
-from wtforms.validators import DataRequired, Optional, Length, ValidationError
+from wtforms.validators import DataRequired, InputRequired, Optional, Length, ValidationError
 
 
 class AbsenceForm(FlaskForm):
@@ -20,14 +20,14 @@ class AbsenceForm(FlaskForm):
         'Person',
         coerce=lambda x: int(x) if x and x != '' else None,
         validators=[
-            DataRequired(message='Person ist erforderlich.')
+            InputRequired(message='Person ist erforderlich.')
         ]
     )
     category_id = SelectField(
         'Kategorie',
         coerce=lambda x: int(x) if x and x != '' else None,
         validators=[
-            DataRequired(message='Kategorie ist erforderlich.')
+            InputRequired(message='Kategorie ist erforderlich.')
         ]
     )
     start_date = DateField(
@@ -208,7 +208,7 @@ class OccurrenceEditForm(FlaskForm):
     category_id = SelectField(
         'Kategorie',
         coerce=lambda x: int(x) if x and x != '' else None,
-        validators=[DataRequired(message='Kategorie ist erforderlich.')]
+        validators=[InputRequired(message='Kategorie ist erforderlich.')]
     )
 
     time_type = SelectField(

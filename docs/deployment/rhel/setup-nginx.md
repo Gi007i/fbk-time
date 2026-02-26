@@ -12,8 +12,8 @@ Nginx dient als Reverse Proxy für FBK-Time und leitet Anfragen an Gunicorn weit
 ```bash
 sudo dnf install nginx -y
 
-# SELinux Booleans setzen
-sudo setsebool -P httpd_can_network_connect 1
+# SELinux Boolean setzen (Nginx darf zu Gunicorn verbinden)
+sudo setsebool -P httpd_can_network_connect on
 ```
 
 ---
@@ -110,16 +110,9 @@ sudo systemctl restart nginx
 
 # Nginx beim Systemstart aktivieren
 sudo systemctl enable nginx
-
-# SELinux Kontext auf statische Dateien anwenden
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/fbk-time/static(/.*)?"
-sudo restorecon -Rv /var/www/fbk-time/static
 ```
 
-**Hinweis:** Falls `semanage` nicht verfügbar:
-```bash
-sudo dnf install policycoreutils-python-utils -y
-```
+**Hinweis:** Die SELinux-Kontexte für das Anwendungsverzeichnis werden in [configure-systemd-service.md](configure-systemd-service.md) konfiguriert.
 
 ---
 
@@ -172,8 +165,7 @@ sudo setenforce 0
 sudo setenforce 1
 
 # Permanente Lösung: Korrekte Booleans setzen
-sudo setsebool -P httpd_can_network_connect 1
-sudo setsebool -P httpd_read_user_content 1
+sudo setsebool -P httpd_can_network_connect on
 ```
 
 ---
@@ -199,8 +191,8 @@ sudo firewall-cmd --list-all
 
 4. **SELinux blockiert Verbindung:**
 ```bash
-# HTTP Connections erlauben
-sudo setsebool -P httpd_can_network_connect 1
+# Nginx darf zu Gunicorn verbinden
+sudo setsebool -P httpd_can_network_connect on
 
 # Verifizieren
 sudo getsebool httpd_can_network_connect
@@ -211,20 +203,13 @@ sudo getsebool httpd_can_network_connect
 ### 403 Forbidden
 
 ```bash
-# Besitzer ändern
-sudo chown -R nginx:nginx /var/www/fbk-time
-
-# Berechtigungen setzen
-sudo chmod -R 755 /var/www/fbk-time
+# Berechtigungen prüfen
+ls -la /var/www/fbk-time/static
 
 # SELinux Kontext prüfen
 ls -Z /var/www/fbk-time/static
 
-# Kontext korrigieren
-sudo restorecon -Rv /var/www/fbk-time
-
-# Falls nötig, explizit setzen
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/fbk-time(/.*)?"
+# Kontext korrigieren (siehe configure-systemd-service.md für vollständige SELinux-Konfiguration)
 sudo restorecon -Rv /var/www/fbk-time
 ```
 
@@ -267,23 +252,20 @@ sudo ss -tulpn | grep :443
 
 ---
 
-## SELinux Checkliste
+## SELinux Checkliste (Nginx)
 
 ```bash
-# 1. Alle relevanten Booleans setzen
-sudo setsebool -P httpd_can_network_connect 1
-sudo setsebool -P httpd_read_user_content 1
+# 1. Boolean setzen (Nginx darf zu Gunicorn verbinden)
+sudo setsebool -P httpd_can_network_connect on
 
-# 2. Kontext auf Anwendung setzen
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/fbk-time(/.*)?"
-sudo restorecon -Rv /var/www/fbk-time
-
-# 3. Kontext auf Zertifikate setzen
+# 2. Kontext auf Zertifikate prüfen
 sudo restorecon -Rv /etc/pki/tls/
 
-# 4. Audit-Log überwachen
+# 3. Audit-Log überwachen
 sudo ausearch -m AVC -ts recent | grep nginx
 ```
+
+**Hinweis:** Die vollständige SELinux-Konfiguration für das Anwendungsverzeichnis (Kontexte, Port-Freigabe) ist in [configure-systemd-service.md](configure-systemd-service.md) beschrieben.
 
 ---
 

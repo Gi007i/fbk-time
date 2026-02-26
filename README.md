@@ -32,7 +32,7 @@ Schneller lokaler Test der Anwendung (keine Production-Konfiguration):
 
 ```bash
 # Repository klonen
-git clone https://github.com/Gi007i/fbk-time.git
+git clone https://gitlab.com/Gi007i/fbk-time.git
 cd fbk-time
 
 # Virtual Environment erstellen
@@ -62,7 +62,7 @@ gunicorn --bind 127.0.0.1:5000 --workers 1 app:app
 
 1. **Repository klonen:**
    ```bash
-   git clone https://github.com/Gi007i/fbk-time.git
+   git clone https://gitlab.com/Gi007i/fbk-time.git
    cd fbk-time
    ```
 

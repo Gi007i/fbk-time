@@ -165,6 +165,7 @@ def login_admin(user, remember=False):
 def logout_admin():
     """Log out the current user."""
     logout_user()
+    session.clear()
 
 
 def calculate_login_delay(identifier):
@@ -213,6 +214,44 @@ def is_account_locked(identifier):
     return True
 
 
+def is_login_throttled(identifier):
+    """Check if login attempt is throttled by lockout or progressive delay.
+
+    Combines lockout and delay checks into a single timestamp-based check.
+    Returns remaining wait time instead of blocking the worker thread.
+
+    Args:
+        identifier: Username to check.
+
+    Returns:
+        Remaining seconds to wait, or 0 if login attempt is allowed.
+    """
+    attempt = LoginAttempt.query.filter_by(identifier=identifier).first()
+    if not attempt:
+        return 0
+
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if attempt.locked_until:
+        if now_utc < attempt.locked_until:
+            return int((attempt.locked_until - now_utc).total_seconds()) + 1
+        db.session.delete(attempt)
+        db.session.commit()
+        return 0
+
+    if not _get_delay_enabled() or attempt.attempt_count == 0:
+        return 0
+
+    if attempt.last_attempt:
+        delay = _get_delay_base_seconds() * (2 ** (attempt.attempt_count - 1))
+        delay = min(delay, _get_delay_max_seconds())
+        next_allowed = attempt.last_attempt + timedelta(seconds=delay)
+        if now_utc < next_allowed:
+            return int((next_allowed - now_utc).total_seconds()) + 1
+
+    return 0
+
+
 def record_failed_attempt(identifier):
     """Record a failed login attempt and lock account if threshold reached.
 
@@ -253,6 +292,66 @@ def clear_failed_attempts(identifier):
     if attempt:
         db.session.delete(attempt)
         db.session.commit()
+
+
+_IP_LOCKOUT_MULTIPLIER = 5
+
+
+def _get_ip_identifier(ip_address):
+    return f'ip:{ip_address}'
+
+
+def is_ip_throttled(ip_address):
+    """Check if an IP address is locked out due to excessive failed attempts.
+
+    Defense-in-depth measure. Primary IP rate limiting is handled by Nginx.
+    Uses a higher threshold (lockout_threshold * 5) to avoid locking
+    legitimate users on shared IPs while still catching credential stuffing.
+
+    Args:
+        ip_address: Client IP address.
+
+    Returns:
+        Remaining seconds to wait, or 0 if allowed.
+    """
+    identifier = _get_ip_identifier(ip_address)
+    attempt = LoginAttempt.query.filter_by(identifier=identifier).first()
+    if not attempt:
+        return 0
+
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+
+    if attempt.locked_until:
+        if now_utc < attempt.locked_until:
+            return int((attempt.locked_until - now_utc).total_seconds()) + 1
+        db.session.delete(attempt)
+        db.session.commit()
+
+    return 0
+
+
+def record_failed_ip_attempt(ip_address):
+    """Record a failed login attempt for an IP address.
+
+    Args:
+        ip_address: Client IP address.
+    """
+    identifier = _get_ip_identifier(ip_address)
+    attempt = LoginAttempt.query.filter_by(identifier=identifier).first()
+
+    if not attempt:
+        attempt = LoginAttempt(identifier=identifier, attempt_count=0)
+        db.session.add(attempt)
+
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    attempt.attempt_count += 1
+    attempt.last_attempt = now_utc
+
+    ip_threshold = _get_lockout_threshold() * _IP_LOCKOUT_MULTIPLIER
+    if attempt.attempt_count >= ip_threshold:
+        attempt.locked_until = now_utc + _get_lockout_duration()
+
+    db.session.commit()
 
 
 def cleanup_expired_lockouts():
@@ -335,3 +434,56 @@ def deactivate_inactive_accounts():
         db.session.commit()
 
     return count
+
+
+def get_lockout_status_for_users(usernames: list[str]) -> dict[str, dict]:
+    """Get lockout status for multiple users.
+
+    Args:
+        usernames: List of usernames to check.
+
+    Returns:
+        Dict mapping username to lockout info (attempt_count, locked_until).
+    """
+    if not usernames:
+        return {}
+
+    attempts = LoginAttempt.query.filter(
+        LoginAttempt.identifier.in_(usernames)
+    ).all()
+
+    return {
+        attempt.identifier: {
+            'attempt_count': attempt.attempt_count,
+            'locked_until': attempt.locked_until
+        }
+        for attempt in attempts
+    }
+
+
+def register_pending_user(
+    username: str,
+    name: str,
+    password: str,
+    email: str | None = None
+) -> User:
+    """Register a new user with PENDING status (self-registration).
+
+    Args:
+        username: Username (will be normalized to lowercase).
+        name: Display name.
+        password: Plain text password (will be hashed).
+        email: Optional email address (will be normalized to lowercase).
+
+    Returns:
+        Created User instance.
+    """
+    user = User(
+        username=username.strip().lower(),
+        name=name.strip(),
+        email=email.strip().lower() if email else None,
+        password_hash=hash_password(password),
+        status=UserStatus.PENDING
+    )
+    db.session.add(user)
+    return user

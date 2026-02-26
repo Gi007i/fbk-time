@@ -14,24 +14,24 @@
             <tbody>
                 <tr>
                     <th scope="row">Benutzername</th>
-                    <td>{{ current_user.username }}</td>
+                    <td>{{ profile.username }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Anzeigename</th>
-                    <td>{{ current_user.name }}</td>
+                    <td>{{ profile.name }}</td>
                 </tr>
-                {% if current_user.email %}
+                {% if profile.email %}
                 <tr>
                     <th scope="row">E-Mail</th>
-                    <td>{{ current_user.email }}</td>
+                    <td>{{ profile.email }}</td>
                 </tr>
                 {% endif %}
                 <tr>
                     <th scope="row">Rolle</th>
                     <td>
-                        {% if current_user.role.value == 'admin' %}
+                        {% if profile.role.value == 'admin' %}
                         Admin
-                        {% elif current_user.role.value == 'manager' %}
+                        {% elif profile.role.value == 'manager' %}
                         Manager
                         {% else %}
                         Benutzer
@@ -41,11 +41,11 @@
                 <tr>
                     <th scope="row">Status</th>
                     <td>
-                        {% if current_user.status.value == 'active' %}
+                        {% if profile.status.value == 'active' %}
                         Aktiv
-                        {% elif current_user.status.value == 'pending' %}
+                        {% elif profile.status.value == 'pending' %}
                         Ausstehend
-                        {% elif current_user.status.value == 'locked' %}
+                        {% elif profile.status.value == 'locked' %}
                         Gesperrt
                         {% else %}
                         Deaktiviert
@@ -54,13 +54,13 @@
                 </tr>
                 <tr>
                     <th scope="row">Konto erstellt</th>
-                    <td>{{ current_user.created_at|format_date }}</td>
+                    <td>{{ profile.created_at|format_date }}</td>
                 </tr>
                 <tr>
                     <th scope="row">Letzter Login</th>
                     <td>
-                        {% if current_user.last_login %}
-                        {{ current_user.last_login|format_date(include_time=True) }}
+                        {% if profile.last_login %}
+                        {{ profile.last_login|format_date(include_time=True) }}
                         {% else %}
                         &mdash;
                         {% endif %}

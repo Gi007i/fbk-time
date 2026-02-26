@@ -13,7 +13,7 @@
 <article>
     {% if absences_count > 0 %}
     <form method="POST" action="{{ url_for('categories.delete', id=category.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {{ form.hidden_tag() }}
 
         <fieldset>
             <legend>Was möchten Sie tun?</legend>
@@ -47,7 +47,7 @@
     <p>Diese Kategorie hat keine zugeordneten Abwesenheiten.</p>
 
     <form method="POST" action="{{ url_for('categories.delete', id=category.id) }}">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        {{ form.hidden_tag() }}
 
         <hr>
 

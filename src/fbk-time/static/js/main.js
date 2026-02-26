@@ -20,6 +20,17 @@
     }
 
     /**
+     * Escape string for safe use in HTML attribute values.
+     * Escapes quotes in addition to HTML special characters.
+     * @param {string} text - String to escape.
+     * @returns {string} Escaped string safe for attribute contexts.
+     */
+    function escapeAttr(text) {
+        if (typeof text !== 'string') return '';
+        return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    /**
      * Get CSRF token from meta tag.
      * @returns {string} CSRF token value.
      */
@@ -380,6 +391,18 @@
                             Toast.success(result.data.message);
                         }
                     }
+
+                    // Display warnings from backend (non-blocking)
+                    if (result.data.warnings && result.data.warnings.length > 0) {
+                        result.data.warnings.forEach(function(warning) {
+                            if (result.data.redirect) {
+                                Toast.store(warning, 'warning');
+                            } else {
+                                Toast.warning(warning);
+                            }
+                        });
+                    }
+
                     if (result.data.redirect) {
                         location.href = result.data.redirect;
                     }
@@ -389,10 +412,14 @@
 
                     if (result.data.errors) {
                         Object.keys(result.data.errors).forEach(function(fieldName) {
+                            if (!/^[a-zA-Z_][a-zA-Z0-9_\-]*$/.test(fieldName)) return;
                             var field = form.querySelector('[name="' + fieldName + '"]');
-                            if (field) {
-                                showFieldError(field, result.data.errors[fieldName]);
-                            }
+                            if (!field) return;
+
+                            // Skip inline error for checkbox/radio groups (Toast is sufficient)
+                            if (field.type === 'checkbox' || field.type === 'radio') return;
+
+                            showFieldError(field, result.data.errors[fieldName]);
                         });
                     }
                 }
@@ -417,6 +444,28 @@
         initTableSorting();
         initFilterPanelState();
     }
+
+    /**
+     * Handle logout link via POST request with CSRF token.
+     */
+    document.addEventListener('click', function(event) {
+        var logoutLink = event.target.closest('[data-logout]');
+        if (!logoutLink) return;
+        event.preventDefault();
+
+        var form = document.createElement('form');
+        form.method = 'POST';
+        form.action = logoutLink.href;
+
+        var csrfInput = document.createElement('input');
+        csrfInput.type = 'hidden';
+        csrfInput.name = 'csrf_token';
+        csrfInput.value = getCSRFToken();
+        form.appendChild(csrfInput);
+
+        document.body.appendChild(form);
+        form.submit();
+    });
 
     /**
      * Handle navigation buttons via event delegation.
@@ -536,9 +585,29 @@
         invalidFields.forEach(function(el) { el.removeAttribute('aria-invalid'); });
     }
 
+    /**
+     * Check if a date string is within valid range (current year ± 50).
+     * Matches backend validation in request_validators.py.
+     * @param {string} dateStr - Date string in YYYY-MM-DD format.
+     * @returns {boolean} True if date is valid and within range.
+     */
+    function isDateInValidRange(dateStr) {
+        if (!dateStr || dateStr.length !== 10) return false;
+
+        var parts = dateStr.split('-');
+        if (parts.length !== 3) return false;
+
+        var year = parseInt(parts[0], 10);
+        if (isNaN(year)) return false;
+
+        var currentYear = new Date().getFullYear();
+        return year >= currentYear - 50 && year <= currentYear + 50;
+    }
+
     // Export utility functions to global scope
     window.FBKTime = window.FBKTime || {};
     window.FBKTime.escapeHtml = escapeHtml;
+    window.FBKTime.escapeAttr = escapeAttr;
     window.FBKTime.getCSRFToken = getCSRFToken;
     window.FBKTime.showConfirmDialog = showConfirmDialog;
     window.FBKTime.showFieldError = showFieldError;
@@ -546,6 +615,7 @@
     window.FBKTime.clearFieldError = clearFieldError;
     window.FBKTime.clearFieldsetError = clearFieldsetError;
     window.FBKTime.clearAllFieldErrors = clearAllFieldErrors;
+    window.FBKTime.isDateInValidRange = isDateInValidRange;
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);

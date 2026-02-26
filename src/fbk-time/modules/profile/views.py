@@ -7,6 +7,7 @@ from flask import Blueprint, render_template
 from flask_login import login_required
 
 from utils.session_navigation import save_return_url
+from .services import get_profile_data
 
 bp = Blueprint('profile', __name__, url_prefix='/profile')
 
@@ -22,4 +23,5 @@ def require_login():
 def index():
     """Display user profile with account information."""
     save_return_url('Profil')
-    return render_template('profile/index.html')
+    profile = get_profile_data()
+    return render_template('profile/index.html', profile=profile)

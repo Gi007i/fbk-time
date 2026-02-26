@@ -35,8 +35,7 @@ class UserStatus(enum.Enum):
 
 
 class User(UserMixin, db.Model):
-    """
-    User model combining authentication and user data.
+    """User model combining authentication and user data.
 
     Each user is both a login account and a user record.
     Uses Argon2id for password hashing via argon2-cffi.
@@ -104,8 +103,7 @@ class User(UserMixin, db.Model):
 
 
 class LoginAttempt(db.Model):
-    """
-    Track failed login attempts for account lockout protection.
+    """Track failed login attempts for account lockout protection.
 
     Locks account after configured failed attempts for configured duration.
     """

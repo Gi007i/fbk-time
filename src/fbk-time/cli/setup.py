@@ -54,7 +54,6 @@ class FBKSetup:
         self.app_dir = self._find_app_dir()
 
     def _find_app_dir(self):
-        """Find app directory from current working directory."""
         cwd = Path.cwd()
 
         if (cwd / 'app.py').exists():
@@ -128,18 +127,23 @@ class FBKSetup:
         if dirs_ok:
             checks_passed += 1
 
+        temp_key_set = False
         try:
             sys.path.insert(0, str(self.app_dir))
             os.chdir(self.app_dir)
 
             if 'SECRET_KEY' not in os.environ:
                 os.environ['SECRET_KEY'] = 'test-key-for-verification'
+                temp_key_set = True
 
             from config import Config
             self.logger.success("Configuration loadable")
             checks_passed += 1
         except Exception as e:
             self.logger.error(f"Configuration error: {e}")
+        finally:
+            if temp_key_set:
+                del os.environ['SECRET_KEY']
 
         if checks_passed == total_checks:
             self.logger.section("VERIFICATION PASSED")
@@ -150,7 +154,6 @@ class FBKSetup:
             return False
 
     def _is_writable(self, path):
-        """Check if path is writable."""
         try:
             test_file = path / '.write_test'
             test_file.touch()
@@ -160,7 +163,6 @@ class FBKSetup:
             return False
 
     def _create_directories(self):
-        """Create required directories (data, logs) with correct permissions."""
         directories = ['data', 'logs']
 
         for dir_name in directories:
@@ -180,7 +182,6 @@ class FBKSetup:
         return True
 
     def _generate_env_file(self):
-        """Generate .env file with SECRET_KEY."""
         env_path = self.app_dir / '.env'
 
         if env_path.exists() and not self.args.force:
@@ -220,7 +221,6 @@ FLASK_ENV=production
             return False
 
     def _display_next_steps(self):
-        """Display next steps after setup."""
         print("\n" + "=" * 60)
         print("  FBK-TIME SETUP COMPLETE")
         print("=" * 60)

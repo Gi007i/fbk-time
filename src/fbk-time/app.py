@@ -7,7 +7,8 @@ Usage:
     python app.py  (local execution)
 """
 
-from flask import Flask, render_template, g, jsonify
+from flask import Flask, render_template
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config, get_config
 from utils.session_navigation import is_ajax_request
@@ -28,6 +29,7 @@ def create_app(config_class=None, cli_mode=False):
         Configured Flask application instance.
     """
     application = Flask(__name__)
+    application.wsgi_app = ProxyFix(application.wsgi_app, x_for=1, x_proto=1)
 
     if config_class is None:
         config_class = get_config()
@@ -66,10 +68,13 @@ def create_app(config_class=None, cli_mode=False):
         application.register_blueprint(profile_bp)
 
     with application.app_context():
+        # Import all models before create_all to ensure complete schema
+        from modules.auth.models import User, LoginAttempt  # noqa: F401
+        from modules.category.models import Category  # noqa: F401
+        from modules.absence.models import Absence, AbsenceHistory, RecurrenceException  # noqa: F401
+        from modules.settings.models import Setting
         db.create_all()
 
-        # Initialize settings from template if database is empty
-        from modules.settings.models import Setting
         if Setting.query.count() == 0:
             settings_manager.seed_defaults()
         else:
@@ -89,7 +94,6 @@ def create_app(config_class=None, cli_mode=False):
 
 
 def register_context_processor(application):
-    """Register context processor to inject settings into all templates."""
 
     @application.context_processor
     def inject_settings():
@@ -119,7 +123,6 @@ def register_context_processor(application):
 
 
 def register_jinja_filters(application):
-    """Register custom Jinja filters."""
 
     @application.template_filter('format_date')
     def format_date_filter(value, short=False, include_time=False):
@@ -158,30 +161,38 @@ def register_error_handlers(application):
 
     Returns JSON responses for AJAX requests, HTML for regular requests.
     """
+    from flask_wtf.csrf import CSRFError
+    from utils.response_helpers import api_error
+
+    @application.errorhandler(CSRFError)
+    def handle_csrf_error(error):
+        if is_ajax_request():
+            return api_error('CSRF-Token abgelaufen. Bitte Seite neu laden.', status_code=400)
+        return render_template('errors/400.html'), 400
 
     @application.errorhandler(400)
     def bad_request_error(error):
         if is_ajax_request():
-            return jsonify({'error': 'Ungültige Anfrage.'}), 400
+            return api_error('Ungültige Anfrage.', status_code=400)
         return render_template('errors/400.html'), 400
 
     @application.errorhandler(403)
     def forbidden_error(error):
         if is_ajax_request():
-            return jsonify({'error': 'Zugriff verweigert.'}), 403
+            return api_error('Zugriff verweigert.', status_code=403)
         return render_template('errors/403.html'), 403
 
     @application.errorhandler(404)
     def not_found_error(error):
         if is_ajax_request():
-            return jsonify({'error': 'Ressource nicht gefunden.'}), 404
+            return api_error('Ressource nicht gefunden.', status_code=404)
         return render_template('errors/404.html'), 404
 
     @application.errorhandler(500)
     def internal_error(error):
         db.session.rollback()
         if is_ajax_request():
-            return jsonify({'error': 'Ein Fehler ist aufgetreten.'}), 500
+            return api_error('Ein Fehler ist aufgetreten.', status_code=500)
         return render_template('errors/500.html'), 500
 
 

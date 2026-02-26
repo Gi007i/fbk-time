@@ -3,14 +3,25 @@
 Provides PDF and iCal export endpoints.
 """
 
-from datetime import datetime, date, timedelta
-from calendar import monthrange
+from datetime import date, timedelta
 from urllib.parse import urlparse, urljoin
 
-from flask import Blueprint, send_file, request, redirect, url_for, abort
-from flask_login import login_required, current_user
+from flask import Blueprint, send_file, request, redirect, url_for
+from flask_login import login_required
 
-from core.extensions import db
+from utils.request_validators import validate_int_param, validate_date_param, validate_year_param
+from .pdf import export_absences_pdf, export_user_absences_pdf
+from .ical import export_absences_ical
+from .matrix import export_team_matrix_pdf
+from .services import (
+    get_default_date_range,
+    get_export_occurrences,
+    build_pdf_title,
+    build_ical_name,
+    get_user_absences_ordered,
+    get_absences_for_export
+)
+from modules.user.services import get_user_or_404
 
 bp = Blueprint('export', __name__, url_prefix='/export')
 
@@ -34,17 +45,6 @@ def _is_safe_redirect_url(target):
         test_url.scheme in ('http', 'https') and
         ref_url.netloc == test_url.netloc
     )
-from .pdf import (
-    export_absences_pdf,
-    export_user_absences_pdf,
-    export_category_absences_pdf
-)
-from .ical import export_absences_ical
-from .matrix import export_team_matrix_pdf
-from modules.absence.models import Absence
-from modules.absence.recurrence import recurrence_service
-from modules.auth.models import User, UserRole, UserStatus
-from modules.category.models import Category
 
 
 @bp.before_request
@@ -57,85 +57,27 @@ def require_login():
 @bp.route('/pdf')
 def export_pdf():
     """Export absences as PDF document with optional filters."""
-    user_id_str = request.args.get('user_id')
-    if user_id_str:
-        try:
-            user_id = int(user_id_str)
-        except ValueError:
-            abort(400, 'Invalid user_id')
-    else:
-        user_id = None
-
-    category_id_str = request.args.get('category_id')
-    if category_id_str:
-        try:
-            category_id = int(category_id_str)
-        except ValueError:
-            abort(400, 'Invalid category_id')
-    else:
-        category_id = None
-
-    date_from_str = request.args.get('date_from')
-    date_to_str = request.args.get('date_to')
+    user_id = validate_int_param('user_id', min_value=1)
+    category_id = validate_int_param('category_id', min_value=1)
     include_notes = request.args.get('include_notes', 'false') == 'true'
 
-    from_date = None
-    to_date = None
-    current_year = date.today().year
+    from_date = validate_date_param('date_from')
+    to_date = validate_date_param('date_to')
 
-    if date_from_str:
-        if len(date_from_str) != 10:
-            abort(400, 'Invalid date format')
-        try:
-            from_date = datetime.strptime(date_from_str, '%Y-%m-%d').date()
-            if from_date.year < current_year - 50 or from_date.year > current_year + 50:
-                abort(400, 'Invalid date range')
-        except ValueError:
-            abort(400, 'Invalid date format')
+    if not from_date or not to_date:
+        default_from, default_to = get_default_date_range()
+        from_date = from_date or default_from
+        to_date = to_date or default_to
 
-    if date_to_str:
-        if len(date_to_str) != 10:
-            abort(400, 'Invalid date format')
-        try:
-            to_date = datetime.strptime(date_to_str, '%Y-%m-%d').date()
-            if to_date.year < current_year - 50 or to_date.year > current_year + 50:
-                abort(400, 'Invalid date range')
-        except ValueError:
-            abort(400, 'Invalid date format')
-
-    if not from_date:
-        from_date = date(date.today().year, date.today().month, 1)
-    if not to_date:
-        _, days = monthrange(from_date.year, from_date.month)
-        to_date = date(from_date.year, from_date.month, days)
-
-    user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
-
-    query = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        user_status_filter,
-        User.role == UserRole.USER,
-        Category.active == True,
-        Absence.start_date <= to_date
-    ).filter(
-        db.or_(
-            Absence.end_date >= from_date,
-            Absence.is_recurring == True
-        )
+    absences = get_absences_for_export(
+        from_date=from_date,
+        to_date=to_date,
+        user_id=user_id,
+        category_id=category_id,
+        order_desc=True
     )
 
-    if user_id:
-        query = query.filter(Absence.user_id == user_id)
-
-    if category_id:
-        query = query.filter(Absence.category_id == category_id)
-
-    absences = query.order_by(Absence.start_date.desc()).all()
-
-    occurrences = recurrence_service.get_all_occurrences_for_range(
-        absences, from_date, to_date
-    )
+    occurrences = get_export_occurrences(absences, from_date, to_date)
 
     if not occurrences:
         referer = request.referrer
@@ -143,19 +85,11 @@ def export_pdf():
             return redirect(referer)
         return redirect(url_for('absences.calendar'))
 
-    title_parts = ['Abwesenheitsübersicht']
-    if user_id:
-        user = db.session.get(User,user_id)
-        if user:
-            title_parts.append(f'- {user.name}')
-    if category_id:
-        category = db.session.get(Category,category_id)
-        if category:
-            title_parts.append(f'({category.name})')
+    title = build_pdf_title(user_id, category_id)
 
     pdf_buffer = export_absences_pdf(
         absences,
-        title=' '.join(title_parts),
+        title=title,
         include_notes=include_notes,
         date_from=from_date,
         date_to=to_date
@@ -174,99 +108,19 @@ def export_pdf():
 @bp.route('/ical')
 def export_ical():
     """Export absences as iCal file with optional filters."""
-    user_id_str = request.args.get('user_id')
-    if user_id_str:
-        try:
-            user_id = int(user_id_str)
-        except ValueError:
-            abort(400, 'Invalid user_id')
-    else:
-        user_id = None
+    user_id = validate_int_param('user_id', min_value=1)
+    category_id = validate_int_param('category_id', min_value=1)
 
-    category_id_str = request.args.get('category_id')
-    if category_id_str:
-        try:
-            category_id = int(category_id_str)
-        except ValueError:
-            abort(400, 'Invalid category_id')
-    else:
-        category_id = None
+    from_date = validate_date_param('date_from')
+    to_date = validate_date_param('date_to')
 
-    date_from = request.args.get('date_from')
-    date_to = request.args.get('date_to')
-
-    from_date = None
-    to_date = None
-    current_year = date.today().year
-
-    if date_from:
-        if len(date_from) != 10:
-            abort(400, 'Invalid date format')
-        try:
-            from_date = datetime.strptime(date_from, '%Y-%m-%d').date()
-            if from_date.year < current_year - 50 or from_date.year > current_year + 50:
-                abort(400, 'Invalid date range')
-        except ValueError:
-            abort(400, 'Invalid date format')
-
-    if date_to:
-        if len(date_to) != 10:
-            abort(400, 'Invalid date format')
-        try:
-            to_date = datetime.strptime(date_to, '%Y-%m-%d').date()
-            if to_date.year < current_year - 50 or to_date.year > current_year + 50:
-                abort(400, 'Invalid date range')
-        except ValueError:
-            abort(400, 'Invalid date format')
-
-    user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
-
-    query = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        user_status_filter,
-        User.role == UserRole.USER,
-        Category.active == True
+    absences = get_absences_for_export(
+        from_date=from_date,
+        to_date=to_date,
+        user_id=user_id,
+        category_id=category_id,
+        order_desc=False
     )
-
-    if user_id:
-        query = query.filter(Absence.user_id == user_id)
-
-    if category_id:
-        query = query.filter(Absence.category_id == category_id)
-
-    if from_date and to_date:
-        query = query.filter(
-            Absence.start_date <= to_date
-        ).filter(
-            db.or_(
-                Absence.end_date >= from_date,
-                db.and_(
-                    Absence.is_recurring == True,
-                    db.or_(
-                        Absence.recurrence_end_date >= from_date,
-                        Absence.recurrence_end_date.is_(None)
-                    )
-                )
-            )
-        )
-    elif from_date:
-        query = query.filter(
-            db.or_(
-                Absence.end_date >= from_date,
-                db.and_(
-                    Absence.is_recurring == True,
-                    db.or_(
-                        Absence.recurrence_end_date >= from_date,
-                        Absence.recurrence_end_date.is_(None)
-                    )
-                )
-            )
-        )
-    elif to_date:
-        query = query.filter(Absence.start_date <= to_date)
-
-    absences = query.order_by(Absence.start_date).all()
 
     if not absences:
         referer = request.referrer
@@ -274,12 +128,7 @@ def export_ical():
             return redirect(referer)
         return redirect(url_for('absences.calendar'))
 
-    calendar_name = 'FBK-Time Abwesenheiten'
-    if user_id:
-        user = db.session.get(User,user_id)
-        if user:
-            calendar_name = f'Abwesenheiten - {user.name}'
-
+    calendar_name = build_ical_name(user_id)
     ical_buffer = export_absences_ical(absences, calendar_name)
 
     filename = f'abwesenheiten_{date.today().strftime("%Y%m%d")}.ics'
@@ -295,24 +144,8 @@ def export_ical():
 @bp.route('/user/<int:user_id>/pdf')
 def export_user_pdf(user_id):
     """Export all absences for a specific user as PDF."""
-    # RBAC: Regular users can only export their own data
-    if current_user.role == UserRole.USER and user_id != current_user.id:
-        abort(403)
-
-    user = User.query.get_or_404(user_id)
-    current_year = date.today().year
-
-    year_str = request.args.get('year')
-    if year_str:
-        try:
-            year = int(year_str)
-        except ValueError:
-            abort(400, 'Invalid year')
-    else:
-        year = current_year
-
-    if year < current_year - 50 or year > current_year + 50:
-        abort(400, 'Invalid year')
+    user = get_user_or_404(user_id)
+    year = validate_year_param()
 
     pdf_buffer = export_user_absences_pdf(user, year)
 
@@ -329,15 +162,9 @@ def export_user_pdf(user_id):
 @bp.route('/user/<int:user_id>/ical')
 def export_user_ical(user_id):
     """Export all absences for a specific user as iCal."""
-    # RBAC: Regular users can only export their own data
-    if current_user.role == UserRole.USER and user_id != current_user.id:
-        abort(403)
+    user = get_user_or_404(user_id)
 
-    user = User.query.get_or_404(user_id)
-
-    absences = Absence.query.filter(
-        Absence.user_id == user_id
-    ).order_by(Absence.start_date).all()
+    absences = get_user_absences_ordered(user_id)
 
     if not absences:
         return redirect(url_for('absences.calendar'))
@@ -361,32 +188,14 @@ def export_user_ical(user_id):
 def export_team_matrix():
     """Export team matrix (users × days) as PDF for a specific week or month."""
     today = date.today()
-    current_year = today.year
-    week_start_str = request.args.get('week_start')
-    week_end_str = request.args.get('week_end')
 
-    if week_start_str:
-        if len(week_start_str) != 10:
-            abort(400, 'Invalid date format')
-        try:
-            week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
-            if week_start.year < current_year - 50 or week_start.year > current_year + 50:
-                abort(400, 'Invalid date range')
-        except ValueError:
-            abort(400, 'Invalid date format')
-    else:
+    week_start = validate_date_param('week_start')
+    week_end = validate_date_param('week_end')
+
+    if not week_start:
         week_start = today - timedelta(days=today.weekday())
 
-    if week_end_str:
-        if len(week_end_str) != 10:
-            abort(400, 'Invalid date format')
-        try:
-            week_end = datetime.strptime(week_end_str, '%Y-%m-%d').date()
-            if week_end.year < current_year - 50 or week_end.year > current_year + 50:
-                abort(400, 'Invalid date range')
-        except ValueError:
-            abort(400, 'Invalid date format')
-    else:
+    if not week_end:
         week_start = week_start - timedelta(days=week_start.weekday())
         week_end = week_start + timedelta(days=4)
 

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de"{% if app_theme != 'auto' %} data-theme="{{ app_theme }}"{% endif %}>
+<html lang="de" data-date-format="{{ app_date_format }}"{% if app_theme != 'auto' %} data-theme="{{ app_theme }}"{% endif %}>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,12 +10,9 @@
     <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='img/favicon.svg') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/pico.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/fbk-custom.css') }}">
+    {% if current_user.is_authenticated %}
     <link rel="stylesheet" href="{{ url_for('css.categories_css') }}">
-
-    <script>
-        window.FBK = window.FBK || {};
-        window.FBK.dateFormat = '{{ current_user.date_format if current_user.is_authenticated else "DD.MM.YYYY" }}';
-    </script>
+    {% endif %}
 
     {% block head %}{% endblock %}
 </head>
@@ -40,7 +37,7 @@
                         {% if current_user.is_admin %}
                         <li><a href="{{ url_for('settings.system_settings') }}"{% if request.endpoint == 'settings.system_settings' %} aria-current="page"{% endif %}>Systemeinstellungen</a></li>
                         {% endif %}
-                        <li><a href="{{ url_for('auth.logout') }}">Abmelden</a></li>
+                        <li><a href="{{ url_for('auth.logout') }}" data-logout>Abmelden</a></li>
                     </ul>
                 </details>
             </li>

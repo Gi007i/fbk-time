@@ -34,7 +34,6 @@ def get_return_url(default_endpoint):
     """Get return URL from session for redirects.
 
     Retrieves the saved return URL without clearing it (peek).
-    Use clear_return_url() after successful redirect if needed.
 
     Args:
         default_endpoint: Flask endpoint name for fallback.
@@ -75,8 +74,3 @@ def get_return_info(default_endpoint, default_label):
             return {'url': url, 'label': label}
 
     return {'url': url_for(default_endpoint), 'label': default_label}
-
-
-def clear_return_url():
-    """Clear return URL from session after use."""
-    session.pop('return_to', None)

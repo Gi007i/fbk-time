@@ -7,8 +7,8 @@ from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField
 from wtforms.validators import DataRequired, Length, Email, EqualTo, Optional, ValidationError
 
-from .models import User
 from utils.validators import validate_password_strength
+from modules.user.services import username_exists, email_exists
 
 
 class LoginForm(FlaskForm):
@@ -77,15 +77,14 @@ class RegistrationForm(FlaskForm):
 
     def validate_username(self, field):
         """Check if username is already taken."""
-        if User.query.filter_by(username=field.data.strip().lower()).first():
-            raise ValidationError('Dieser Benutzername ist bereits vergeben.')
+        if username_exists(field.data):
+            raise ValidationError('Registrierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben.')
 
     def validate_email(self, field):
         """Check if email is already taken."""
         if field.data:
-            email = field.data.strip().lower()
-            if User.query.filter_by(email=email).first():
-                raise ValidationError('Diese E-Mail-Adresse ist bereits registriert.')
+            if email_exists(field.data):
+                raise ValidationError('Registrierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben.')
 
 
 class ChangePasswordForm(FlaskForm):

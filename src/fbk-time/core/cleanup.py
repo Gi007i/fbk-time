@@ -98,23 +98,6 @@ class LoginAttemptCleanupScheduler:
                 self.app.logger.error(f"Failed to start cleanup scheduler: {e}")
             return
 
-    def stop_cleanup_scheduler(self):
-        """Stop the cleanup scheduler and release lock."""
-        self.is_running = False
-        if self.cleanup_thread and self.cleanup_thread.is_alive():
-            self.cleanup_thread.join(timeout=5)
-
-        if self.lock_fd:
-            try:
-                fcntl.flock(self.lock_fd, fcntl.LOCK_UN)
-                self.lock_fd.close()
-            except Exception as e:
-                if self.app:
-                    self.app.logger.warning(f"Error releasing cleanup lock: {e}")
-
-        if self.app:
-            self.app.logger.info("Cleanup scheduler stopped")
-
     def _run_scheduler(self):
         """Background thread loop for scheduled cleanup."""
         while self.is_running:
@@ -160,10 +143,6 @@ class LoginAttemptCleanupScheduler:
             if self.app:
                 self.app.logger.error(f"Automatic cleanup failed: {e}")
 
-    def get_next_cleanup_time(self):
-        """Return the next scheduled cleanup time."""
-        return self.next_cleanup_time
-
 
 cleanup_scheduler = LoginAttemptCleanupScheduler()
 
@@ -172,18 +151,3 @@ def schedule_cleanup(app):
     """Initialize and start the cleanup scheduler."""
     cleanup_scheduler.init_app(app)
     cleanup_scheduler.start_cleanup_scheduler()
-
-
-def stop_cleanup():
-    """Stop the cleanup scheduler."""
-    cleanup_scheduler.stop_cleanup_scheduler()
-
-
-def get_cleanup_status():
-    """Return current cleanup scheduler status."""
-    return {
-        'enabled': settings_manager.get('lockout_cleanup_enabled'),
-        'running': cleanup_scheduler.is_running,
-        'interval_hours': settings_manager.get('lockout_cleanup_interval_hours'),
-        'next_cleanup': cleanup_scheduler.get_next_cleanup_time()
-    }

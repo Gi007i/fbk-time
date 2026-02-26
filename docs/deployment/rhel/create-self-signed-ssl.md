@@ -173,7 +173,7 @@ sudo systemctl reload nginx
 sudo systemctl status nginx
 
 # Falls Nginx nicht startet - SELinux prüfen
-sudo setsebool -P httpd_can_network_connect 1
+sudo setsebool -P httpd_can_network_connect on
 sudo ausearch -m AVC -ts recent | grep nginx
 ```
 
@@ -198,8 +198,8 @@ sudo ausearch -m AVC -ts recent | grep nginx
 # Kontext korrigieren
 sudo restorecon -Rv /etc/pki/tls/
 
-# Falls nötig, explizit erlauben
-sudo setsebool -P httpd_read_user_content 1
+# Falls nötig, SELinux-Kontext wiederherstellen
+sudo restorecon -Rv /etc/pki/tls/
 ```
 
 ---

@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Kategorie Details - FBK-Time{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb">
+    <ul>
+        <li><a href="{{ url_for('categories.list_categories') }}">Kategorien</a></li>
+        <li>{{ category.name }}</li>
+    </ul>
+</nav>
+
+<h1>Kategorie: {{ category.name }}</h1>
+
+<article>
+    <dl>
+        <dt><strong>Name</strong></dt>
+        <dd>{{ category.name }}</dd>
+
+        <dt><strong>Farbe</strong></dt>
+        <dd>
+            <span class="category-badge category-{{ category.id }}">
+                {% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}
+            </span>
+        </dd>
+
+        <dt><strong>Typ</strong></dt>
+        <dd>
+            {% if category.is_present %}
+            <span class="text-positive">Anwesend (A)</span>
+            {% else %}
+            <span class="text-negative">Abwesend (X)</span>
+            {% endif %}
+        </dd>
+
+        <dt><strong>Vertretung erforderlich</strong></dt>
+        <dd>{{ 'Ja' if category.requires_substitute else 'Nein' }}</dd>
+
+        <dt><strong>Sortierung</strong></dt>
+        <dd>{{ category.sort_order }}</dd>
+
+        <dt><strong>Status</strong></dt>
+        <dd>{{ 'Aktiv' if category.active else 'Inaktiv' }}</dd>
+
+        <dt><strong>Verwendete Abwesenheiten</strong></dt>
+        <dd>{{ absence_count }}</dd>
+    </dl>
+
+    <hr>
+
+    <div class="grid">
+        <button type="button" data-href="{{ url_for('categories.edit', id=category.id) }}" class="outline">
+            Bearbeiten
+        </button>
+        <button type="button" data-href="{{ url_for('categories.delete', id=category.id) }}" class="outline contrast">
+            Löschen
+        </button>
+        <div></div>
+    </div>
+</article>
+{% endblock %}

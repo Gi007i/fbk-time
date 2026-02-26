@@ -64,7 +64,7 @@ var Toast = (function() {
         closeBtn.type = 'button';
         closeBtn.className = 'toast-close';
         closeBtn.setAttribute('aria-label', 'Schließen');
-        closeBtn.innerHTML = '&times;';
+        closeBtn.textContent = '\u00D7';
         closeBtn.addEventListener('click', function() {
             dismiss(toast);
         });

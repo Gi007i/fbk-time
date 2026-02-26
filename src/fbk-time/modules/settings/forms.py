@@ -5,7 +5,7 @@ Provides forms for user preferences and admin system settings.
 
 from flask_wtf import FlaskForm
 from wtforms import StringField, SelectField, RadioField, IntegerField, BooleanField
-from wtforms.validators import DataRequired, InputRequired, Length, NumberRange
+from wtforms.validators import DataRequired, InputRequired, Length, NumberRange, Regexp
 
 
 class SettingsForm(FlaskForm):
@@ -65,7 +65,8 @@ class SettingsForm(FlaskForm):
         'Standard-Schriftfarbe für Kategorien',
         validators=[
             DataRequired(message='Standard-Schriftfarbe ist erforderlich.'),
-            Length(min=7, max=7, message='Schriftfarbe muss im Format #RRGGBB sein.')
+            Length(min=7, max=7, message='Schriftfarbe muss im Format #RRGGBB sein.'),
+            Regexp(r'^#[0-9A-Fa-f]{6}$', message='Schriftfarbe muss im Format #RRGGBB sein.')
         ],
         default='#FFFFFF'
     )
@@ -210,6 +211,7 @@ class AdminSettingsForm(FlaskForm):
         'Standard-Schriftfarbe für neue Benutzer',
         validators=[
             DataRequired(message='Wert erforderlich.'),
-            Length(min=7, max=7, message='Farbe muss im Format #RRGGBB sein.')
+            Length(min=7, max=7, message='Farbe muss im Format #RRGGBB sein.'),
+            Regexp(r'^#[0-9A-Fa-f]{6}$', message='Farbe muss im Format #RRGGBB sein.')
         ]
     )

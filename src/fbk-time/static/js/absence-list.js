@@ -14,9 +14,6 @@
     var bulkDeleteBtn;
     var clearSelectionBtn;
 
-    /**
-     * Initialize the module.
-     */
     function init() {
         selectAllCheckbox = document.getElementById('select-all');
         checkboxes = document.querySelectorAll('input[type="checkbox"][data-bulk-item]');
@@ -33,9 +30,6 @@
         initBulkActions();
     }
 
-    /**
-     * Initialize checkbox event listeners.
-     */
     function initCheckboxListeners() {
         checkboxes.forEach(function(checkbox) {
             checkbox.addEventListener('change', function() {
@@ -57,9 +51,6 @@
         }
     }
 
-    /**
-     * Initialize bulk action button listeners.
-     */
     function initBulkActions() {
         if (bulkDeleteBtn) {
             bulkDeleteBtn.addEventListener('click', bulkDelete);
@@ -70,9 +61,6 @@
         }
     }
 
-    /**
-     * Update the list of selected IDs from checked checkboxes.
-     */
     function updateSelectedIds() {
         selectedIds = [];
         checkboxes.forEach(function(checkbox) {
@@ -82,9 +70,6 @@
         });
     }
 
-    /**
-     * Update the select-all checkbox state based on individual selections.
-     */
     function updateSelectAllState() {
         if (!selectAllCheckbox) {
             return;
@@ -96,9 +81,6 @@
         selectAllCheckbox.checked = allChecked && checkboxes.length > 0;
     }
 
-    /**
-     * Show/hide bulk actions bar based on selection.
-     */
     function updateBulkActionsUI() {
         if (!bulkActionsBar) {
             return;
@@ -114,9 +96,6 @@
         }
     }
 
-    /**
-     * Clear all checkbox selections.
-     */
     function clearSelection() {
         checkboxes.forEach(function(checkbox) {
             checkbox.checked = false;
@@ -128,9 +107,6 @@
         updateBulkActionsUI();
     }
 
-    /**
-     * Execute bulk delete operation using shared confirmation dialog.
-     */
     function bulkDelete() {
         if (selectedIds.length === 0) {
             return;
@@ -143,9 +119,6 @@
         window.FBKTime.showConfirmDialog(message, executeBulkDelete);
     }
 
-    /**
-     * Perform the actual bulk delete API call.
-     */
     function executeBulkDelete() {
         bulkDeleteBtn.disabled = true;
         bulkDeleteBtn.setAttribute('aria-busy', 'true');
@@ -164,8 +137,12 @@
         })
         .then(function(data) {
             if (data.success) {
-                var count = data.deleted || selectedIds.length;
+                var count = (data.data && data.data.deleted) || 0;
+                var skipped = selectedIds.length - count;
                 var message = count + ' Abwesenheit' + (count !== 1 ? 'en' : '') + ' gelöscht.';
+                if (skipped > 0) {
+                    message += ' ' + skipped + ' übersprungen (keine Berechtigung).';
+                }
                 Toast.store(message, 'success');
                 location.reload();
             } else {
@@ -181,7 +158,6 @@
         });
     }
 
-    // Initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

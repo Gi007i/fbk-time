@@ -34,8 +34,7 @@ class RecurrenceService:
         end_date: Optional[date] = None,
         count: Optional[int] = None
     ) -> str:
-        """
-        Build an RRULE string from UI parameters.
+        """Build an RRULE string from UI parameters.
 
         Args:
             frequency: 'daily', 'weekly', or 'biweekly'.
@@ -64,8 +63,7 @@ class RecurrenceService:
         return ';'.join(parts)
 
     def parse_rrule_string(self, rrule_string: str) -> dict:
-        """
-        Parse an RRULE string into component parts for UI display.
+        """Parse an RRULE string into component parts for UI display.
 
         Args:
             rrule_string: RRULE string to parse.
@@ -128,8 +126,7 @@ class RecurrenceService:
         range_start: date,
         range_end: Optional[date] = None
     ) -> Generator[tuple[date, Optional[RecurrenceException]], None, None]:
-        """
-        Generate occurrence dates for a recurring absence within a date range.
+        """Generate occurrence dates for a recurring absence within a date range.
 
         Args:
             absence: The master recurring absence record.
@@ -189,8 +186,7 @@ class RecurrenceService:
         absence: Absence,
         occurrence_date: date
     ) -> Optional[dict]:
-        """
-        Get the effective data for a specific occurrence.
+        """Get the effective data for a specific occurrence.
 
         Merges master absence data with any exception overrides.
 
@@ -256,9 +252,27 @@ class RecurrenceService:
 
         return data
 
-    def delete_occurrence(self, absence: Absence, occurrence_date: date) -> RecurrenceException:
+    def _is_valid_occurrence_date(self, absence: Absence, occurrence_date: date) -> bool:
+        """Check if a date is a valid occurrence in the recurring series.
+
+        Args:
+            absence: The master recurring absence.
+            occurrence_date: The date to validate.
+
+        Returns:
+            True if the date is a valid occurrence, False otherwise.
         """
-        Delete a single occurrence from a recurring series.
+        if not absence.is_recurring or not absence.rrule:
+            return occurrence_date == absence.start_date
+
+        for occ_date, _ in self.expand_occurrences(absence, occurrence_date, occurrence_date):
+            if occ_date == occurrence_date:
+                return True
+
+        return False
+
+    def delete_occurrence(self, absence: Absence, occurrence_date: date) -> RecurrenceException:
+        """Delete a single occurrence from a recurring series.
 
         Creates a 'deleted' exception for the specified date.
 
@@ -268,11 +282,20 @@ class RecurrenceService:
 
         Returns:
             The created RecurrenceException.
+
+        Raises:
+            ValueError: If occurrence_date is not a valid date in the series.
         """
         exception = RecurrenceException.query.filter_by(
             absence_id=absence.id,
             exception_date=occurrence_date
         ).first()
+
+        if not exception and not self._is_valid_occurrence_date(absence, occurrence_date):
+            raise ValueError(
+                f'{format_date_for_user(occurrence_date)} ist kein gültiger '
+                f'Termin dieser Serie'
+            )
 
         if exception:
             exception.exception_type = 'deleted'
@@ -297,8 +320,7 @@ class RecurrenceService:
         occurrence_date: date,
         modifications: dict
     ) -> RecurrenceException:
-        """
-        Create or update a modification exception for a specific occurrence.
+        """Create or update a modification exception for a specific occurrence.
 
         Args:
             absence: The master recurring absence.
@@ -307,11 +329,26 @@ class RecurrenceService:
 
         Returns:
             Created or updated RecurrenceException.
+
+        Raises:
+            ValueError: If occurrence_date is not valid or was previously deleted.
         """
         exception = RecurrenceException.query.filter_by(
             absence_id=absence.id,
             exception_date=occurrence_date
         ).first()
+
+        if exception and exception.exception_type == 'deleted':
+            raise ValueError(
+                f'Termin am {format_date_for_user(occurrence_date)} wurde gelöscht '
+                f'und kann nicht modifiziert werden'
+            )
+
+        if not exception and not self._is_valid_occurrence_date(absence, occurrence_date):
+            raise ValueError(
+                f'{format_date_for_user(occurrence_date)} ist kein gültiger '
+                f'Termin dieser Serie'
+            )
 
         if not exception:
             exception = RecurrenceException(
@@ -320,8 +357,6 @@ class RecurrenceService:
                 exception_type='modified'
             )
             db.session.add(exception)
-        else:
-            exception.exception_type = 'modified'
 
         field_mapping = {
             'category_id': 'modified_category_id',
@@ -342,8 +377,7 @@ class RecurrenceService:
         start_date: date,
         end_date: Optional[date]
     ) -> date:
-        """
-        Validate and constrain recurrence end date to max 1 year.
+        """Validate and constrain recurrence end date to max 1 year.
 
         Args:
             start_date: Start date of the recurring absence.
@@ -365,8 +399,7 @@ class RecurrenceService:
         range_start: Optional[date] = None,
         range_end: Optional[date] = None
     ) -> int:
-        """
-        Count total occurrences in a date range.
+        """Count total occurrences in a date range.
 
         Args:
             absence: The recurring absence to count.
@@ -395,8 +428,7 @@ class RecurrenceService:
         rrule_string: str,
         end_date: Optional[date] = None
     ) -> str:
-        """
-        Generate human-readable description of recurrence pattern.
+        """Generate human-readable description of recurrence pattern.
 
         Args:
             rrule_string: The RRULE string to describe.
@@ -444,8 +476,7 @@ class RecurrenceService:
         range_start: date,
         range_end: date
     ) -> list[dict]:
-        """
-        Expand all absences (recurring and non-recurring) for a date range.
+        """Expand all absences (recurring and non-recurring) for a date range.
 
         Args:
             absences: List of Absence records to expand.

@@ -3,29 +3,30 @@
 Provides login, logout, and registration routes with security protections.
 """
 
-import time
 from datetime import datetime, timezone
 from urllib.parse import urlparse, urljoin
 
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session, jsonify
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_required, current_user, login_user
 
 from core.extensions import db
 from core.settings_manager import settings_manager
 from utils.session_navigation import is_ajax_request, get_return_url
 from .forms import LoginForm, RegistrationForm, ChangePasswordForm
-from .models import User, UserStatus, UserRole
+from .models import UserRole
 from .services import (
     authenticate_user,
     login_admin,
     logout_admin,
-    is_account_locked,
+    is_login_throttled,
     record_failed_attempt,
     clear_failed_attempts,
-    calculate_login_delay,
+    is_ip_throttled,
+    record_failed_ip_attempt,
     hash_password,
-    ph
+    ph,
+    register_pending_user
 )
 
 bp = Blueprint('auth', __name__, url_prefix='/auth')
@@ -63,10 +64,8 @@ def check_force_password_change():
 
     # Return JSON for API and AJAX requests
     if '/api/' in request.path or is_ajax_request():
-        return jsonify({
-            'error': 'Password change required',
-            'message': 'Passwortänderung erforderlich.'
-        }), 403
+        from utils.response_helpers import api_error
+        return api_error('Passwortänderung erforderlich.', status_code=403)
 
     return redirect(url_for('auth.change_password'))
 
@@ -104,11 +103,18 @@ def login():
     if form.validate_on_submit():
         username = form.username.data.strip().lower()
         password = form.password.data
-        lockout_duration = settings_manager.get('lockout_duration_minutes')
-        lockout_threshold = settings_manager.get('lockout_threshold')
+        client_ip = request.remote_addr
 
-        if is_account_locked(username):
-            flash(f'Konto temporär gesperrt. Bitte warten Sie {lockout_duration} Minuten.', 'danger')
+        remaining = max(
+            is_login_throttled(username),
+            is_ip_throttled(client_ip)
+        )
+        if remaining > 0:
+            if remaining >= 60:
+                wait_msg = f'{(remaining + 59) // 60} Minuten'
+            else:
+                wait_msg = f'{remaining} Sekunden'
+            flash(f'Zu viele Fehlversuche. Bitte warten Sie {wait_msg}.', 'danger')
             return render_template(
                 'auth/login.html',
                 form=form,
@@ -121,7 +127,6 @@ def login():
             clear_failed_attempts(username)
             login_admin(user, remember=form.remember.data)
 
-            # Check if password change is required
             if user.force_password_change:
                 flash('Bitte ändern Sie Ihr Passwort.', 'warning')
                 return redirect(url_for('auth.change_password'))
@@ -133,35 +138,9 @@ def login():
                 next_page = url_for('dashboard.index')
             return redirect(next_page)
 
-        # Show status-specific message if provided
-        # Still record failed attempt to prevent password enumeration
-        if error_message:
-            record_failed_attempt(username)
-            delay = calculate_login_delay(username)
-            if delay > 0:
-                time.sleep(delay)
-            flash(error_message, 'warning')
-            return render_template(
-                'auth/login.html',
-                form=form,
-                self_registration_enabled=self_registration_enabled
-            )
-
-        result = record_failed_attempt(username)
-
-        # Apply progressive delay before responding
-        delay = calculate_login_delay(username)
-        if delay > 0:
-            time.sleep(delay)
-
-        if result['locked_until']:
-            flash(f'Zu viele Fehlversuche. Bitte warten Sie {lockout_duration} Minuten.', 'danger')
-        else:
-            remaining_attempts = lockout_threshold - result['count']
-            if remaining_attempts > 0:
-                flash(f'Ungültiger Benutzername oder Passwort. Noch {remaining_attempts} Versuch(e).', 'danger')
-            else:
-                flash('Ungültiger Benutzername oder Passwort.', 'danger')
+        record_failed_attempt(username)
+        record_failed_ip_attempt(client_ip)
+        flash('Ungültiger Benutzername oder Passwort.', 'danger')
 
     return render_template(
         'auth/login.html',
@@ -170,10 +149,10 @@ def login():
     )
 
 
-@bp.route('/logout')
+@bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
-    """Handle user logout."""
+    """Handle user logout via POST to prevent CSRF logout attacks."""
     logout_admin()
     flash('Sie wurden abgemeldet.', 'info')
     return redirect(url_for('auth.login'))
@@ -192,14 +171,12 @@ def register():
     form = RegistrationForm()
 
     if form.validate_on_submit():
-        user = User(
-            username=form.username.data.strip().lower(),
-            name=form.name.data.strip(),
-            email=form.email.data.strip().lower() if form.email.data else None,
-            password_hash=hash_password(form.password.data),
-            status=UserStatus.PENDING
+        register_pending_user(
+            username=form.username.data,
+            name=form.name.data,
+            password=form.password.data,
+            email=form.email.data
         )
-        db.session.add(user)
         db.session.commit()
 
         flash(

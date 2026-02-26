@@ -17,8 +17,7 @@ ALLOWED_URL_SCHEMES = ('http://', 'https://')
 
 
 def _sanitize_url(url: str | None) -> str | None:
-    """
-    Validate URL scheme to prevent XSS via javascript: or data: URIs.
+    """Validate URL scheme to prevent XSS via javascript: or data: URIs.
 
     Args:
         url: URL string to validate.
@@ -51,8 +50,7 @@ def get_requirements_path() -> Path:
 
 
 def needs_regeneration() -> bool:
-    """
-    Check if licenses.json needs to be regenerated.
+    """Check if licenses.json needs to be regenerated.
 
     Returns True if:
     - licenses.json does not exist
@@ -71,8 +69,7 @@ def needs_regeneration() -> bool:
 
 
 def generate_licenses() -> bool:
-    """
-    Generate licenses.json from installed packages using pip-licenses.
+    """Generate licenses.json from installed packages using pip-licenses.
 
     Returns:
         True if generation was successful, False otherwise.
@@ -108,6 +105,7 @@ def generate_licenses() -> bool:
 
         for pkg in licenses_data:
             pkg['URL'] = _sanitize_url(pkg.get('URL'))
+            pkg.pop('Version', None)
 
         licenses_data.sort(key=lambda x: x.get('Name', '').lower())
 
@@ -132,8 +130,7 @@ def generate_licenses() -> bool:
 
 
 def ensure_licenses_current() -> None:
-    """
-    Ensure licenses.json is up-to-date.
+    """Ensure licenses.json is up-to-date.
 
     Called on app startup. Only regenerates if requirements.txt has changed.
     """
@@ -158,8 +155,7 @@ def _load_json_file(path: Path) -> list[dict]:
 
 
 def load_manual_licenses() -> list[dict]:
-    """
-    Load manually defined licenses from manual-licenses.json.
+    """Load manually defined licenses from manual-licenses.json.
 
     Returns:
         List of license dictionaries, or empty list if file not found.
@@ -174,8 +170,7 @@ def load_manual_licenses() -> list[dict]:
 
 
 def load_licenses() -> list[dict]:
-    """
-    Load all licenses from auto-generated and manual JSON files.
+    """Load all licenses from auto-generated and manual JSON files.
 
     Merges pip-licenses output with manually defined frontend/other licenses.
     Returns combined list sorted alphabetically by package name.
@@ -193,8 +188,7 @@ def load_licenses() -> list[dict]:
 
 
 def get_license_summary() -> dict:
-    """
-    Get summary statistics about licenses.
+    """Get summary statistics about licenses.
 
     Returns:
         Dictionary with license type counts and total package count.

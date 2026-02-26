@@ -14,8 +14,7 @@ def export_absences_ical(
     absences: List,
     calendar_name: str = 'FBK-Time Abwesenheiten'
 ) -> BytesIO:
-    """
-    Export absences to iCal format.
+    """Export absences to iCal format.
 
     Supports recurring absences with RRULE, EXDATE for deleted exceptions,
     and separate events with RECURRENCE-ID for modified exceptions.
@@ -146,8 +145,7 @@ def export_absences_ical(
 
 
 def _parse_rrule_to_dict(rrule_string: str) -> Optional[dict]:
-    """
-    Parse RRULE string into dictionary for icalendar.
+    """Parse RRULE string into dictionary for icalendar.
 
     Args:
         rrule_string: RRULE string like "FREQ=WEEKLY;BYDAY=MO,WE".

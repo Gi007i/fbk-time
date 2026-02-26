@@ -42,7 +42,7 @@ Konfigurations-Beispiele für Red Hat Enterprise Linux und Derivate:
 - Nginx-Konfiguration: `/etc/nginx/conf.d/` (direkte Platzierung)
 - SSL-Pfad: `/etc/pki/tls/certs/`, `/etc/pki/tls/private/`
 - Nginx-User: `nginx`
-- Service-User: `fbktime` (muss manuell erstellt werden)
+- Service-User: `nginx` (existiert bereits nach Nginx-Installation)
 - Firewall: firewalld (`firewall-cmd`)
 - **SELinux:** Aktiv - erfordert korrekte Kontexte und Booleans!
 

@@ -47,7 +47,7 @@ limit_request_field_size = 8192
 
 graceful_timeout = 30
 
-pidfile = "/tmp/gunicorn_fbktime.pid"
+pidfile = str(_base_dir / "data" / "gunicorn.pid")
 
 proc_name = "fbk-time"
 
@@ -60,20 +60,16 @@ raw_env = [
 
 
 def when_ready(server):
-    """Callback when server is ready."""
     server.log.info("Gunicorn server started")
 
 
 def worker_int(worker):
-    """Callback on worker interrupt."""
     worker.log.info("Worker process terminated")
 
 
 def pre_fork(server, worker):
-    """Callback before worker fork."""
     pass
 
 
 def post_fork(server, worker):
-    """Callback after worker fork."""
     server.log.info(f"Worker {worker.pid} started")

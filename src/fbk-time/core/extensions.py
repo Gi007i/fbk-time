@@ -19,8 +19,7 @@ csrf = CSRFProtect()
 
 @event.listens_for(Engine, "connect")
 def enable_sqlite_wal_mode(dbapi_connection, connection_record):
-    """
-    Enable WAL mode and Foreign Keys for SQLite connections.
+    """Enable WAL mode and Foreign Keys for SQLite connections.
 
     WAL mode allows concurrent reads during writes - required for
     multi-device access with same user account.
@@ -35,5 +34,6 @@ def enable_sqlite_wal_mode(dbapi_connection, connection_record):
         cursor.execute("PRAGMA temp_store=MEMORY")
         cursor.execute("PRAGMA mmap_size=268435456")
         cursor.execute("PRAGMA busy_timeout=30000")
+        cursor.execute("PRAGMA secure_delete=ON")
 
         cursor.close()

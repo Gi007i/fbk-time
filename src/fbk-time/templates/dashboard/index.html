@@ -107,17 +107,15 @@
                         <small>
                             {% if warning.type == 'missing_substitute' %}
                             Vertretung fehlt für {{ warning.category }}
-                            {% elif warning.type == 'user_overlap' %}
-                            Überlappende Einträge: {{ warning.absence1_category }}
-                            <span class="nowrap">({{ warning.absence1_start|format_date(short=True) }} - {{ warning.absence1_end|format_date(short=True) }})</span>
-                            und {{ warning.absence2_category }}
-                            <span class="nowrap">({{ warning.absence2_start|format_date(short=True) }} - {{ warning.absence2_end|format_date(short=True) }})</span>
                             {% elif warning.type == 'substitute_conflict' %}
                             Vertretung {{ warning.substitute }} ist selbst abwesend
-                            <span class="nowrap">({{ warning.conflict_start|format_date(short=True) }} - {{ warning.conflict_end|format_date(short=True) }})</span>
+                            <span class="nowrap">({% for d in warning.conflict_dates %}{{ d|format_date(short=True) }}{% if not loop.last %}, {% endif %}{% endfor %}{% if warning.conflict_count > 3 %} +{{ warning.conflict_count - 3 }} weitere{% endif %})</span>
                             {% elif warning.type == 'substitute_double_assignment' %}
                             {{ warning.substitute }} vertritt bereits {{ warning.other_user }}
-                            <span class="nowrap">({{ warning.other_start|format_date(short=True) }} - {{ warning.other_end|format_date(short=True) }})</span>
+                            <span class="nowrap">({{ warning.conflict_date|format_date(short=True) }})</span>
+                            {% elif warning.type == 'cross_substitution' %}
+                            Kreuzvertretung mit {{ warning.substitute }}
+                            <span class="nowrap">({% for d in warning.overlap_dates %}{{ d|format_date(short=True) }}{% if not loop.last %}, {% endif %}{% endfor %}{% if warning.overlap_count > 3 %} +{{ warning.overlap_count - 3 }} weitere{% endif %})</span>
                             {% endif %}
                         </small>
                     </td>

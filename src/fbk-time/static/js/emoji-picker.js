@@ -72,7 +72,6 @@
             });
         }
 
-        // Close picker when clicking outside
         document.addEventListener('click', function(e) {
             if (!wrapper.contains(e.target)) {
                 hidePicker(picker);

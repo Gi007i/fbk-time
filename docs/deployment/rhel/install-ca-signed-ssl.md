@@ -230,7 +230,7 @@ sudo nginx -t
 sudo systemctl reload nginx
 
 # Falls Probleme mit SELinux
-sudo setsebool -P httpd_can_network_connect 1
+sudo setsebool -P httpd_can_network_connect on
 sudo ausearch -m AVC -ts recent | grep nginx
 
 # Firewall konfigurieren (falls noch nicht geschehen)

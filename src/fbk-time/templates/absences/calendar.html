@@ -128,10 +128,10 @@
     "year": {{ year }},
     "month": {{ month }},
     "today": "{{ today.isoformat() }}",
-    "urlWeekStart": "{{ request.args.get('week_start', '') }}",
+    "urlWeekStart": {{ request.args.get('week_start', '')|tojson }},
     "holidays": {
         {% for date, name in holidays.items() %}
-        "{{ date.isoformat() }}": "{{ name }}"{% if not loop.last %},{% endif %}
+        {{ date.isoformat()|tojson }}: {{ name|tojson }}{% if not loop.last %},{% endif %}
         {% endfor %}
     },
     "occurrences": [
@@ -157,5 +157,5 @@
     }
 }
 </script>
-<script src="{{ url_for('static', filename='js/calendar-renderer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/calendar.js') }}"></script>
 {% endblock %}

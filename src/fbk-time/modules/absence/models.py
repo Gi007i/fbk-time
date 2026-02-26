@@ -14,13 +14,12 @@ def _utc_now():
 
 
 class Absence(db.Model):
-    """
-    Absence record with flexible time options and substitute support.
+    """Absence record with flexible time options and substitute support.
 
     Delete behaviors:
-    - user_id: CASCADE (delete absence when user deleted)
-    - category_id: RESTRICT (prevent category deletion, handled in app)
-    - substitute_id: SET NULL (clear substitute reference when user deleted)
+        user_id: CASCADE (delete absence when user deleted)
+        category_id: RESTRICT (prevent category deletion, handled in app)
+        substitute_id: SET NULL (clear substitute reference when user deleted)
     """
 
     __tablename__ = 'absences'
@@ -67,6 +66,10 @@ class Absence(db.Model):
     created_at = db.Column(db.DateTime, default=_utc_now)
     updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
 
+    __table_args__ = (
+        db.Index('ix_absence_user_dates', 'user_id', 'start_date', 'end_date'),
+    )
+
     substitute = db.relationship(
         'User',
         foreign_keys=[substitute_id],
@@ -94,8 +97,7 @@ class Absence(db.Model):
 
     @property
     def duration_days(self):
-        """
-        Calculate number of days for this absence.
+        """Calculate number of days for this absence.
 
         Half-day absences (morning/afternoon) subtract 0.5 from total.
         Custom time absences count as full days (informational only).
@@ -114,8 +116,7 @@ class Absence(db.Model):
 
 
 class AbsenceHistory(db.Model):
-    """
-    Change history for absence records.
+    """Change history for absence records.
 
     Tracks all modifications with user attribution.
     Automatically deleted when parent absence is deleted (CASCADE).
@@ -154,12 +155,11 @@ class AbsenceHistory(db.Model):
 
 
 class RecurrenceException(db.Model):
-    """
-    Exceptions for recurring absences (deleted or modified occurrences).
+    """Exceptions for recurring absences (deleted or modified occurrences).
 
     Stores dates that deviate from the recurring pattern:
-    - 'deleted': Occurrence removed from series
-    - 'modified': Occurrence with overridden values
+        deleted: Occurrence removed from series
+        modified: Occurrence with overridden values
 
     Automatically deleted when parent absence is deleted (CASCADE).
     """

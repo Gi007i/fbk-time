@@ -89,6 +89,8 @@ class Config:
     WTF_CSRF_ENABLED = True
     WTF_CSRF_TIME_LIMIT = 3600
 
+    JSON_AS_ASCII = False
+
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024
 
     HOST = SYSTEM_SETTINGS['server']['host']

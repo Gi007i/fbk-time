@@ -98,7 +98,7 @@ Alle Konfigurations-Beispiele befinden sich unter [config/examples/](../../confi
 | **Nginx-Konfiguration** | `/etc/nginx/sites-available/` + Symlink | `/etc/nginx/conf.d/` |
 | **SSL-Pfad** | `/etc/ssl/certs/`, `/etc/ssl/private/` | `/etc/pki/tls/certs/`, `/etc/pki/tls/private/` |
 | **Nginx-User** | `www-data` | `nginx` |
-| **Service-User** | `www-data` (existiert bereits) | `fbktime` (manuell erstellen) |
+| **Service-User** | `www-data` (existiert bereits) | `nginx` (existiert bereits) |
 | **Firewall** | UFW (`ufw`) | firewalld (`firewall-cmd`) |
 | **SELinux** | Nicht aktiv | **Aktiv** - Kontexte & Booleans erforderlich! |
 

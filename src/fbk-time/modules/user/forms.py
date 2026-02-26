@@ -1,11 +1,12 @@
 """User management forms."""
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SelectField, BooleanField
+from wtforms import StringField, PasswordField, SelectField
 from wtforms.validators import DataRequired, Email, Length, Optional, ValidationError
 
-from modules.auth.models import User, UserRole, UserStatus
+from modules.auth.models import UserRole, UserStatus
 from utils.validators import validate_password_strength
+from .services import username_exists, email_exists
 
 
 class UserCreateForm(FlaskForm):
@@ -40,13 +41,13 @@ class UserCreateForm(FlaskForm):
 
     def validate_username(self, field):
         """Check username is unique."""
-        if User.query.filter_by(username=field.data.strip().lower()).first():
+        if username_exists(field.data):
             raise ValidationError('Dieser Benutzername ist bereits vergeben.')
 
     def validate_email(self, field):
         """Check email is unique if provided."""
         if field.data:
-            if User.query.filter_by(email=field.data.strip().lower()).first():
+            if email_exists(field.data):
                 raise ValidationError('Diese E-Mail-Adresse ist bereits registriert.')
 
     def validate_password(self, field):
@@ -99,8 +100,7 @@ class UserEditForm(FlaskForm):
     def validate_email(self, field):
         """Check email is unique if changed."""
         if field.data and self.user:
-            existing = User.query.filter_by(email=field.data.strip().lower()).first()
-            if existing and existing.id != self.user.id:
+            if email_exists(field.data, exclude_user_id=self.user.id):
                 raise ValidationError('Diese E-Mail-Adresse ist bereits registriert.')
 
     def validate_password(self, field):

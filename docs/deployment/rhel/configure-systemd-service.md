@@ -13,16 +13,13 @@ Der FBK-Time Gunicorn Application Server wird als systemd-Dienst betrieben, um a
 
 ---
 
-## Service-User erstellen
+## Berechtigungen setzen
 
-RHEL benötigt einen dedizierten Service-User:
+FBK-Time läuft unter dem `nginx`-User, der bei der Nginx-Installation automatisch erstellt wird:
 
 ```bash
-# System-User ohne Login-Shell erstellen
-sudo useradd -r -s /sbin/nologin fbktime
-
-# Anwendungsverzeichnis dem User zuweisen
-sudo chown -R fbktime:fbktime /var/www/fbk-time
+# Anwendungsverzeichnis dem Nginx-User zuweisen
+sudo chown -R nginx:nginx /var/www/fbk-time
 ```
 
 ---
@@ -42,20 +39,39 @@ sudo chmod 644 /etc/systemd/system/fbk-time.service
 
 ## SELinux konfigurieren
 
-```bash
-# Kontext auf Anwendungsverzeichnis setzen
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/fbk-time(/.*)?"
-
-# Schreibzugriff auf Datenverzeichnis erlauben
-sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/fbk-time/data(/.*)?"
-
-# Kontext anwenden
-sudo restorecon -Rv /var/www/fbk-time
-```
+SELinux ist auf RHEL standardmäßig aktiv und erfordert explizite Konfiguration.
 
 **Hinweis:** Falls `semanage` nicht verfügbar:
 ```bash
 sudo dnf install policycoreutils-python-utils -y
+```
+
+### SELinux-Kontexte setzen
+
+```bash
+# Schreibzugriff auf gesamtes Anwendungsverzeichnis (DB, Logs, Cache)
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/fbk-time(/.*)?"
+
+# Ausführungsrecht für Virtual Environment Binaries (Gunicorn, Python)
+sudo semanage fcontext -a -t httpd_sys_script_exec_t "/var/www/fbk-time/venv/bin(/.*)?"
+
+# Kontexte anwenden
+sudo restorecon -Rv /var/www/fbk-time
+```
+
+### SELinux-Port freigeben
+
+Gunicorn lauscht auf Port 6000, der standardmäßig nicht als HTTP-Port registriert ist:
+
+```bash
+sudo semanage port -a -t http_port_t -p tcp 6000
+```
+
+### SELinux-Booleans setzen
+
+```bash
+# Nginx-Verbindung zu Gunicorn (Reverse Proxy) erlauben
+sudo setsebool -P httpd_can_network_connect on
 ```
 
 ---
@@ -134,7 +150,7 @@ pip install -r requirements.txt
 
 2. **Falsche Berechtigungen:**
 ```bash
-sudo chown -R fbktime:fbktime /var/www/fbk-time
+sudo chown -R nginx:nginx /var/www/fbk-time
 ```
 
 3. **gunicorn.conf.py fehlt oder fehlerhaft:**
@@ -151,13 +167,18 @@ python -c "exec(open('gunicorn.conf.py').read())"
 # Audit-Log prüfen
 sudo ausearch -m AVC -ts recent | grep fbk
 
-# Kontext auf Anwendung setzen
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/fbk-time(/.*)?"
-sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/fbk-time/data(/.*)?"
+# Kontexte prüfen
+ls -Z /var/www/fbk-time/
+ls -Z /var/www/fbk-time/venv/bin/
+
+# Kontexte neu setzen (siehe Abschnitt "SELinux konfigurieren")
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/fbk-time(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_script_exec_t "/var/www/fbk-time/venv/bin(/.*)?"
 sudo restorecon -Rv /var/www/fbk-time
 
-# Boolean für Netzwerkverbindungen (falls Gunicorn externe Verbindungen braucht)
-sudo setsebool -P httpd_can_network_connect 1
+# Port und Boolean prüfen
+sudo semanage port -l | grep 6000
+sudo getsebool httpd_can_network_connect
 ```
 
 ### Port bereits belegt
@@ -194,7 +215,7 @@ Die RHEL Service-Datei enthält erweiterte Sicherheitsoptionen:
 | `PrivateTmp=true` | Isoliertes /tmp Verzeichnis |
 | `ProtectSystem=strict` | Dateisystem read-only (außer explizite Ausnahmen) |
 | `ProtectHome=true` | Kein Zugriff auf /home |
-| `ReadWritePaths=/var/www/fbk-time/data` | Nur data/ beschreibbar |
+| `ReadWritePaths=/var/www/fbk-time` | Anwendungsverzeichnis beschreibbar (DB, Logs, Cache) |
 | `ProtectKernelTunables=true` | Kein Zugriff auf /proc/sys |
 | `ProtectKernelModules=true` | Keine Kernel-Module ladbar |
 | `ProtectControlGroups=true` | Kein Zugriff auf cgroups |
@@ -206,18 +227,19 @@ Die RHEL Service-Datei enthält erweiterte Sicherheitsoptionen:
 ## Checkliste nach Installation
 
 ```bash
-# 1. Service-User erstellen
-sudo useradd -r -s /sbin/nologin fbktime
-sudo chown -R fbktime:fbktime /var/www/fbk-time
+# 1. Berechtigungen setzen
+sudo chown -R nginx:nginx /var/www/fbk-time
 
 # 2. Service-Datei kopieren
 sudo cp /var/www/fbk-time/config/examples/rhel/systemd-rhel.service.example \
         /etc/systemd/system/fbk-time.service
 
-# 3. SELinux Kontext
-sudo semanage fcontext -a -t httpd_sys_content_t "/var/www/fbk-time(/.*)?"
-sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/fbk-time/data(/.*)?"
+# 3. SELinux konfigurieren
+sudo semanage fcontext -a -t httpd_sys_rw_content_t "/var/www/fbk-time(/.*)?"
+sudo semanage fcontext -a -t httpd_sys_script_exec_t "/var/www/fbk-time/venv/bin(/.*)?"
 sudo restorecon -Rv /var/www/fbk-time
+sudo semanage port -a -t http_port_t -p tcp 6000
+sudo setsebool -P httpd_can_network_connect on
 
 # 4. Service aktivieren
 sudo systemctl daemon-reload
@@ -234,4 +256,4 @@ sudo systemctl status fbk-time
 - Standard-Port für Gunicorn ist 6000 (siehe `gunicorn.conf.py`)
 - Logs werden ins systemd Journal geschrieben (`journalctl -u fbk-time`)
 - Bei Änderungen an der Service-Datei: `systemctl daemon-reload` nicht vergessen
-- Service-User: `fbktime`
+- Service-User: `nginx` (wird bei Nginx-Installation erstellt)

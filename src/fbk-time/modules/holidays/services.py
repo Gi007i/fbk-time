@@ -44,8 +44,7 @@ def get_current_region() -> str:
 
 
 def get_holidays_for_year(year: int, region: Optional[str] = None) -> Dict[date, str]:
-    """
-    Get all holidays for a specific year and region.
+    """Get all holidays for a specific year and region.
 
     Args:
         year: The year to get holidays for.
@@ -87,8 +86,7 @@ def get_holidays_for_range(
     end_date: date,
     region: Optional[str] = None
 ) -> Dict[date, str]:
-    """
-    Get all holidays within a date range.
+    """Get all holidays within a date range.
 
     Args:
         start_date: Start of the range.
@@ -121,8 +119,7 @@ def get_holidays_for_month(
     month: int,
     region: Optional[str] = None
 ) -> Dict[date, str]:
-    """
-    Get all holidays for a specific month.
+    """Get all holidays for a specific month.
 
     Args:
         year: The year.
@@ -142,8 +139,7 @@ def get_holidays_for_month(
 
 
 def is_holiday(check_date: date, region: Optional[str] = None) -> Tuple[bool, Optional[str]]:
-    """
-    Check if a specific date is a holiday.
+    """Check if a specific date is a holiday.
 
     Args:
         check_date: The date to check.
@@ -166,34 +162,12 @@ def is_holiday(check_date: date, region: Optional[str] = None) -> Tuple[bool, Op
     return False, None
 
 
-def is_working_day(check_date: date, region: Optional[str] = None) -> bool:
-    """
-    Check if a date is a working day (not weekend, not holiday).
-
-    Args:
-        check_date: The date to check.
-        region: Region code. Uses settings if None.
-
-    Returns:
-        True if the date is a working day.
-    """
-    # Monday=0, Sunday=6
-    if check_date.weekday() >= 5:
-        return False
-
-    is_hol, _ = is_holiday(check_date, region)
-    return not is_hol
-
-
 def count_working_days(
     start_date: date,
     end_date: date,
     region: Optional[str] = None
 ) -> int:
-    """
-    Count working days in a date range.
-
-    Excludes weekends and holidays.
+    """Count working days in a date range (excludes weekends and holidays).
 
     Args:
         start_date: Start of the range.
@@ -221,8 +195,7 @@ def count_working_days(
 
 
 def get_region_choices() -> List[Tuple[str, str]]:
-    """
-    Get list of region choices for form select field.
+    """Get list of region choices for form select field.
 
     Returns:
         List of (code, display_name) tuples.
@@ -231,8 +204,7 @@ def get_region_choices() -> List[Tuple[str, str]]:
 
 
 def _get_state_code(region: str) -> Optional[str]:
-    """
-    Get the state code for the holidays library.
+    """Get the state code for the holidays library.
 
     Args:
         region: Region code (e.g., 'DE-BY').

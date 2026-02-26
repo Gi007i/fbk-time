@@ -1,5 +1,5 @@
 /**
- * Absence form handling, validation, and live conflict checking.
+ * Absence form UI handling for time fields and recurrence.
  * @module absence-form
  */
 
@@ -7,7 +7,6 @@
     'use strict';
 
     var form;
-    var userSelect;
     var categorySelect;
     var substituteSelect;
     var startDateInput;
@@ -15,8 +14,6 @@
     var timeTypeInputs;
     var startTimeInput;
     var endTimeInput;
-    var conflictDisplay;
-    var checkTimeout;
 
     // Recurrence fields
     var isRecurringCheckbox;
@@ -34,7 +31,6 @@
         form = document.getElementById('absence-form');
         if (!form) return;
 
-        userSelect = form.querySelector('[name="user_id"]');
         categorySelect = form.querySelector('[name="category_id"]');
         substituteSelect = form.querySelector('[name="substitute_id"]');
         startDateInput = form.querySelector('[name="start_date"]');
@@ -42,7 +38,6 @@
         timeTypeInputs = form.querySelectorAll('[name="time_type"]');
         startTimeInput = form.querySelector('[name="start_time"]');
         endTimeInput = form.querySelector('[name="end_time"]');
-        conflictDisplay = document.getElementById('conflict-warnings');
 
         // Recurrence fields
         isRecurringCheckbox = document.getElementById('is_recurring');
@@ -63,37 +58,12 @@
      * Set up event listeners for form fields.
      */
     function initEventListeners() {
-        if (userSelect) {
-            userSelect.addEventListener('change', function() {
-                updateAvailableSubstitutes();
-                scheduleConflictCheck();
-            });
-        }
-
         if (categorySelect) {
-            categorySelect.addEventListener('change', function() {
-                updateSubstituteRequirement();
-                scheduleConflictCheck();
-            });
-        }
-
-        if (substituteSelect) {
-            substituteSelect.addEventListener('change', scheduleConflictCheck);
+            categorySelect.addEventListener('change', updateSubstituteRequirement);
         }
 
         if (startDateInput) {
-            startDateInput.addEventListener('change', function() {
-                syncEndDate();
-                updateAvailableSubstitutes();
-                scheduleConflictCheck();
-            });
-        }
-
-        if (endDateInput) {
-            endDateInput.addEventListener('change', function() {
-                updateAvailableSubstitutes();
-                scheduleConflictCheck();
-            });
+            startDateInput.addEventListener('change', syncEndDate);
         }
 
         timeTypeInputs.forEach(function(input) {
@@ -152,221 +122,39 @@
 
     /**
      * Update substitute field requirement based on category.
+     * Uses DOM manipulation instead of innerHTML for CSP compliance.
      */
     function updateSubstituteRequirement() {
         if (!categorySelect || !substituteSelect) return;
 
         var selectedOption = categorySelect.options[categorySelect.selectedIndex];
         var requiresSubstitute = selectedOption && selectedOption.dataset.requiresSubstitute === 'true';
-        var substituteLabel = document.querySelector('label[for="substitute_id"]');
+        var substituteLabel = substituteSelect.closest('label');
 
-        if (requiresSubstitute) {
-            substituteSelect.required = true;
-            if (substituteLabel) {
-                substituteLabel.innerHTML = 'Vertretung <span class="required">*</span>';
-            }
-        } else {
-            substituteSelect.required = false;
-            if (substituteLabel) {
-                substituteLabel.innerHTML = 'Vertretung';
-            }
+        if (!substituteLabel) return;
+
+        substituteSelect.required = requiresSubstitute;
+
+        var existingRequired = substituteLabel.querySelector('.required');
+
+        if (requiresSubstitute && !existingRequired) {
+            var requiredSpan = document.createElement('span');
+            requiredSpan.className = 'required';
+            requiredSpan.textContent = ' *';
+            substituteLabel.insertBefore(requiredSpan, substituteSelect);
+        } else if (!requiresSubstitute && existingRequired) {
+            existingRequired.remove();
         }
     }
 
     /**
-     * Update available substitutes based on date range.
-     */
-    function updateAvailableSubstitutes() {
-        if (!userSelect || !substituteSelect || !startDateInput || !endDateInput) return;
-
-        var userId = userSelect.value;
-        var startDate = startDateInput.value;
-        var endDate = endDateInput.value;
-
-        if (!userId || !startDate || !endDate) return;
-
-        var url = '/absences/api/available-substitutes?' +
-            'user_id=' + encodeURIComponent(userId) +
-            '&start_date=' + encodeURIComponent(startDate) +
-            '&end_date=' + encodeURIComponent(endDate);
-
-        fetch(url, {
-            headers: {
-                'X-Requested-With': 'XMLHttpRequest'
-            }
-        })
-            .then(function(response) {
-                return response.json();
-            })
-            .then(function(data) {
-                if (data.substitutes) {
-                    updateSubstituteOptions(data.substitutes);
-                }
-            })
-            .catch(function() {
-                showWarning('Vertretungsliste konnte nicht aktualisiert werden. Bitte manuelle Überprüfung durchführen.');
-            });
-    }
-
-    /**
-     * Update substitute select options.
-     * @param {Array} substitutes - Array of available substitute objects.
-     */
-    function updateSubstituteOptions(substitutes) {
-        if (!substituteSelect) return;
-
-        var currentValue = substituteSelect.value;
-
-        // Clear all options except the first (empty) one
-        while (substituteSelect.options.length > 1) {
-            substituteSelect.remove(1);
-        }
-
-        substitutes.forEach(function(sub) {
-            var option = document.createElement('option');
-            option.value = sub.id;
-            option.textContent = sub.name;
-            substituteSelect.appendChild(option);
-        });
-
-        // Try to restore previous selection
-        if (currentValue) {
-            substituteSelect.value = currentValue;
-            if (substituteSelect.value !== currentValue) {
-                // Previous selection is no longer available
-                substituteSelect.value = '';
-                showWarning('Die zuvor gewählte Vertretung ist im neuen Zeitraum nicht verfügbar.');
-            }
-        }
-    }
-
-    /**
-     * Schedule a conflict check with debouncing.
-     */
-    function scheduleConflictCheck() {
-        if (checkTimeout) {
-            clearTimeout(checkTimeout);
-        }
-        checkTimeout = setTimeout(checkConflicts, 300);
-    }
-
-    /**
-     * Check for conflicts via API.
-     */
-    function checkConflicts() {
-        if (!userSelect || !startDateInput || !endDateInput) return;
-
-        var userId = userSelect.value;
-        var startDate = startDateInput.value;
-        var endDate = endDateInput.value;
-
-        if (!userId || !startDate || !endDate) {
-            clearConflictDisplay();
-            return;
-        }
-
-        var data = {
-            user_id: userId,
-            start_date: startDate,
-            end_date: endDate
-        };
-
-        if (substituteSelect && substituteSelect.value) {
-            data.substitute_id = substituteSelect.value;
-        }
-
-        // Check if we're editing (exclude_id from form)
-        var excludeInput = form.querySelector('[name="exclude_id"]');
-        if (excludeInput && excludeInput.value) {
-            data.exclude_id = excludeInput.value;
-        }
-
-        var csrfToken = document.querySelector('meta[name="csrf-token"]');
-
-        fetch('/absences/api/check-conflicts', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-                'X-CSRFToken': csrfToken ? csrfToken.content : ''
-            },
-            body: JSON.stringify(data)
-        })
-        .then(function(response) {
-            if (!response.ok) {
-                throw new Error('Request failed');
-            }
-            return response.json();
-        })
-        .then(function(result) {
-            displayConflicts(result);
-        })
-        .catch(function() {
-            showWarning('Konfliktprüfung fehlgeschlagen. Bitte manuelle Überprüfung vor dem Speichern durchführen.');
-        });
-    }
-
-    /**
-     * Display conflict warnings in the UI.
-     * @param {Object} result - Conflict check result.
-     */
-    function displayConflicts(result) {
-        if (!conflictDisplay) return;
-
-        var hasMessages = result.messages && result.messages.length > 0;
-
-        if (!result.has_conflicts && !result.cross_substitution_warning && !hasMessages) {
-            clearConflictDisplay();
-            return;
-        }
-
-        var html = '';
-
-        if (hasMessages) {
-            result.messages.forEach(function(message) {
-                // Conflicts are blocking (danger), warnings are informational
-                var isWarning = !result.has_conflicts ||
-                    message.indexOf('Kreuzvertretung') !== -1 ||
-                    message.indexOf('vertritt bereits') !== -1;
-                var className = isWarning ? 'alert-warning' : 'alert-danger';
-                html += '<article role="alert" class="inline-alert ' + className + '">' + escapeHtml(message) + '</article>';
-            });
-        }
-
-        conflictDisplay.innerHTML = html;
-        conflictDisplay.classList.remove('hidden');
-    }
-
-    /**
-     * Clear the conflict display.
-     */
-    function clearConflictDisplay() {
-        if (conflictDisplay) {
-            conflictDisplay.innerHTML = '';
-            conflictDisplay.classList.add('hidden');
-        }
-    }
-
-    /**
-     * Show a warning message.
-     * @param {string} message - Warning message to display.
-     */
-    function showWarning(message) {
-        if (conflictDisplay) {
-            var html = '<article role="alert" class="inline-alert alert-warning">' + escapeHtml(message) + '</article>';
-            conflictDisplay.innerHTML += html;
-            conflictDisplay.classList.remove('hidden');
-        }
-    }
-
-    /**
-     * Escape HTML special characters.
+     * Check if a date string is within valid range.
      * Uses global utility function from main.js.
-     * @param {string} text - Text to escape.
-     * @returns {string} Escaped text.
+     * @param {string} dateStr - Date string in YYYY-MM-DD format.
+     * @returns {boolean} True if date is valid and within range.
      */
-    function escapeHtml(text) {
-        return window.FBKTime.escapeHtml(text);
+    function isDateInValidRange(dateStr) {
+        return window.FBKTime.isDateInValidRange(dateStr);
     }
 
     /**
@@ -392,7 +180,6 @@
             checkbox.addEventListener('change', updateRecurrencePreview);
         });
 
-        // Start date change updates max recurrence end date
         if (startDateInput) {
             startDateInput.addEventListener('change', function() {
                 updateMaxRecurrenceEndDate();
@@ -412,21 +199,23 @@
 
     /**
      * Toggle recurrence fields container visibility.
+     * Clears recurrence end date constraints when hidden to prevent browser validation issues.
      */
     function toggleRecurrenceFields() {
         if (!recurrenceFieldsContainer) return;
 
         if (isRecurringCheckbox && isRecurringCheckbox.checked) {
             recurrenceFieldsContainer.classList.remove('hidden');
-            // Hide end date for recurring (uses recurrence_end_date instead)
             if (endDateGroup) {
                 endDateGroup.classList.add('hidden');
             }
+            updateMaxRecurrenceEndDate();
         } else {
             recurrenceFieldsContainer.classList.add('hidden');
             if (endDateGroup) {
                 endDateGroup.classList.remove('hidden');
             }
+            clearRecurrenceEndDateConstraints();
         }
     }
 
@@ -445,24 +234,50 @@
     }
 
     /**
+     * Clear recurrence end date constraints to prevent browser validation on hidden field.
+     */
+    function clearRecurrenceEndDateConstraints() {
+        if (!recurrenceEndDate) return;
+
+        recurrenceEndDate.removeAttribute('min');
+        recurrenceEndDate.removeAttribute('max');
+        recurrenceEndDate.removeAttribute('required');
+        recurrenceEndDate.disabled = true;
+        recurrenceEndDate.value = '';
+    }
+
+    /**
      * Update the maximum allowed recurrence end date (1 year from start).
+     * Only sets constraints if recurrence is active and start date is within valid range.
      */
     function updateMaxRecurrenceEndDate() {
         if (!recurrenceEndDate || !startDateInput) return;
 
+        // Only update constraints if recurrence is active
+        if (!isRecurringCheckbox || !isRecurringCheckbox.checked) {
+            return;
+        }
+
         var startDate = startDateInput.value;
-        if (!startDate) return;
+        if (!startDate) {
+            clearRecurrenceEndDateConstraints();
+            return;
+        }
+
+        if (!isDateInValidRange(startDate)) {
+            clearRecurrenceEndDateConstraints();
+            return;
+        }
 
         var start = new Date(startDate);
         var maxEnd = new Date(start);
         maxEnd.setFullYear(maxEnd.getFullYear() + 1);
 
-        // Format as YYYY-MM-DD
         var maxDateStr = maxEnd.toISOString().split('T')[0];
+        recurrenceEndDate.disabled = false;
         recurrenceEndDate.max = maxDateStr;
         recurrenceEndDate.min = startDate;
 
-        // If no end date set, default to 3 months from start
         if (!recurrenceEndDate.value) {
             var defaultEnd = new Date(start);
             defaultEnd.setMonth(defaultEnd.getMonth() + 3);
@@ -525,7 +340,6 @@
                 desc = 'Alle 2 Wochen';
             }
         } else {
-            // weekly
             if (weekdays.length > 0) {
                 var dayNames = weekdays.map(function(d) { return weekdayNames[d]; });
                 if (dayNames.length === 1) {
@@ -548,89 +362,10 @@
         return desc;
     }
 
-    /**
-     * Reset submit button state after validation failure.
-     */
-    function resetSubmitButton() {
-        var submitButton = form.querySelector('button[type="submit"]');
-        if (submitButton) {
-            submitButton.disabled = false;
-            submitButton.removeAttribute('aria-busy');
-        }
-    }
-
-    /**
-     * Validate the form before submission.
-     * @param {Event} event - Form submit event.
-     * @returns {boolean} Whether form is valid.
-     */
-    function validateForm(event) {
-        var isValid = true;
-
-        // Clear previous validation errors
-        window.FBKTime.clearAllFieldErrors(form);
-
-        // Check date range (only for non-recurring)
-        var isRecurring = isRecurringCheckbox && isRecurringCheckbox.checked;
-        if (!isRecurring && startDateInput && endDateInput) {
-            if (endDateInput.value < startDateInput.value) {
-                window.FBKTime.showFieldError(endDateInput, 'Das Enddatum darf nicht vor dem Startdatum liegen.');
-                event.preventDefault();
-                isValid = false;
-            }
-        }
-
-        var timeType = getSelectedTimeType();
-        if (timeType === 'custom_time') {
-            if (!startTimeInput.value || !endTimeInput.value) {
-                window.FBKTime.showFieldError(startTimeInput, 'Bitte geben Sie Start- und Endzeit an.');
-                event.preventDefault();
-                isValid = false;
-            } else if (startTimeInput.value >= endTimeInput.value) {
-                window.FBKTime.showFieldError(endTimeInput, 'Die Endzeit muss nach der Startzeit liegen.');
-                event.preventDefault();
-                isValid = false;
-            }
-        }
-
-        if (isRecurring) {
-            var frequency = recurrenceFrequency ? recurrenceFrequency.value : 'weekly';
-
-            // Weekday required for weekly/biweekly
-            if (frequency !== 'daily') {
-                var selectedWeekdays = getSelectedWeekdays();
-                if (selectedWeekdays.length === 0) {
-                    window.FBKTime.showFieldsetError(weekdayFields, 'Bitte wählen Sie mindestens einen Wochentag aus.');
-                    event.preventDefault();
-                    isValid = false;
-                }
-            }
-
-            if (recurrenceEndDate && !recurrenceEndDate.value) {
-                window.FBKTime.showFieldError(recurrenceEndDate, 'Bitte geben Sie ein Enddatum für die Serie an.');
-                event.preventDefault();
-                isValid = false;
-            }
-        }
-
-        if (!isValid) {
-            resetSubmitButton();
-        }
-
-        return isValid;
-    }
-
     // Initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
-
-    document.addEventListener('DOMContentLoaded', function() {
-        var absenceForm = document.getElementById('absence-form');
-        if (absenceForm) {
-            absenceForm.addEventListener('submit', validateForm);
-        }
-    });
 })();
