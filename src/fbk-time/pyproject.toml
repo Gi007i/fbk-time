@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fbk-time"
-version = "1.1.1"
+version = "1.2.0"
 description = "Web-based absence management with substitute tracking and holiday integration"
 readme = "README.md"
 license = "MIT"
@@ -42,8 +42,8 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://gitlab.com/Gi007i/fbk-time"
-Repository = "https://gitlab.com/Gi007i/fbk-time"
+GitHub = "https://github.com/Gi007i/fbk-time"
+GitLab = "https://gitlab.com/Gi007i/fbk-time"
 
 [tool.setuptools]
 py-modules = []

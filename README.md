@@ -31,7 +31,9 @@ Ein webbasiertes Abwesenheitsmanagement mit rollenbasierter Zugriffskontrolle (R
 Schneller lokaler Test der Anwendung (keine Production-Konfiguration):
 
 ```bash
-# Repository klonen
+# Repository klonen (GitHub oder GitLab)
+git clone https://github.com/Gi007i/fbk-time.git
+# oder
 git clone https://gitlab.com/Gi007i/fbk-time.git
 cd fbk-time
 
@@ -62,6 +64,9 @@ gunicorn --bind 127.0.0.1:5000 --workers 1 app:app
 
 1. **Repository klonen:**
    ```bash
+   # GitHub oder GitLab
+   git clone https://github.com/Gi007i/fbk-time.git
+   # oder
    git clone https://gitlab.com/Gi007i/fbk-time.git
    cd fbk-time
    ```

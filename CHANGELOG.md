@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.2.0] - 2026-03-09
+
+### Added
+- Dual-Plattform-Verfügbarkeit integriert.
+
 ## [1.1.1] - 2026-02-26
 
 ### Added

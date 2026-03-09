@@ -1,0 +1,50 @@
+name: Sync from GitLab
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - name: Sync from GitLab
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
+        run: |
+          GITLAB_URL="https://oauth2:${GITLAB_TOKEN}@gitlab.com/Gi007i/fbk-time.git"
+          git remote add gitlab "${GITLAB_URL}"
+          git fetch gitlab main --tags || { echo "WARNING: GitLab unreachable"; exit 0; }
+
+          # Fast-forward main if behind
+          git checkout main
+          if git merge-base --is-ancestor HEAD gitlab/main 2>/dev/null; then
+            if [ "$(git rev-parse HEAD)" != "$(git rev-parse gitlab/main)" ]; then
+              git merge --ff-only gitlab/main
+              git push origin main
+              echo "main synced from GitLab"
+            else
+              echo "main already up to date"
+            fi
+          else
+            echo "ERROR: main branches have diverged, manual resolution needed"
+            exit 1
+          fi
+
+          # Push missing tags (non-fatal: individual failures must not abort sync)
+          ORIGIN_TAGS=$(git ls-remote --tags origin | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' || true)
+          for tag in $(git tag -l 'v*'); do
+            if ! echo "$ORIGIN_TAGS" | grep -qx "$tag"; then
+              git push origin "$tag" && echo "Synced tag $tag" || echo "WARNING: Failed to push tag $tag"
+            fi
+          done
+          echo "Sync complete"

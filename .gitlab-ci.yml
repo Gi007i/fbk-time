@@ -1,36 +1,105 @@
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v/
+    - if: $CI_COMMIT_BRANCH =~ /^release\//
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_PIPELINE_SOURCE == "web"
+
 stages:
+  - sync
   - prepare
   - release
 
+sync:
+  stage: sync
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: 0
+  script:
+    - |
+      git config user.name "gitlab-ci[bot]"
+      git config user.email "gitlab-ci[bot]@users.noreply.gitlab.com"
+      git remote set-url origin "https://oauth2:${RELEASE_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+      GITHUB_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/Gi007i/fbk-time.git"
+      git remote add github "${GITHUB_URL}"
+      git fetch origin main --tags
+      git fetch github main --tags || { echo "WARNING: GitHub unreachable"; exit 0; }
+
+      # Fast-forward main if behind (explicit origin to avoid ambiguity with github/main)
+      git checkout -b main origin/main
+      if git merge-base --is-ancestor HEAD github/main 2>/dev/null; then
+        if [ "$(git rev-parse HEAD)" != "$(git rev-parse github/main)" ]; then
+          git merge --ff-only github/main
+          git push origin main
+          echo "main synced from GitHub"
+        else
+          echo "main already up to date"
+        fi
+      else
+        echo "ERROR: main branches have diverged, manual resolution needed"
+        exit 1
+      fi
+
+      # Push missing tags (non-fatal: individual failures must not abort sync)
+      GITLAB_TAGS=$(git ls-remote --tags origin | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' || true)
+      for tag in $(git tag -l 'v*'); do
+        if ! echo "$GITLAB_TAGS" | grep -qx "$tag"; then
+          git push origin "$tag" && echo "Synced tag $tag" || echo "WARNING: Failed to push tag $tag"
+        fi
+      done
+      echo "Sync complete"
+
 prepare-release:
   stage: prepare
-  image: alpine:latest
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
   rules:
     - if: $CI_COMMIT_BRANCH =~ /^release\//
-  before_script:
-    - apk add --no-cache git sed
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: 0
   script:
-    - VERSION=$(echo "$CI_COMMIT_BRANCH" | sed 's|release/v||')
-    - 'if ! echo "$VERSION" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+$"; then echo "Invalid version format: $VERSION (expected X.Y.Z)"; exit 1; fi'
-    - TAG="v${VERSION}"
-    - REPO_URL="https://gitlab.com/${CI_PROJECT_PATH}"
-    - git config user.name "GitLab CI"
-    - git config user.email "ci@gitlab.com"
-    - PUSH_URL="https://oauth2:${RELEASE_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
-    - git remote set-url origin "${PUSH_URL}"
-    - git fetch origin main
-    - git checkout main
-    - git merge --squash "origin/release/v${VERSION}"
-    - sed -i "s|__REPO_URL__|${REPO_URL}|g" README.md
-    - sed -i "s|__REPO_URL__|${REPO_URL}|g" src/fbk-time/pyproject.toml
-    - sed -i "s|__REPO_URL__|${REPO_URL}|g" src/fbk-time/static/css/fbk-custom.css
-    - sed -i "s|__VERSION__|${VERSION}|g" src/fbk-time/pyproject.toml
-    - git add -A
-    - 'git commit -m "feat: release v${VERSION}"'
-    - 'git tag -a "${TAG}" -m "Release ${TAG}"'
-    - git push origin main
-    - git push origin "${TAG}"
-    - git push origin --delete "release/v${VERSION}"
+    - |
+      VERSION="${CI_COMMIT_BRANCH#release/v}"
+      TAG="v${VERSION}"
+      echo "Preparing release ${TAG}"
+      echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "ERROR: Invalid version ${VERSION}"; exit 1; }
+
+      GITHUB_REPO_URL="https://github.com/Gi007i/fbk-time"
+      GITLAB_REPO_URL="https://gitlab.com/${CI_PROJECT_PATH}"
+
+      git config user.name "gitlab-ci[bot]"
+      git config user.email "gitlab-ci[bot]@users.noreply.gitlab.com"
+      git remote set-url origin "https://oauth2:${RELEASE_TOKEN}@gitlab.com/${CI_PROJECT_PATH}.git"
+
+      # Squash-merge onto main
+      git fetch origin main
+      git checkout main
+      git merge --squash "origin/${CI_COMMIT_BRANCH}"
+
+      # Replace placeholders
+      sed -i "s|__GITHUB_REPO_URL__|${GITHUB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml src/fbk-time/static/css/fbk-custom.css
+      sed -i "s|__GITLAB_REPO_URL__|${GITLAB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml src/fbk-time/static/css/fbk-custom.css
+      sed -i "s|__VERSION__|${VERSION}|g" src/fbk-time/pyproject.toml
+
+      git add -A
+      git commit -m "feat: release v${VERSION}"
+      git tag -a "${TAG}" -m "Release ${TAG}"
+      git push origin main
+      git push origin "${TAG}"
+
+      # Cross-push to GitHub
+      git push "https://x-access-token:${GITHUB_TOKEN}@github.com/Gi007i/fbk-time.git" main || echo "WARNING: GitHub push (main) failed"
+      git push "https://x-access-token:${GITHUB_TOKEN}@github.com/Gi007i/fbk-time.git" "${TAG}" || echo "WARNING: GitHub push (tag) failed"
+
+      # Delete release branch
+      git push origin --delete "${CI_COMMIT_BRANCH}" || true
 
 release:
   stage: release
@@ -38,13 +107,14 @@ release:
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
   script:
-    - VERSION=$(echo "$CI_COMMIT_TAG" | sed 's|^v||')
-    - 'NOTES=$(awk -v ver="$VERSION" ''/^## \[/{if(found)exit;if(index($0,"["ver"]"))found=1;next}found{print}'' CHANGELOG.md)'
-    - 'if [ -z "$NOTES" ]; then NOTES="No changelog entry found for version ${VERSION}."; fi'
-    - echo "$NOTES" > release_notes.md
-    - echo "" >> release_notes.md
-    - echo "---" >> release_notes.md
-    - 'echo "Full changelog: [CHANGELOG.md](https://gitlab.com/${CI_PROJECT_PATH}/-/blob/main/CHANGELOG.md)" >> release_notes.md'
+    - |
+      VERSION=$(echo "$CI_COMMIT_TAG" | sed 's|^v||')
+      NOTES=$(awk -v ver="$VERSION" '/^## \[/{if(found)exit;if(index($0,"["ver"]"))found=1;next}found{print}' CHANGELOG.md)
+      if [ -z "$NOTES" ]; then NOTES="No changelog entry found for version ${VERSION}."; fi
+      echo "$NOTES" > release_notes.md
+      echo "" >> release_notes.md
+      echo "---" >> release_notes.md
+      echo "Full changelog: [CHANGELOG.md](https://gitlab.com/${CI_PROJECT_PATH}/-/blob/main/CHANGELOG.md)" >> release_notes.md
   release:
     tag_name: $CI_COMMIT_TAG
     name: $CI_COMMIT_TAG

@@ -9,59 +9,52 @@ permissions:
   contents: write
 
 jobs:
-  prepare-release:
+  prepare:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Extract version from branch name
+      - name: Extract version
         id: version
         run: |
-          BRANCH="${GITHUB_REF#refs/heads/}"
-          VERSION="${BRANCH#release/v}"
-          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Invalid version format: $VERSION (expected X.Y.Z)"
-            exit 1
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          VERSION="${GITHUB_REF_NAME#release/v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Preparing release v${VERSION}"
+          echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "ERROR: Invalid version ${VERSION}"; exit 1; }
 
-      - name: Configure git
+      - name: Prepare release commit
+        env:
+          GITLAB_TOKEN: ${{ secrets.GITLAB_TOKEN }}
         run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="v${VERSION}"
+          GITHUB_REPO_URL="https://github.com/${{ github.repository }}"
+          GITLAB_REPO_URL="https://gitlab.com/Gi007i/fbk-time"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Squash-merge release branch into main
-        run: |
+          # Squash-merge
           git checkout main
-          git merge --squash "origin/release/v${{ steps.version.outputs.version }}"
-          echo "Squash-merge completed"
+          git merge --squash "origin/${GITHUB_REF_NAME}"
 
-      - name: Replace placeholders
-        env:
-          REPO_URL: "https://github.com/${{ github.repository }}"
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          sed -i "s|__REPO_URL__|${REPO_URL}|g" README.md
-          sed -i "s|__REPO_URL__|${REPO_URL}|g" src/fbk-time/pyproject.toml
-          sed -i "s|__REPO_URL__|${REPO_URL}|g" src/fbk-time/static/css/fbk-custom.css
+          # Replace placeholders
+          sed -i "s|__GITHUB_REPO_URL__|${GITHUB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml src/fbk-time/static/css/fbk-custom.css
+          sed -i "s|__GITLAB_REPO_URL__|${GITLAB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml src/fbk-time/static/css/fbk-custom.css
           sed -i "s|__VERSION__|${VERSION}|g" src/fbk-time/pyproject.toml
 
-      - name: Commit, tag and push
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-          TAG: ${{ steps.version.outputs.tag }}
-        run: |
           git add -A
           git commit -m "feat: release v${VERSION}"
           git tag -a "${TAG}" -m "Release ${TAG}"
           git push origin main
           git push origin "${TAG}"
 
-      - name: Delete release branch
-        run: |
-          git push origin --delete "release/v${{ steps.version.outputs.version }}"
+          # Cross-push to GitLab
+          git push "https://oauth2:${GITLAB_TOKEN}@gitlab.com/Gi007i/fbk-time.git" main || echo "WARNING: GitLab push (main) failed"
+          git push "https://oauth2:${GITLAB_TOKEN}@gitlab.com/Gi007i/fbk-time.git" "${TAG}" || echo "WARNING: GitLab push (tag) failed"
+
+          # Delete release branch
+          git push origin --delete "${GITHUB_REF_NAME}" || true
