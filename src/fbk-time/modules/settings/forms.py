@@ -53,13 +53,15 @@ class SettingsForm(FlaskForm):
     pagination = SelectField(
         'Einträge pro Seite',
         choices=[
+            ('5', '5'),
             ('10', '10'),
             ('25', '25'),
             ('50', '50'),
             ('100', '100'),
-            ('all', 'Alle')
+            ('0', 'Alle')
         ],
-        default='25'
+        coerce=int,
+        default=25
     )
     default_text_color = StringField(
         'Standard-Schriftfarbe für Kategorien',
@@ -176,10 +178,12 @@ class AdminSettingsForm(FlaskForm):
     user_default_items_per_page = SelectField(
         'Standard-Einträge pro Seite für neue Benutzer',
         choices=[
+            ('5', '5'),
             ('10', '10'),
             ('25', '25'),
             ('50', '50'),
-            ('100', '100')
+            ('100', '100'),
+            ('0', 'Alle')
         ],
         coerce=int
     )

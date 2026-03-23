@@ -2,29 +2,29 @@
 # Production-ready absence management system
 
 # Core Framework
-Flask==3.1.2
+Flask==3.1.3
 Flask-SQLAlchemy==3.1.1
 Flask-Login==0.6.3
 Flask-WTF==1.2.2
 
 # Template Engine
-Jinja2>=3.1.6
+Jinja2==3.1.6
 
 # Database
-SQLAlchemy==2.0.45
+SQLAlchemy==2.0.48
 
 # Security - Argon2id password hashing (RFC 9106 LOW_MEMORY profile)
 argon2-cffi==25.1.0
 
 # German Holidays (offline-capable)
-holidays==0.87
+holidays==0.93
 
 # Export
-reportlab==4.4.7
-icalendar==6.3.2
+reportlab==4.4.10
+icalendar==7.0.3
 
 # Production WSGI Server
-gunicorn==23.0.0
+gunicorn==25.1.0
 
 # License Management
-pip-licenses==5.5.0
+pip-licenses==5.5.1

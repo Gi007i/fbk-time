@@ -87,7 +87,7 @@ class Config:
     REMEMBER_COOKIE_DURATION = timedelta(days=_remember_days)
 
     WTF_CSRF_ENABLED = True
-    WTF_CSRF_TIME_LIMIT = 3600
+    WTF_CSRF_TIME_LIMIT = None
 
     JSON_AS_ASCII = False
 

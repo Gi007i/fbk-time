@@ -56,7 +56,7 @@ def index():
         form.holiday_region.data = current_user.holiday_region
         form.theme.data = current_user.theme
         form.date_format.data = current_user.date_format
-        form.pagination.data = 'all' if current_user.items_per_page == 0 else str(current_user.items_per_page)
+        form.pagination.data = current_user.items_per_page
         form.default_text_color.data = current_user.default_text_color
 
     if request.method == 'POST' and is_ajax_request():

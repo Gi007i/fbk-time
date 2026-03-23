@@ -5,9 +5,9 @@ Provides login and registration forms with CSRF protection.
 
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField
-from wtforms.validators import DataRequired, Length, Email, EqualTo, Optional, ValidationError
+from wtforms.validators import DataRequired, Length, EqualTo, Optional, ValidationError
 
-from utils.validators import validate_password_strength
+from utils.validators import validate_password_strength, EmailFormat
 from modules.user.services import username_exists, email_exists
 
 
@@ -51,7 +51,7 @@ class RegistrationForm(FlaskForm):
         'E-Mail',
         validators=[
             Optional(),
-            Email(message='Ungültige E-Mail-Adresse.'),
+            EmailFormat(message='Ungültige E-Mail-Adresse.'),
             Length(max=120, message='E-Mail darf maximal 120 Zeichen lang sein.')
         ]
     )

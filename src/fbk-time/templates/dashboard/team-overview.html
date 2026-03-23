@@ -34,7 +34,7 @@
                 <tr>
                     <th class="user-name">Person</th>
                     {% for day in week_days %}
-                    <th class="day-header {% if day.is_today %}day-today{% endif %}{% if day.is_holiday %}day-holiday{% endif %}"
+                    <th class="day-header{% if day.is_holiday %} day-holiday{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if day.holiday_name %}data-tooltip="{{ day.holiday_name }}"{% endif %}>
                         {{ day.day }}
                         <small>{{ day.weekday_short }}</small>
@@ -48,7 +48,7 @@
                     <td class="user-name"><small>{{ user.name }}</small></td>
                     {% for day in week_days %}
                     {% set absence = matrix.get((user.id, day.date)) %}
-                    <td class="{% if day.is_holiday %}day-holiday{% endif %}{% if day.is_today %}day-today{% endif %}{% if absence %} absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% endif %}"
+                    <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if absence %}
                         data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (Vormittag){% elif absence.is_half_day_afternoon %} (Nachmittag){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
                         {% if absence.is_recurring %}
@@ -83,7 +83,7 @@
                     <th class="user-name">Person</th>
                     {% for day in month_days %}
                     {% if not day.empty %}
-                    <th class="day-header {% if day.is_today %}day-today{% endif %}{% if day.is_weekend %}day-weekend{% endif %}{% if day.is_holiday %}day-holiday{% endif %}"
+                    <th class="day-header{% if day.is_holiday %} day-holiday{% elif day.is_weekend %} day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if day.holiday_name %}data-tooltip="{{ day.holiday_name }}"{% endif %}>
                         {{ day.day }}
                         <small>{{ day.weekday_short }}</small>
@@ -99,7 +99,7 @@
                     {% for day in month_days %}
                     {% if not day.empty %}
                     {% set absence = matrix.get((user.id, day.date)) %}
-                    <td class="{% if day.is_weekend %}day-weekend{% endif %}{% if day.is_holiday %}day-holiday{% endif %}{% if day.is_today %}day-today{% endif %}{% if absence %} absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% endif %}"
+                    <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% elif day.is_weekend %}day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if absence %}
                         data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (Vormittag){% elif absence.is_half_day_afternoon %} (Nachmittag){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
                         {% if absence.is_recurring %}

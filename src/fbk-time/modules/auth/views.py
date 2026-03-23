@@ -53,7 +53,9 @@ def check_force_password_change():
         current_version = settings_manager.get('user_session_version')
         if session_version is None or session_version != current_version:
             logout_admin()
-            return redirect(url_for('auth.login'))
+            if request.endpoint not in ('auth.login', 'auth.logout', 'auth.register'):
+                return redirect(url_for('auth.login'))
+            return None
 
     if not current_user.force_password_change:
         return None

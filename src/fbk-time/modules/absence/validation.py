@@ -231,7 +231,9 @@ def _get_user_absence_dates(
     range_end: date,
     exclude_absence_id: Optional[int] = None
 ) -> set:
-    """Get all dates where user has an absence in the range.
+    """Get all dates where user is genuinely absent in the range.
+
+    Excludes categories with is_present=True.
 
     Args:
         user_id: User ID.
@@ -240,10 +242,11 @@ def _get_user_absence_dates(
         exclude_absence_id: Absence ID to exclude.
 
     Returns:
-        Set of dates where user is absent.
+        Set of dates where user is genuinely absent.
     """
     occurrences = _get_expanded_user_occurrences(
-        user_id, range_start, range_end, exclude_absence_id
+        user_id, range_start, range_end, exclude_absence_id,
+        only_absent=True
     )
     return {occ['date'] for occ in occurrences}
 
@@ -387,7 +390,8 @@ def _get_expanded_user_occurrences(
     user_id: int,
     range_start: date,
     range_end: date,
-    exclude_absence_id: Optional[int] = None
+    exclude_absence_id: Optional[int] = None,
+    only_absent: bool = False
 ) -> List[dict]:
     """Get all expanded occurrences for a user within a date range.
 
@@ -398,6 +402,7 @@ def _get_expanded_user_occurrences(
         range_start: Start of date range.
         range_end: End of date range.
         exclude_absence_id: Absence ID to exclude (for edits).
+        only_absent: If True, skip categories with is_present=True.
 
     Returns:
         List of occurrence dicts with date and slot information.
@@ -417,6 +422,8 @@ def _get_expanded_user_occurrences(
             ):
                 occ_data = recurrence_service.get_occurrence_data(absence, occ_date)
                 if occ_data:
+                    if only_absent and occ_data['category'].is_present:
+                        continue
                     occurrences.append({
                         'date': occ_date,
                         'absence_id': absence.id,
@@ -428,6 +435,8 @@ def _get_expanded_user_occurrences(
                     })
         else:
             if absence.start_date > range_end or absence.end_date < range_start:
+                continue
+            if only_absent and absence.category.is_present:
                 continue
 
             current = max(range_start, absence.start_date)

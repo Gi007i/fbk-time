@@ -29,7 +29,7 @@ def update_user_settings(
     holiday_region: str,
     theme: str,
     date_format: str,
-    pagination: str,
+    pagination: int,
     default_text_color: str
 ) -> None:
     """Update current user's personal settings.
@@ -38,13 +38,13 @@ def update_user_settings(
         holiday_region: Holiday region code.
         theme: Theme preference (light/dark/auto).
         date_format: Date format preference.
-        pagination: Items per page ('all' or numeric string).
+        pagination: Items per page (0 = show all).
         default_text_color: Default text color for new categories.
     """
     current_user.holiday_region = holiday_region
     current_user.theme = theme
     current_user.date_format = date_format
-    current_user.items_per_page = 0 if pagination == 'all' else int(pagination)
+    current_user.items_per_page = pagination
     current_user.default_text_color = default_text_color.upper()
 
     db.session.commit()
@@ -199,6 +199,6 @@ def get_current_settings() -> dict:
         'holiday_region': current_user.holiday_region,
         'theme': current_user.theme,
         'date_format': current_user.date_format,
-        'pagination': str(current_user.items_per_page),
+        'pagination': current_user.items_per_page,
         'default_text_color': current_user.default_text_color
     }

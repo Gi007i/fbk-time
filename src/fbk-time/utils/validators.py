@@ -1,10 +1,12 @@
-"""Password validation utilities.
+"""Input validation utilities.
 
-Provides configurable password strength validation based on database settings.
+Provides configurable password strength validation and email format checking.
 """
 
 import re
 from typing import Optional
+
+from wtforms.validators import ValidationError
 
 from core.settings_manager import settings_manager
 
@@ -93,6 +95,28 @@ class PasswordValidator:
 
 
 password_validator = PasswordValidator()
+
+EMAIL_PATTERN = re.compile(
+    r'^[a-zA-Z0-9.!#$%&\'*+/=?^_`{|}~-]+@[a-zA-Z0-9]'
+    r'(?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?'
+    r'(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$'
+)
+
+
+class EmailFormat:
+    """WTForms validator for email format without email_validator dependency.
+
+    Args:
+        message: Error message on validation failure.
+    """
+
+    def __init__(self, message: str = 'Ungültige E-Mail-Adresse.'):
+        self.message = message
+
+    def __call__(self, form, field):
+        """Validate field contains a valid email format."""
+        if field.data and not EMAIL_PATTERN.match(field.data.strip()):
+            raise ValidationError(self.message)
 
 
 def validate_password_strength(password: str) -> tuple[bool, Optional[str]]:

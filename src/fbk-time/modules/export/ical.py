@@ -85,6 +85,13 @@ def export_absences_ical(
 
         event.add('description', '\n'.join(description_parts))
 
+        if absence.category and absence.category.is_present:
+            event.add('transp', 'TRANSPARENT')
+            event['x-microsoft-cdo-busystatus'] = 'FREE'
+        else:
+            event.add('transp', 'OPAQUE')
+            event['x-microsoft-cdo-busystatus'] = 'OOF'
+
         event.add('dtstamp', datetime.now(timezone.utc))
         if absence.created_at:
             event.add('created', absence.created_at)
@@ -132,6 +139,13 @@ def export_absences_ical(
                     exc_desc_parts.append(f'Notizen: {exc_notes}')
 
                 exc_event.add('description', '\n'.join(exc_desc_parts))
+
+                if exc_category and exc_category.is_present:
+                    exc_event.add('transp', 'TRANSPARENT')
+                    exc_event['x-microsoft-cdo-busystatus'] = 'FREE'
+                else:
+                    exc_event.add('transp', 'OPAQUE')
+                    exc_event['x-microsoft-cdo-busystatus'] = 'OOF'
 
                 exc_event.add('dtstamp', datetime.now(timezone.utc))
                 exc_event.add('sequence', max(0, history_count - 1))

@@ -23,12 +23,12 @@ def categories_css():
     - .half-day-afternoon.category-{id}: Right-half gradient
 
     Colors are validated to prevent CSS injection.
+    Caching is handled by Nginx (no-store on dynamic responses).
 
     Returns:
-        CSS response with appropriate headers for caching.
+        CSS response with text/css content type.
     """
     css_content = generate_category_css()
     response = make_response(css_content)
     response.headers['Content-Type'] = 'text/css; charset=utf-8'
-    response.headers['Cache-Control'] = 'public, max-age=3600'
     return response

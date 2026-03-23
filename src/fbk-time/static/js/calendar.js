@@ -179,18 +179,29 @@
             var tooltip = safeCategoryName + ': ' + safeUserName;
             if (occ.isHalfDayMorning) tooltip += ' (Vormittag)';
             else if (occ.isHalfDayAfternoon) tooltip += ' (Nachmittag)';
-            tooltip += occ.isPresent ? ' - Anwesend' : ' - Abwesend';
+            tooltip += occ.isPresent ? ' (A)' : ' (X)';
             if (occ.isRecurring) tooltip += ' (Serie)';
 
             var detailUrl = occ.isRecurring
                 ? '/absences/' + safeAbsenceId + '/occurrence/' + occ.date
                 : '/absences/' + safeAbsenceId;
 
-            var tooltipAttr = window.FBKTime.escapeAttr(occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (Vormittag)' : occ.isHalfDayAfternoon ? ' (Nachmittag)' : '') + (occ.isPresent ? ' - Anwesend' : ' - Abwesend') + (occ.isRecurring ? ' (Serie)' : ''));
+            var tooltipAttr = window.FBKTime.escapeAttr(occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (Vormittag)' : occ.isHalfDayAfternoon ? ' (Nachmittag)' : '') + (occ.isPresent ? ' (A)' : ' (X)') + (occ.isRecurring ? ' (Serie)' : ''));
             html += '<span data-tooltip="' + tooltipAttr + '"><a href="' + detailUrl + '" class="absence-item category-' + safeCategoryId + '">' + label + '</a></span>';
         }
         if (dayOccurrences.length > maxShow) {
-            html += '<span class="absence-more">+' + (dayOccurrences.length - maxShow) + ' weitere</span>';
+            var moreLines = [];
+            for (var j = maxShow; j < dayOccurrences.length; j++) {
+                var hidden = dayOccurrences[j];
+                var line = hidden.categoryName + ': ' + hidden.userName;
+                if (hidden.isHalfDayMorning) line += ' (VM)';
+                else if (hidden.isHalfDayAfternoon) line += ' (NM)';
+                line += hidden.isPresent ? ' (A)' : ' (X)';
+                if (hidden.isRecurring) line += ' (Serie)';
+                moreLines.push(line);
+            }
+            var moreTooltip = window.FBKTime.escapeAttr(moreLines.join('\n'));
+            html += '<span class="absence-more" data-tooltip="' + moreTooltip + '">+' + (dayOccurrences.length - maxShow) + ' weitere</span>';
         }
 
         html += '</td>';

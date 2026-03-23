@@ -10,13 +10,13 @@ from flask_login import login_required
 
 from utils.session_navigation import save_return_url
 from utils.helpers import format_date_for_user
+from utils.pagination import paginate_list
 from utils.request_validators import validate_year_param, validate_month_param, validate_date_param
 from modules.holidays.services import get_holidays_for_month
 from .services import (
     get_today_absences,
     get_week_absences,
     get_dashboard_warnings,
-    get_dashboard_stats,
     get_today_holiday,
     get_team_overview_data
 )
@@ -39,19 +39,25 @@ def index():
     week_end = week_start + timedelta(days=6)
 
     today_absent, today_present = get_today_absences()
-    week_absences = get_week_absences()
+    week_occurrences = get_week_absences()
     warnings = get_dashboard_warnings()
-    stats = get_dashboard_stats()
     today_holiday = get_today_holiday()
+
+    paginated_occurrences, pagination, redirect_response = paginate_list(
+        week_occurrences, 'dashboard.index'
+    )
+
+    if redirect_response:
+        return redirect_response
 
     return render_template(
         'dashboard/index.html',
         today=today,
         today_absent=today_absent,
         today_present=today_present,
-        week_absences=week_absences,
+        week_occurrences=paginated_occurrences,
+        pagination=pagination.to_dict(),
         warnings=warnings,
-        stats=stats,
         today_holiday=today_holiday,
         week_start=week_start,
         week_end=week_end

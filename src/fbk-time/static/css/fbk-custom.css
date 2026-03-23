@@ -88,6 +88,10 @@ body > footer {
     border-color: var(--pico-primary);
 }
 
+.pagination + .center {
+    text-align: center;
+}
+
 /* =============================================
    CALENDAR
    ============================================= */
@@ -182,15 +186,20 @@ tr[data-href] {
     background: var(--pico-card-sectioning-background-color);
 }
 
-.day-weekend {
+.team-matrix th.day-weekend,
+.team-matrix td.day-weekend,
+.calendar td.day-weekend {
     background: rgba(0, 0, 0, 0.03);
 }
 
-[data-theme="dark"] .day-weekend {
+[data-theme="dark"] .team-matrix th.day-weekend,
+[data-theme="dark"] .team-matrix td.day-weekend,
+[data-theme="dark"] .calendar td.day-weekend {
     background: rgba(255, 255, 255, 0.05);
 }
 
-.day-holiday {
+.team-matrix th.day-holiday,
+.team-matrix td.day-holiday {
     background: var(--pico-mark-background-color);
 }
 
@@ -204,6 +213,11 @@ tr[data-href] {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.calendar .absence-more[data-tooltip]::before {
+    white-space: pre;
+    text-align: left;
 }
 
 /* =============================================

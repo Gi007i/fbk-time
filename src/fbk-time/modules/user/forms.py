@@ -2,10 +2,10 @@
 
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, SelectField
-from wtforms.validators import DataRequired, Email, Length, Optional, ValidationError
+from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
 from modules.auth.models import UserRole, UserStatus
-from utils.validators import validate_password_strength
+from utils.validators import validate_password_strength, EmailFormat
 from .services import username_exists, email_exists
 
 
@@ -28,7 +28,7 @@ class UserCreateForm(FlaskForm):
 
     email = StringField('E-Mail', validators=[
         Optional(),
-        Email(message='Ungültige E-Mail-Adresse'),
+        EmailFormat(message='Ungültige E-Mail-Adresse'),
         Length(max=120)
     ])
 
@@ -68,7 +68,7 @@ class UserEditForm(FlaskForm):
 
     email = StringField('E-Mail', validators=[
         Optional(),
-        Email(message='Ungültige E-Mail-Adresse'),
+        EmailFormat(message='Ungültige E-Mail-Adresse'),
         Length(max=120)
     ])
 

@@ -16,51 +16,75 @@ from modules.category.models import Category
 from modules.holidays.services import is_holiday
 
 
-def get_today_absences() -> tuple[list, list]:
-    """Get today's absences split by presence status.
+def get_today_absences() -> tuple[list[dict], list[dict]]:
+    """Get today's expanded occurrences split by presence status.
+
+    Uses recurrence_service to correctly resolve recurring absences.
 
     Returns:
-        Tuple of (absent_list, present_list).
+        Tuple of (absent_occurrences, present_occurrences).
     """
     today = date.today()
     user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
 
-    today_all = Absence.query.join(
+    absences = Absence.query.join(
         User, Absence.user_id == User.id
     ).join(Category).filter(
         user_status_filter,
         User.role == UserRole.USER,
         Category.active == True,
-        Absence.start_date <= today,
-        Absence.end_date >= today
+        or_(
+            (Absence.is_recurring == False) & (Absence.start_date <= today) & (Absence.end_date >= today),
+            (Absence.is_recurring == True) & (Absence.start_date <= today) & (
+                (Absence.recurrence_end_date >= today) | (Absence.recurrence_end_date.is_(None))
+            )
+        )
     ).all()
 
-    today_absent = [a for a in today_all if not a.category.is_present]
-    today_present = [a for a in today_all if a.category.is_present]
+    occurrences = recurrence_service.get_all_occurrences_for_range(
+        absences, today, today
+    )
+
+    today_absent = [o for o in occurrences if not o['category'].is_present]
+    today_present = [o for o in occurrences if o['category'].is_present]
 
     return today_absent, today_present
 
 
-def get_week_absences() -> list:
-    """Get absences for current week.
+def get_week_absences() -> list[dict]:
+    """Get expanded daily occurrences for current week.
+
+    Expands multi-day and recurring absences into individual
+    daily entries using recurrence_service.
 
     Returns:
-        List of absences in current week.
+        List of occurrence dicts sorted by date, then user name.
     """
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
     user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
 
-    return Absence.query.join(
+    absences = Absence.query.join(
         User, Absence.user_id == User.id
     ).join(Category).filter(
         user_status_filter,
         User.role == UserRole.USER,
         Category.active == True,
-        Absence.start_date <= week_end,
-        Absence.end_date >= week_start
-    ).order_by(Absence.start_date).all()
+        or_(
+            (Absence.is_recurring == False) & (Absence.start_date <= week_end) & (Absence.end_date >= week_start),
+            (Absence.is_recurring == True) & (Absence.start_date <= week_end) & (
+                (Absence.recurrence_end_date >= week_start) | (Absence.recurrence_end_date.is_(None))
+            )
+        )
+    ).all()
+
+    occurrences = recurrence_service.get_all_occurrences_for_range(
+        absences, week_start, week_end
+    )
+    occurrences.sort(key=lambda o: (o['date'], o['user'].name))
+
+    return occurrences
 
 
 def get_dashboard_warnings() -> list[dict]:
@@ -125,9 +149,11 @@ def get_dashboard_warnings() -> list[dict]:
         all_absences, today, max_range_end
     )
 
-    # Build lookup: user_id -> set of dates
+    # Build lookup: user_id -> set of dates (only genuinely absent)
     user_absence_dates = {}
     for occ in all_occurrences:
+        if occ['category'].is_present:
+            continue
         user_id = occ['user_id']
         if user_id not in user_absence_dates:
             user_absence_dates[user_id] = set()
@@ -162,42 +188,44 @@ def get_dashboard_warnings() -> list[dict]:
         if not absence_dates:
             continue
 
-        # Substitute conflict: substitute is absent on same dates
-        substitute_absent_dates = user_absence_dates.get(absence.substitute_id, set())
-        conflict_dates = absence_dates & substitute_absent_dates
+        # Present categories don't need substitute warnings
+        if not absence.category.is_present:
+            # Substitute conflict: substitute is absent on same dates
+            substitute_absent_dates = user_absence_dates.get(absence.substitute_id, set())
+            conflict_dates = absence_dates & substitute_absent_dates
 
-        if conflict_dates:
-            conflict_key = (absence.id, absence.substitute_id)
-            if conflict_key not in checked_substitute_conflicts:
-                checked_substitute_conflicts.add(conflict_key)
-                sorted_dates = sorted(conflict_dates)
-                warnings.append({
-                    'type': 'substitute_conflict',
-                    'user': absence.user.name,
-                    'substitute': absence.substitute.name,
-                    'conflict_dates': sorted_dates[:3],
-                    'conflict_count': len(sorted_dates),
-                    'absence_id': absence.id
-                })
+            if conflict_dates:
+                conflict_key = (absence.id, absence.substitute_id)
+                if conflict_key not in checked_substitute_conflicts:
+                    checked_substitute_conflicts.add(conflict_key)
+                    sorted_dates = sorted(conflict_dates)
+                    warnings.append({
+                        'type': 'substitute_conflict',
+                        'user': absence.user.name,
+                        'substitute': absence.substitute.name,
+                        'conflict_dates': sorted_dates[:3],
+                        'conflict_count': len(sorted_dates),
+                        'absence_id': absence.id
+                    })
 
-        # Double assignment: substitute assigned to multiple people
-        other_assignments = substitute_assignments.get(absence.substitute_id, [])
-        for assign_date, other_absence in other_assignments:
-            if other_absence.id == absence.id or assign_date not in absence_dates:
-                continue
+            # Double assignment: substitute assigned to multiple people
+            other_assignments = substitute_assignments.get(absence.substitute_id, [])
+            for assign_date, other_absence in other_assignments:
+                if other_absence.id == absence.id or assign_date not in absence_dates:
+                    continue
 
-            pair_key = tuple(sorted([absence.id, other_absence.id]))
-            if pair_key not in checked_double_assignments:
-                checked_double_assignments.add(pair_key)
-                warnings.append({
-                    'type': 'substitute_double_assignment',
-                    'user': absence.user.name,
-                    'substitute': absence.substitute.name,
-                    'other_user': other_absence.user.name,
-                    'conflict_date': assign_date,
-                    'absence_id': absence.id
-                })
-                break
+                pair_key = tuple(sorted([absence.id, other_absence.id]))
+                if pair_key not in checked_double_assignments:
+                    checked_double_assignments.add(pair_key)
+                    warnings.append({
+                        'type': 'substitute_double_assignment',
+                        'user': absence.user.name,
+                        'substitute': absence.substitute.name,
+                        'other_user': other_absence.user.name,
+                        'conflict_date': assign_date,
+                        'absence_id': absence.id
+                    })
+                    break
 
         # Cross-substitution
         for other in absences_with_substitute:
@@ -226,63 +254,6 @@ def get_dashboard_warnings() -> list[dict]:
                 })
 
     return warnings
-
-
-def get_dashboard_stats() -> dict:
-    """Calculate dashboard statistics.
-
-    Returns:
-        Dict with active_users, active_percentage, today_absent,
-        today_present, month_absent, month_present.
-    """
-    today = date.today()
-    user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
-
-    manageable_users = User.query.filter(
-        user_status_filter,
-        User.role == UserRole.USER
-    ).count()
-    total_users = User.query.filter_by(role=UserRole.USER).count()
-    active_percentage = round((manageable_users / total_users) * 100) if total_users > 0 else 0
-
-    today_absent, today_present = get_today_absences()
-
-    month_start = date(today.year, today.month, 1)
-    if today.month == 12:
-        month_end = date(today.year + 1, 1, 1) - timedelta(days=1)
-    else:
-        month_end = date(today.year, today.month + 1, 1) - timedelta(days=1)
-
-    this_month_absent = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        user_status_filter,
-        User.role == UserRole.USER,
-        Category.active == True,
-        Category.is_present == False,
-        Absence.start_date <= month_end,
-        Absence.end_date >= month_start
-    ).count()
-
-    this_month_present = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        user_status_filter,
-        User.role == UserRole.USER,
-        Category.active == True,
-        Category.is_present == True,
-        Absence.start_date <= month_end,
-        Absence.end_date >= month_start
-    ).count()
-
-    return {
-        'active_users': manageable_users,
-        'active_percentage': active_percentage,
-        'today_absent': len(today_absent),
-        'today_present': len(today_present),
-        'month_absent': this_month_absent,
-        'month_present': this_month_present
-    }
 
 
 def get_today_holiday() -> Optional[str]:
@@ -375,7 +346,7 @@ def get_team_overview_data(
         or_(
             (Absence.is_recurring == False) & (Absence.start_date <= range_end) & (Absence.end_date >= range_start),
             (Absence.is_recurring == True) & (Absence.start_date <= range_end) & (
-                (Absence.recurrence_end_date >= range_start) | (Absence.recurrence_end_date == None)
+                (Absence.recurrence_end_date >= range_start) | (Absence.recurrence_end_date.is_(None))
             )
         )
     ).all()

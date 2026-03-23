@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.0] - 2026-03-22
+
+### Changed
+- Abhängigkeiten aktualisiert (Flask, SQLAlchemy, holidays, reportlab, icalendar, gunicorn, pip-licenses)
+
+### Added
+- Kalender: Tooltip bei „+X weitere" zeigt versteckte Einträge
+- Versionsanzeige im Footer auf allen Seiten
+- Pagination für Dashboard-Wochenansicht
+- Einstellung „5 Einträge pro Seite" für alle Listenansichten
+
+### Fixed
+- Login-Redirect-Loop bei defektem Session-Cookie (z.B. voller Cookie-Speicher im Browser)
+- Vertretungs-Konflikte ignorierten Anwesend-Kategorien (z.B. Home Office fälschlich als Konflikt gemeldet)
+- Dashboard-Warnungen für Vertretungskonflikte und Doppelbelegung bei Anwesend-Kategorien unterdrückt
+- iCal-Export: Anwesend-Kategorien als „Frei", Abwesend-Kategorien als „Außer Haus" in Outlook
+- Dashboard „Heute" und „Diese Woche" zeigten mehrtägige Abwesenheiten nur mit Startdatum statt tageweise
+- Dashboard ignorierte wiederkehrende Abwesenheiten
+- Pagination-Optionen zwischen User- und Admin-Einstellungen nicht identisch
+- Pagination-Infotext nicht zentriert unter Navigation
+- E-Mail-Validierung verursachte Fehler 500 (fehlende `email_validator` Abhängigkeit durch eigenen Regex-Validator ersetzt)
+- CSRF-Token lief nach 1 Stunde ab — Anmeldung zeigte Fehler 400 statt hilfreicher Meldung
+- Dynamische Kategorie-CSS lieferte veralteten `max-age=3600` Cache-Header
+- Feiertagsnamen auf Servern mit englischer Locale in Englisch statt Deutsch angezeigt
+- Team-Übersicht: Feiertage und Wochenenden ohne Hintergrundfarbe bei Überlappung mit Today- oder Holiday-Klassen (CSS-Spezifität)
+
 ## [1.2.0] - 2026-03-09
 
 ### Added

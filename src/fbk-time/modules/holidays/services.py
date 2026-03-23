@@ -61,11 +61,11 @@ def get_holidays_for_year(year: int, region: Optional[str] = None) -> Dict[date,
 
     if region == 'DE-all':
         result = {}
-        nationwide = holidays.Germany(years=year)
+        nationwide = holidays.Germany(years=year, language='de')
         for d, name in nationwide.items():
             result[d] = name
         for state_code in ALL_STATE_CODES:
-            state_holidays = holidays.Germany(years=year, prov=state_code)
+            state_holidays = holidays.Germany(years=year, prov=state_code, language='de')
             for d, name in state_holidays.items():
                 if d not in result:
                     result[d] = name
@@ -74,9 +74,9 @@ def get_holidays_for_year(year: int, region: Optional[str] = None) -> Dict[date,
     state_code = _get_state_code(region)
 
     if state_code:
-        holiday_obj = holidays.Germany(years=year, prov=state_code)
+        holiday_obj = holidays.Germany(years=year, prov=state_code, language='de')
     else:
-        holiday_obj = holidays.Germany(years=year)
+        holiday_obj = holidays.Germany(years=year, language='de')
 
     return {d: name for d, name in holiday_obj.items()}
 

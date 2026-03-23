@@ -7,7 +7,11 @@ Usage:
     python app.py  (local execution)
 """
 
-from flask import Flask, render_template
+import logging
+import tomllib
+from pathlib import Path
+
+from flask import Flask, render_template, flash, redirect, url_for
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config, get_config
@@ -93,6 +97,17 @@ def create_app(config_class=None, cli_mode=False):
     return application
 
 
+def _read_version():
+    """Read project version from pyproject.toml."""
+    pyproject_path = Path(__file__).parent / 'pyproject.toml'
+    with open(pyproject_path, 'rb') as f:
+        data = tomllib.load(f)
+    return data['project']['version']
+
+
+APP_VERSION = _read_version()
+
+
 def register_context_processor(application):
 
     @application.context_processor
@@ -101,6 +116,7 @@ def register_context_processor(application):
         from utils.validators import get_password_policy_info
 
         context = {
+            'app_version': APP_VERSION,
             'password_policy': get_password_policy_info()
         }
 
@@ -162,12 +178,19 @@ def register_error_handlers(application):
     Returns JSON responses for AJAX requests, HTML for regular requests.
     """
     from flask_wtf.csrf import CSRFError
+    from flask_login import current_user
     from utils.response_helpers import api_error
+
+    logger = logging.getLogger(__name__)
 
     @application.errorhandler(CSRFError)
     def handle_csrf_error(error):
+        logger.warning('CSRF validation failed: %s', error.description)
         if is_ajax_request():
-            return api_error('CSRF-Token abgelaufen. Bitte Seite neu laden.', status_code=400)
+            return api_error('Sitzung abgelaufen. Bitte Seite neu laden.', status_code=400)
+        if not current_user.is_authenticated:
+            flash('Ihre Sitzung ist abgelaufen. Bitte erneut anmelden.', 'warning')
+            return redirect(url_for('auth.login'))
         return render_template('errors/400.html'), 400
 
     @application.errorhandler(400)
