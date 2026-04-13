@@ -68,9 +68,20 @@
         <button type="button" data-href="{{ url_for('absences.occurrence_edit', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" class="outline">
             Termin bearbeiten
         </button>
+        {% if occurrence.is_exception %}
+        <button type="button"
+                class="outline secondary"
+                data-action="delete"
+                data-url="{{ url_for('absences.occurrence_restore', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
+                data-confirm="Serienelement wiederherstellen?"
+                data-confirm-label="Zurücksetzen">
+            Zurücksetzen
+        </button>
+        {% else %}
         <button type="button" data-href="{{ url_for('absences.edit', id=absence.id) }}" class="outline secondary">
             Serie bearbeiten
         </button>
+        {% endif %}
         <button type="button"
                 class="outline contrast"
                 data-action="delete"

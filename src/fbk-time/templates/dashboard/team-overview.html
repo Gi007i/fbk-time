@@ -48,9 +48,17 @@
                     <td class="user-name"><small>{{ user.name }}</small></td>
                     {% for day in week_days %}
                     {% set absence = matrix.get((user.id, day.date)) %}
+                    {% if absence and absence.is_combined_half_day %}
+                    <td class="absence-cell combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
+                        data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
+                        data-href-morning="{% if absence.is_recurring %}{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence.id) }}{% endif %}"
+                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ url_for('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
+                        {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% endif %}{% if absence.category_afternoon.icon %}<span class="category-icon">{{ absence.category_afternoon.icon }}</span>{% endif %}
+                    </td>
+                    {% else %}
                     <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if absence %}
-                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (Vormittag){% elif absence.is_half_day_afternoon %} (Nachmittag){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
+                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
                         {% if absence.is_recurring %}
                         data-href="{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
                         {% else %}
@@ -63,6 +71,7 @@
                         {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% else %}•{% endif %}
                         {% endif %}
                     </td>
+                    {% endif %}
                     {% endfor %}
                 </tr>
                 {% endfor %}
@@ -99,9 +108,16 @@
                     {% for day in month_days %}
                     {% if not day.empty %}
                     {% set absence = matrix.get((user.id, day.date)) %}
+                    {% if absence and absence.is_combined_half_day %}
+                    <td class="absence-cell combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
+                        data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
+                        data-href-morning="{% if absence.is_recurring %}{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence.id) }}{% endif %}"
+                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ url_for('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
+                    </td>
+                    {% else %}
                     <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% elif day.is_weekend %}day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if absence %}
-                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (Vormittag){% elif absence.is_half_day_afternoon %} (Nachmittag){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
+                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
                         {% if absence.is_recurring %}
                         data-href="{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
                         {% else %}
@@ -114,6 +130,7 @@
                         {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% else %}•{% endif %}
                         {% endif %}
                     </td>
+                    {% endif %}
                     {% endif %}
                     {% endfor %}
                 </tr>
@@ -166,9 +183,15 @@
      data-week-end="{{ week_end.isoformat() }}"
      data-year="{{ year }}"
      data-month="{{ month }}"
+     {% if current_user.is_manager %}
      data-url-matrix="{{ url_for('export.export_team_matrix') }}"
      data-url-pdf="{{ url_for('export.export_pdf') }}"
-     data-url-ical="{{ url_for('export.export_ical') }}">
+     data-url-ical="{{ url_for('export.export_ical') }}"
+     {% else %}
+     data-url-matrix="{{ url_for('export.export_user_matrix', user_id=current_user.id) }}"
+     data-url-pdf="{{ url_for('export.export_user_pdf', user_id=current_user.id) }}"
+     data-url-ical="{{ url_for('export.export_user_ical', user_id=current_user.id) }}"
+     {% endif %}>
 </div>
 {% endblock %}
 

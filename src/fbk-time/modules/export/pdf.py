@@ -12,49 +12,60 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Flowable
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Flowable, PageBreak
 
-from flask_login import current_user
-from modules.absence.recurrence import recurrence_service
 from utils.helpers import format_date_for_user
 
 
 class HalfDayCell(Flowable):
     """Custom Flowable for half-day visualization in PDF table cells."""
 
-    def __init__(self, width, height, color, is_morning=True):
+    def __init__(self, width, height, color, is_morning=True, color_afternoon=None):
         Flowable.__init__(self)
         self.width = width
         self.height = height
         self.color = color
         self.is_morning = is_morning
+        self.color_afternoon = color_afternoon
 
     def draw(self):
         """Draw a half-colored rectangle (left for morning, right for afternoon)."""
         self.canv.saveState()
-        self.canv.setFillColor(self.color)
-        if self.is_morning:
+        if self.color_afternoon:
+            self.canv.setFillColor(self.color)
             self.canv.rect(0, 0, self.width / 2, self.height, fill=1, stroke=0)
-        else:
+            self.canv.setFillColor(self.color_afternoon)
             self.canv.rect(self.width / 2, 0, self.width / 2, self.height, fill=1, stroke=0)
+        else:
+            self.canv.setFillColor(self.color)
+            if self.is_morning:
+                self.canv.rect(0, 0, self.width / 2, self.height, fill=1, stroke=0)
+            else:
+                self.canv.rect(self.width / 2, 0, self.width / 2, self.height, fill=1, stroke=0)
         self.canv.restoreState()
 
 
 def export_absences_pdf(
-    absences: List,
+    occurrences: List[dict],
     title: str = 'Abwesenheitsübersicht',
     include_notes: bool = False,
     date_from: Optional[date] = None,
-    date_to: Optional[date] = None
+    date_to: Optional[date] = None,
+    date_format: str = 'DD.MM.YYYY'
 ) -> BytesIO:
-    """Export absences to PDF document with expanded occurrences.
+    """Export pre-expanded occurrences to PDF document.
+
+    The caller is responsible for loading absences, expanding them with
+    recurrence_service, and applying any category/substitute filters.
+    This function only renders.
 
     Args:
-        absences: List of Absence records to export.
+        occurrences: Pre-expanded, pre-filtered occurrence dicts.
         title: Document title.
-        include_notes: Whether to include absence notes.
-        date_from: Start date for occurrence expansion.
-        date_to: End date for occurrence expansion.
+        include_notes: Whether to include occurrence notes.
+        date_from: Start date (for header display only).
+        date_to: End date (for header display only).
+        date_format: Date display format ('DD.MM.YYYY' or 'YYYY-MM-DD').
 
     Returns:
         BytesIO buffer containing PDF data.
@@ -90,15 +101,12 @@ def export_absences_pdf(
         f'Erstellt am {format_date_for_user(datetime.now(ZoneInfo("Europe/Berlin")), include_time=True)}',
         subtitle_style
     ))
-    elements.append(Spacer(1, 10 * mm))
-
     if date_from and date_to:
-        occurrences = recurrence_service.get_all_occurrences_for_range(
-            absences, date_from, date_to
-        )
-        occurrences.sort(key=lambda o: o['date'])
-    else:
-        occurrences = []
+        elements.append(Paragraph(
+            f'Zeitraum: {format_date_for_user(date_from)} - {format_date_for_user(date_to)}',
+            subtitle_style
+        ))
+    elements.append(Spacer(1, 10 * mm))
 
     if not occurrences:
         elements.append(Paragraph('Keine Abwesenheiten gefunden.', styles['Normal']))
@@ -110,47 +118,27 @@ def export_absences_pdf(
             headers = ['Person', 'Kategorie', 'Datum', 'Zeitraum', 'Vertretung', 'Serie']
             col_widths = [45 * mm, 35 * mm, 28 * mm, 25 * mm, 35 * mm, 20 * mm]
 
-        data = [headers]
+        fmt = '%d.%m.%Y' if date_format == 'DD.MM.YYYY' else '%Y-%m-%d'
 
-        date_format_setting = current_user.date_format if current_user.is_authenticated else 'DD.MM.YYYY'
-        fmt = '%d.%m.%Y' if date_format_setting == 'DD.MM.YYYY' else '%Y-%m-%d'
+        month_names = [
+            '', 'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+            'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
+        ]
 
+        grouped = {}
         for occ in occurrences:
-            category = occ['category']
-            absence = occ['absence']
+            key = (occ['date'].year, occ['date'].month)
+            grouped.setdefault(key, []).append(occ)
 
-            category_text = '-'
-            if category:
-                presence_type = '(A)' if category.is_present else '(X)'
-                category_text = f'{category.name} {presence_type}'
+        month_heading_style = ParagraphStyle(
+            'MonthHeading',
+            parent=styles['Heading2'],
+            fontSize=12,
+            spaceBefore=0,
+            spaceAfter=5 * mm
+        )
 
-            if occ['is_half_day_morning']:
-                time_type_text = 'Vormittag'
-            elif occ['is_half_day_afternoon']:
-                time_type_text = 'Nachmittag'
-            else:
-                time_type_text = 'Ganztags'
-
-            series_text = 'Ja' if occ['is_recurring'] else '-'
-            if occ['is_exception']:
-                series_text = 'Geändert'
-
-            row = [
-                occ['user'].name if occ['user'] else '-',
-                category_text,
-                occ['date'].strftime(fmt),
-                time_type_text,
-                absence.substitute.name if absence.substitute else '-',
-                series_text
-            ]
-            if include_notes:
-                notes = absence.notes[:50] + '...' if absence.notes and len(absence.notes) > 50 else (absence.notes or '-')
-                row.append(notes)
-
-            data.append(row)
-
-        table = Table(data, colWidths=col_widths, repeatRows=1)
-        table.setStyle(TableStyle([
+        table_style_commands = [
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82F6')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
@@ -164,9 +152,69 @@ def export_absences_pdf(
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#F3F4F6')]),
             ('ALIGN', (3, 0), (5, -1), 'CENTER'),
-        ]))
+        ]
 
-        elements.append(table)
+        use_monthly_pages = len(grouped) > 1
+
+        for month_idx, ((year, month), month_occs) in enumerate(grouped.items()):
+            if use_monthly_pages and month_idx > 0:
+                elements.append(PageBreak())
+
+            if use_monthly_pages:
+                elements.append(Paragraph(
+                    f'{month_names[month]} {year}',
+                    month_heading_style
+                ))
+
+            data = [headers]
+            for occ in month_occs:
+                category = occ['category']
+
+                category_text = '-'
+                if category:
+                    presence_type = '(A)' if category.is_present else '(X)'
+                    category_text = f'{category.name} {presence_type}'
+
+                if occ['is_half_day_morning']:
+                    time_type_text = 'Vormittag'
+                elif occ['is_half_day_afternoon']:
+                    time_type_text = 'Nachmittag'
+                else:
+                    time_type_text = 'Ganztags'
+
+                series_text = 'Ja' if occ['is_recurring'] else '-'
+                if occ['is_exception']:
+                    series_text = 'Geändert'
+
+                occ_substitute = occ.get('substitute')
+                occ_notes = occ.get('notes')
+
+                row = [
+                    occ['user'].name if occ['user'] else '-',
+                    category_text,
+                    occ['date'].strftime(fmt),
+                    time_type_text,
+                    occ_substitute.name if occ_substitute else '-',
+                    series_text
+                ]
+                if include_notes:
+                    notes = occ_notes[:50] + '...' if occ_notes and len(occ_notes) > 50 else (occ_notes or '-')
+                    row.append(notes)
+
+                data.append(row)
+
+            table = Table(data, colWidths=col_widths, repeatRows=1)
+            table.setStyle(TableStyle(table_style_commands))
+            elements.append(table)
+
+            if use_monthly_pages:
+                present_count = sum(1 for o in month_occs if o['category'] and o['category'].is_present)
+                absent_count = len(month_occs) - present_count
+                elements.append(Spacer(1, 5 * mm))
+                elements.append(Paragraph(
+                    f'{len(month_occs)} Termine ({present_count} Anwesenheit(en), {absent_count} Abwesenheit(en))',
+                    styles['Normal']
+                ))
 
         present_count = sum(1 for occ in occurrences if occ['category'] and occ['category'].is_present)
         absent_count = len(occurrences) - present_count
@@ -183,19 +231,20 @@ def export_absences_pdf(
 
 def export_user_absences_pdf(
     user,
-    year: Optional[int] = None
+    year: Optional[int] = None,
+    date_format: str = 'DD.MM.YYYY'
 ) -> BytesIO:
-    """Export all absences for a specific user.
+    """Export all occurrences for a specific user in a given year.
 
     Args:
         user: User to export absences for.
         year: Optional year filter. Defaults to current year.
+        date_format: Date display format ('DD.MM.YYYY' or 'YYYY-MM-DD').
 
     Returns:
         BytesIO buffer containing PDF data.
     """
-    from core.extensions import db
-    from modules.absence.models import Absence
+    from .services import build_export_occurrences
 
     if year is None:
         year = date.today().year
@@ -203,73 +252,19 @@ def export_user_absences_pdf(
     date_from = date(year, 1, 1)
     date_to = date(year, 12, 31)
 
-    absences = Absence.query.filter(
-        Absence.user_id == user.id,
-        Absence.start_date <= date_to
-    ).filter(
-        db.or_(
-            Absence.end_date >= date_from,
-            Absence.is_recurring == True
-        )
-    ).order_by(Absence.start_date).all()
+    occurrences = build_export_occurrences(
+        from_date=date_from,
+        to_date=date_to,
+        user_id=user.id
+    )
 
     return export_absences_pdf(
-        absences,
+        occurrences,
         title=f'Abwesenheiten {user.name} - {year}',
         include_notes=True,
         date_from=date_from,
-        date_to=date_to
+        date_to=date_to,
+        date_format=date_format
     )
 
 
-def export_category_absences_pdf(
-    category,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None
-) -> BytesIO:
-    """Export all absences for a specific category.
-
-    Args:
-        category: Category to export absences for.
-        start_date: Optional start date filter.
-        end_date: Optional end date filter.
-
-    Returns:
-        BytesIO buffer containing PDF data.
-    """
-    from core.extensions import db
-    from modules.absence.models import Absence
-    from modules.auth.models import User, UserRole, UserStatus
-
-    if not start_date:
-        start_date = date(date.today().year, 1, 1)
-    if not end_date:
-        end_date = date(date.today().year, 12, 31)
-
-    user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
-
-    query = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).filter(
-        user_status_filter,
-        User.role == UserRole.USER,
-        Absence.category_id == category.id,
-        Absence.start_date <= end_date
-    ).filter(
-        db.or_(
-            Absence.end_date >= start_date,
-            Absence.is_recurring == True
-        )
-    )
-
-    absences = query.order_by(Absence.start_date).all()
-
-    date_range = f' ({format_date_for_user(start_date)} - {format_date_for_user(end_date)})'
-
-    return export_absences_pdf(
-        absences,
-        title=f'{category.name}{date_range}',
-        include_notes=False,
-        date_from=start_date,
-        date_to=end_date
-    )

@@ -76,13 +76,15 @@ def create_app(config_class=None, cli_mode=False):
         from modules.auth.models import User, LoginAttempt  # noqa: F401
         from modules.category.models import Category  # noqa: F401
         from modules.absence.models import Absence, AbsenceHistory, RecurrenceException  # noqa: F401
-        from modules.settings.models import Setting
+        from modules.settings.models import Setting  # noqa: F401
         db.create_all()
 
-        if Setting.query.count() == 0:
-            settings_manager.seed_defaults()
-        else:
-            settings_manager.load_all()
+        settings_manager.load_all()
+        # seed_defaults is idempotent: it inserts only template keys
+        # that do not yet exist in the database. Running it on every
+        # boot keeps fresh installs and upgraded installs in sync with
+        # settings-template.json without requiring a separate migration.
+        settings_manager.seed_defaults()
 
         if not cli_mode:
             if settings_manager.get('lockout_cleanup_enabled'):

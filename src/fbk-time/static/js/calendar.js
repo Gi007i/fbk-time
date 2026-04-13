@@ -177,8 +177,8 @@
             }
 
             var tooltip = safeCategoryName + ': ' + safeUserName;
-            if (occ.isHalfDayMorning) tooltip += ' (Vormittag)';
-            else if (occ.isHalfDayAfternoon) tooltip += ' (Nachmittag)';
+            if (occ.isHalfDayMorning) tooltip += ' (VM)';
+            else if (occ.isHalfDayAfternoon) tooltip += ' (NM)';
             tooltip += occ.isPresent ? ' (A)' : ' (X)';
             if (occ.isRecurring) tooltip += ' (Serie)';
 
@@ -186,7 +186,7 @@
                 ? '/absences/' + safeAbsenceId + '/occurrence/' + occ.date
                 : '/absences/' + safeAbsenceId;
 
-            var tooltipAttr = window.FBKTime.escapeAttr(occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (Vormittag)' : occ.isHalfDayAfternoon ? ' (Nachmittag)' : '') + (occ.isPresent ? ' (A)' : ' (X)') + (occ.isRecurring ? ' (Serie)' : ''));
+            var tooltipAttr = window.FBKTime.escapeAttr(occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (VM)' : occ.isHalfDayAfternoon ? ' (NM)' : '') + (occ.isPresent ? ' (A)' : ' (X)') + (occ.isRecurring ? ' (Serie)' : ''));
             html += '<span data-tooltip="' + tooltipAttr + '"><a href="' + detailUrl + '" class="absence-item category-' + safeCategoryId + '">' + label + '</a></span>';
         }
         if (dayOccurrences.length > maxShow) {

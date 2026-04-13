@@ -24,5 +24,7 @@
   "user_default_items_per_page": {"default": 10, "type": "integer", "category": "user_defaults"},
   "user_default_holiday_region": {"default": "none", "type": "string", "category": "user_defaults"},
   "user_default_text_color": {"default": "#000000", "type": "string", "category": "user_defaults"},
-  "operation_mode": {"default": "single_user", "type": "string", "category": "operation"}
+  "operation_mode": {"default": "single_user", "type": "string", "category": "operation"},
+  "limits_max_future_months": {"default": 14, "type": "integer", "category": "limits"},
+  "limits_bulk_delete_items": {"default": 200, "type": "integer", "category": "limits"}
 }

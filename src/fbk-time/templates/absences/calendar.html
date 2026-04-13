@@ -58,6 +58,14 @@
                     {% endfor %}
                 </select>
             </label>
+            <label>
+                Vertretung
+                <select name="has_substitute" id="filter-substitute">
+                    <option value="">Alle</option>
+                    <option value="yes" {% if request.args.get('has_substitute') == 'yes' %}selected{% endif %}>Mit Vertretung</option>
+                    <option value="no" {% if request.args.get('has_substitute') == 'no' %}selected{% endif %}>Ohne Vertretung</option>
+                </select>
+            </label>
         </fieldset>
         <div class="grid">
             <button type="submit" class="outline">Filtern</button>
@@ -95,7 +103,7 @@
     </span>
     {% endfor %}
     <mark>Feiertag</mark>
-    |
+    <span class="legend-divider" role="separator" aria-orientation="vertical"></span>
     <strong>A</strong> = Anwesend
     <strong>X</strong> = Abwesend
 </article>
@@ -151,9 +159,15 @@
         {% endfor %}
     ],
     "urls": {
+        {% if current_user.is_manager %}
         "matrix": "{{ url_for('export.export_team_matrix') }}",
         "pdf": "{{ url_for('export.export_pdf') }}",
         "ical": "{{ url_for('export.export_ical') }}"
+        {% else %}
+        "matrix": "{{ url_for('export.export_user_matrix', user_id=current_user.id) }}",
+        "pdf": "{{ url_for('export.export_user_pdf', user_id=current_user.id) }}",
+        "ical": "{{ url_for('export.export_user_ical', user_id=current_user.id) }}"
+        {% endif %}
     }
 }
 </script>

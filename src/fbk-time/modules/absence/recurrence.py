@@ -17,8 +17,6 @@ from utils.helpers import format_date_for_user
 class RecurrenceService:
     """Handle recurring absence patterns and occurrence expansion."""
 
-    MAX_RECURRENCE_DAYS = 365  # 1 year limit
-
     FREQUENCY_MAP = {
         'daily': 'DAILY',
         'weekly': 'WEEKLY',
@@ -26,6 +24,23 @@ class RecurrenceService:
     }
 
     WEEKDAY_CODES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
+
+    @property
+    def max_future_date(self):
+        """Return the latest allowed date based on planning horizon."""
+        from core.settings_manager import settings_manager
+        from dateutil.relativedelta import relativedelta
+        months = settings_manager.get('limits_max_future_months')
+        return date.today() + relativedelta(months=months)
+
+    def _get_exception(
+        self, absence: Absence, occurrence_date: date
+    ) -> Optional[RecurrenceException]:
+        """Return the RecurrenceException for a given date, if any."""
+        return RecurrenceException.query.filter_by(
+            absence_id=absence.id,
+            exception_date=occurrence_date
+        ).first()
 
     def build_rrule_string(
         self,
@@ -44,8 +59,13 @@ class RecurrenceService:
 
         Returns:
             RRULE string, e.g., "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261231T235959".
+
+        Raises:
+            ValueError: If frequency is not one of 'daily', 'weekly', 'biweekly'.
         """
-        parts = [f"FREQ={self.FREQUENCY_MAP.get(frequency, 'WEEKLY')}"]
+        if frequency not in self.FREQUENCY_MAP:
+            raise ValueError(f'Unsupported recurrence frequency: {frequency}')
+        parts = [f"FREQ={self.FREQUENCY_MAP[frequency]}"]
 
         if frequency == 'biweekly':
             parts.append('INTERVAL=2')
@@ -139,7 +159,7 @@ class RecurrenceService:
         """
         if range_end is None:
             range_end = absence.recurrence_end_date or (
-                absence.start_date + timedelta(days=self.MAX_RECURRENCE_DAYS)
+                self.max_future_date
             )
 
         if not absence.is_recurring or not absence.rrule:
@@ -163,7 +183,7 @@ class RecurrenceService:
 
         effective_end = min(
             range_end,
-            absence.start_date + timedelta(days=self.MAX_RECURRENCE_DAYS)
+            self.max_future_date
         )
         if absence.recurrence_end_date:
             effective_end = min(effective_end, absence.recurrence_end_date)
@@ -172,7 +192,7 @@ class RecurrenceService:
         dt_end = datetime.combine(effective_end, datetime.max.time())
 
         for dt in rule.between(dt_start, dt_end, inc=True):
-            occurrence_date = dt.date() if hasattr(dt, 'date') else dt
+            occurrence_date = dt.date()
 
             exception = exceptions_by_date.get(occurrence_date)
 
@@ -197,10 +217,7 @@ class RecurrenceService:
         Returns:
             Dictionary with merged absence data, or None if occurrence is deleted.
         """
-        exception = RecurrenceException.query.filter_by(
-            absence_id=absence.id,
-            exception_date=occurrence_date
-        ).first()
+        exception = self._get_exception(absence, occurrence_date)
 
         if exception and exception.exception_type == 'deleted':
             return None
@@ -229,30 +246,26 @@ class RecurrenceService:
             data['is_exception'] = True
             data['exception'] = exception
 
-            if exception.modified_category_id is not None:
+            if exception.modified_category_overridden:
                 data['category_id'] = exception.modified_category_id
                 data['category'] = exception.modified_category
 
-            if exception.modified_is_half_day_morning is not None:
-                data['is_half_day_morning'] = exception.modified_is_half_day_morning
-                if exception.modified_is_half_day_morning:
-                    data['is_all_day'] = False
+            if exception.modified_time_type is not None:
+                time_type = exception.modified_time_type
+                data['is_all_day'] = time_type == 'all_day'
+                data['is_half_day_morning'] = time_type == 'morning'
+                data['is_half_day_afternoon'] = time_type == 'afternoon'
 
-            if exception.modified_is_half_day_afternoon is not None:
-                data['is_half_day_afternoon'] = exception.modified_is_half_day_afternoon
-                if exception.modified_is_half_day_afternoon:
-                    data['is_all_day'] = False
-
-            if exception.modified_substitute_id is not None:
+            if exception.modified_substitute_overridden:
                 data['substitute_id'] = exception.modified_substitute_id
                 data['substitute'] = exception.modified_substitute
 
-            if exception.modified_notes is not None:
+            if exception.modified_notes_overridden:
                 data['notes'] = exception.modified_notes
 
         return data
 
-    def _is_valid_occurrence_date(self, absence: Absence, occurrence_date: date) -> bool:
+    def is_valid_occurrence_date(self, absence: Absence, occurrence_date: date) -> bool:
         """Check if a date is a valid occurrence in the recurring series.
 
         Args:
@@ -271,6 +284,42 @@ class RecurrenceService:
 
         return False
 
+    def is_date_in_rrule(self, absence: Absence, check_date: date) -> bool:
+        """Check if a date is generated by the raw RRULE pattern.
+
+        Unlike :meth:`is_valid_occurrence_date`, this method ignores
+        exceptions entirely. A date with a 'deleted' exception still
+        returns True if the underlying RRULE would generate it.
+
+        Used by the orphan exception pruner: an exception is only
+        orphaned when its date is no longer produced by the new
+        recurrence pattern, regardless of the exception type.
+
+        Args:
+            absence: The master recurring absence.
+            check_date: The date to test against the raw RRULE.
+
+        Returns:
+            True if the date is produced by the RRULE, False otherwise.
+        """
+        if not absence.is_recurring or not absence.rrule:
+            return check_date == absence.start_date
+
+        dtstart = absence.start_date.strftime('%Y%m%dT000000')
+        rrule_full = f"DTSTART:{dtstart}\nRRULE:{absence.rrule}"
+
+        try:
+            rule = rrulestr(rrule_full)
+        except (ValueError, TypeError):
+            return False
+
+        dt_start = datetime.combine(check_date, datetime.min.time())
+        dt_end = datetime.combine(check_date, datetime.max.time())
+        for dt in rule.between(dt_start, dt_end, inc=True):
+            if dt.date() == check_date:
+                return True
+        return False
+
     def delete_occurrence(self, absence: Absence, occurrence_date: date) -> RecurrenceException:
         """Delete a single occurrence from a recurring series.
 
@@ -286,12 +335,9 @@ class RecurrenceService:
         Raises:
             ValueError: If occurrence_date is not a valid date in the series.
         """
-        exception = RecurrenceException.query.filter_by(
-            absence_id=absence.id,
-            exception_date=occurrence_date
-        ).first()
+        exception = self._get_exception(absence, occurrence_date)
 
-        if not exception and not self._is_valid_occurrence_date(absence, occurrence_date):
+        if not exception and not self.is_valid_occurrence_date(absence, occurrence_date):
             raise ValueError(
                 f'{format_date_for_user(occurrence_date)} ist kein gültiger '
                 f'Termin dieser Serie'
@@ -300,10 +346,12 @@ class RecurrenceService:
         if exception:
             exception.exception_type = 'deleted'
             exception.modified_category_id = None
-            exception.modified_is_half_day_morning = None
-            exception.modified_is_half_day_afternoon = None
+            exception.modified_category_overridden = False
+            exception.modified_time_type = None
             exception.modified_substitute_id = None
+            exception.modified_substitute_overridden = False
             exception.modified_notes = None
+            exception.modified_notes_overridden = False
         else:
             exception = RecurrenceException(
                 absence_id=absence.id,
@@ -318,25 +366,47 @@ class RecurrenceService:
         self,
         absence: Absence,
         occurrence_date: date,
-        modifications: dict
-    ) -> RecurrenceException:
-        """Create or update a modification exception for a specific occurrence.
+        effective_state: dict
+    ) -> Optional[RecurrenceException]:
+        """Apply an effective state to a single occurrence of a series.
+
+        The effective_state dictionary describes the complete desired
+        state for the occurrence with four mandatory keys:
+
+            category_id (int):        The desired category.
+            time_type (str):          'all_day', 'morning', or 'afternoon'.
+            substitute_id (int|None): The desired substitute, or None.
+            notes (str|None):         The desired notes, or None.
+
+        Each field is compared against the parent absence. Fields that
+        match the parent are not stored as overrides. Fields that
+        differ become active overrides with their override flags set.
+
+        If every field matches the parent after this comparison, any
+        existing modification exception for the date is removed so
+        that the occurrence inherits the parent cleanly.
 
         Args:
             absence: The master recurring absence.
             occurrence_date: The specific date to modify.
-            modifications: Dictionary of field overrides (category_id, is_half_day_morning, etc.).
+            effective_state: Complete desired state dict.
 
         Returns:
-            Created or updated RecurrenceException.
+            The RecurrenceException in use, or None if no override was
+            needed and any existing exception has been removed.
 
         Raises:
-            ValueError: If occurrence_date is not valid or was previously deleted.
+            ValueError: If occurrence_date is invalid, was previously
+                deleted, or effective_state is missing required keys.
         """
-        exception = RecurrenceException.query.filter_by(
-            absence_id=absence.id,
-            exception_date=occurrence_date
-        ).first()
+        required_keys = {'category_id', 'time_type', 'substitute_id', 'notes'}
+        missing = required_keys - set(effective_state.keys())
+        if missing:
+            raise ValueError(
+                f'effective_state missing required keys: {sorted(missing)}'
+            )
+
+        exception = self._get_exception(absence, occurrence_date)
 
         if exception and exception.exception_type == 'deleted':
             raise ValueError(
@@ -344,11 +414,27 @@ class RecurrenceService:
                 f'und kann nicht modifiziert werden'
             )
 
-        if not exception and not self._is_valid_occurrence_date(absence, occurrence_date):
+        if not exception and not self.is_valid_occurrence_date(absence, occurrence_date):
             raise ValueError(
                 f'{format_date_for_user(occurrence_date)} ist kein gültiger '
                 f'Termin dieser Serie'
             )
+
+        parent_time_type = self.parent_time_type(absence)
+
+        needs_category = effective_state['category_id'] != absence.category_id
+        needs_time = effective_state['time_type'] != parent_time_type
+        needs_substitute = effective_state['substitute_id'] != absence.substitute_id
+        needs_notes = effective_state['notes'] != absence.notes
+
+        any_override = (
+            needs_category or needs_time or needs_substitute or needs_notes
+        )
+
+        if not any_override:
+            if exception:
+                db.session.delete(exception)
+            return None
 
         if not exception:
             exception = RecurrenceException(
@@ -358,19 +444,32 @@ class RecurrenceService:
             )
             db.session.add(exception)
 
-        field_mapping = {
-            'category_id': 'modified_category_id',
-            'is_half_day_morning': 'modified_is_half_day_morning',
-            'is_half_day_afternoon': 'modified_is_half_day_afternoon',
-            'substitute_id': 'modified_substitute_id',
-            'notes': 'modified_notes'
-        }
-
-        for form_field, db_field in field_mapping.items():
-            if form_field in modifications:
-                setattr(exception, db_field, modifications[form_field])
+        exception.modified_category_id = (
+            effective_state['category_id'] if needs_category else None
+        )
+        exception.modified_category_overridden = needs_category
+        exception.modified_time_type = (
+            effective_state['time_type'] if needs_time else None
+        )
+        exception.modified_substitute_id = (
+            effective_state['substitute_id'] if needs_substitute else None
+        )
+        exception.modified_substitute_overridden = needs_substitute
+        exception.modified_notes = (
+            effective_state['notes'] if needs_notes else None
+        )
+        exception.modified_notes_overridden = needs_notes
 
         return exception
+
+    @staticmethod
+    def parent_time_type(absence: Absence) -> str:
+        """Return the time_type enum value of the parent absence."""
+        if absence.is_half_day_morning:
+            return 'morning'
+        if absence.is_half_day_afternoon:
+            return 'afternoon'
+        return 'all_day'
 
     def validate_recurrence_end_date(
         self,
@@ -384,9 +483,9 @@ class RecurrenceService:
             end_date: Requested end date (may be None or beyond limit).
 
         Returns:
-            Valid end date within the 1-year limit.
+            Valid end date within the planning horizon.
         """
-        max_end = start_date + timedelta(days=self.MAX_RECURRENCE_DAYS)
+        max_end = self.max_future_date
 
         if end_date is None:
             return max_end
@@ -414,7 +513,7 @@ class RecurrenceService:
 
         if range_end is None:
             range_end = absence.recurrence_end_date or (
-                absence.start_date + timedelta(days=self.MAX_RECURRENCE_DAYS)
+                self.max_future_date
             )
 
         count = 0
@@ -500,8 +599,14 @@ class RecurrenceService:
                             'user': absence.user,
                             'category_id': occ_data['category_id'],
                             'category': occ_data['category'],
+                            'is_all_day': occ_data['is_all_day'],
                             'is_half_day_morning': occ_data['is_half_day_morning'],
                             'is_half_day_afternoon': occ_data['is_half_day_afternoon'],
+                            'start_time': occ_data['start_time'],
+                            'end_time': occ_data['end_time'],
+                            'substitute_id': occ_data['substitute_id'],
+                            'substitute': occ_data['substitute'],
+                            'notes': occ_data['notes'],
                             'is_recurring': True,
                             'is_exception': occ_data['is_exception']
                         })
@@ -518,8 +623,14 @@ class RecurrenceService:
                         'user': absence.user,
                         'category_id': absence.category_id,
                         'category': absence.category,
+                        'is_all_day': absence.is_all_day,
                         'is_half_day_morning': absence.is_half_day_morning,
                         'is_half_day_afternoon': absence.is_half_day_afternoon,
+                        'start_time': absence.start_time,
+                        'end_time': absence.end_time,
+                        'substitute_id': absence.substitute_id,
+                        'substitute': absence.substitute,
+                        'notes': absence.notes,
                         'is_recurring': False,
                         'is_exception': False
                     })

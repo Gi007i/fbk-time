@@ -3,8 +3,8 @@
 Tracks changes to absence records for audit purposes.
 """
 
-from datetime import datetime, timezone
-from typing import Any, Optional
+from datetime import date, datetime, timezone
+from typing import Optional
 
 from flask_login import current_user
 
@@ -21,41 +21,6 @@ def _get_current_user_id() -> Optional[int]:
     except RuntimeError:
         pass
     return None
-
-
-def track_change(
-    absence: Absence,
-    field_name: str,
-    old_value: Any,
-    new_value: Any
-) -> Optional[AbsenceHistory]:
-    """Record a single field change for an absence.
-
-    Args:
-        absence: The absence being modified.
-        field_name: Name of the changed field.
-        old_value: Previous value (will be converted to string).
-        new_value: New value (will be converted to string).
-
-    Returns:
-        Created AbsenceHistory record or None if values are equal.
-    """
-    old_str = _format_value(old_value)
-    new_str = _format_value(new_value)
-
-    if old_str == new_str:
-        return None
-
-    history = AbsenceHistory(
-        absence_id=absence.id,
-        changed_by_id=_get_current_user_id(),
-        changed_at=datetime.now(timezone.utc),
-        field_name=field_name,
-        old_value=old_str,
-        new_value=new_str
-    )
-    db.session.add(history)
-    return history
 
 
 def track_absence_changes(absence: Absence, form_data: dict) -> list:
@@ -108,6 +73,105 @@ def track_absence_changes(absence: Absence, form_data: dict) -> list:
     return changes
 
 
+def track_occurrence_modifications(
+    absence: Absence,
+    occurrence_date: date,
+    effective_before: dict,
+    effective_after: dict
+) -> list:
+    """Record per-field changes for a modified occurrence of a series.
+
+    Compares the effective state before and after applying the
+    modifications and emits one AbsenceHistory row per changed field.
+    The field name carries the occurrence date so that the audit trail
+    remains attributable to a single day.
+
+    Args:
+        absence: The parent recurring absence.
+        occurrence_date: Date of the affected occurrence.
+        effective_before: Effective merged state before the change.
+        effective_after: Effective merged state after the change.
+
+    Returns:
+        List of created AbsenceHistory records.
+    """
+    date_label = format_date_for_user(occurrence_date)
+    changes = []
+    field_mappings = {
+        'category_id': ('Kategorie', _get_category_name),
+        'time_type': ('Zeittyp', _format_time_type),
+        'substitute_id': ('Vertretung', _get_user_name),
+        'notes': ('Notizen', str)
+    }
+
+    for field, (display_name, formatter) in field_mappings.items():
+        old_value = effective_before.get(field)
+        new_value = effective_after.get(field)
+
+        old_display = formatter(old_value) if old_value is not None else None
+        new_display = formatter(new_value) if new_value is not None else None
+
+        if old_display == new_display:
+            continue
+
+        history = AbsenceHistory(
+            absence_id=absence.id,
+            changed_by_id=_get_current_user_id(),
+            changed_at=datetime.now(timezone.utc),
+            field_name=f'Termin {date_label} - {display_name}',
+            old_value=_truncate(old_display),
+            new_value=_truncate(new_display)
+        )
+        db.session.add(history)
+        changes.append(history)
+
+    return changes
+
+
+def track_occurrence_deletion(absence: Absence, occurrence_date: date) -> AbsenceHistory:
+    """Record a deleted occurrence in the audit trail.
+
+    Args:
+        absence: The parent recurring absence.
+        occurrence_date: Date of the removed occurrence.
+
+    Returns:
+        Created AbsenceHistory record.
+    """
+    history = AbsenceHistory(
+        absence_id=absence.id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name=f'Termin {format_date_for_user(occurrence_date)} - Entfernt',
+        old_value='vorhanden',
+        new_value='entfernt'
+    )
+    db.session.add(history)
+    return history
+
+
+def track_occurrence_restoration(absence: Absence, occurrence_date: date) -> AbsenceHistory:
+    """Record a restored occurrence in the audit trail.
+
+    Args:
+        absence: The parent recurring absence.
+        occurrence_date: Date of the restored occurrence.
+
+    Returns:
+        Created AbsenceHistory record.
+    """
+    history = AbsenceHistory(
+        absence_id=absence.id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name=f'Termin {format_date_for_user(occurrence_date)} - Wiederhergestellt',
+        old_value='entfernt',
+        new_value='vorhanden'
+    )
+    db.session.add(history)
+    return history
+
+
 def create_initial_history(absence: Absence) -> AbsenceHistory:
     """Create initial history entry when absence is created.
 
@@ -129,33 +193,13 @@ def create_initial_history(absence: Absence) -> AbsenceHistory:
     return history
 
 
-def get_absence_history(absence_id: int) -> list:
-    """Get all history entries for an absence, ordered by date descending.
-
-    Args:
-        absence_id: ID of the absence.
-
-    Returns:
-        List of AbsenceHistory records.
-    """
-    return AbsenceHistory.query.filter_by(
-        absence_id=absence_id
-    ).order_by(
-        AbsenceHistory.changed_at.desc()
-    ).all()
-
-
-def _format_value(value: Any) -> Optional[str]:
-    """Convert any value to string for storage."""
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return 'Ja' if value else 'Nein'
-    if hasattr(value, 'strftime'):
-        if hasattr(value, 'hour'):
-            return value.strftime('%H:%M')
-        return format_date_for_user(value)
-    return str(value)[:255]
+def _format_time_type(value) -> str:
+    """Format the time_type enum for display."""
+    return {
+        'all_day': 'Ganztags',
+        'morning': 'Halbtags Vormittag',
+        'afternoon': 'Halbtags Nachmittag'
+    }.get(value, str(value))
 
 
 def _format_date(value) -> Optional[str]:

@@ -27,7 +27,7 @@
      */
     function escapeAttr(text) {
         if (typeof text !== 'string') return '';
-        return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '&#10;');
     }
 
     /**
@@ -147,10 +147,13 @@
      * Show confirmation dialog with callback.
      * @param {string} message - Confirmation message.
      * @param {Function} onConfirm - Callback when confirmed.
+     * @param {string} [confirmLabel] - Custom label for confirm button.
      */
-    function showConfirmDialog(message, onConfirm) {
+    function showConfirmDialog(message, onConfirm, confirmLabel) {
         createConfirmDialog();
         confirmMessageEl.textContent = message;
+        var btn = confirmDialog.querySelector('footer button.outline.contrast');
+        btn.textContent = confirmLabel || 'Löschen';
         confirmCallback = onConfirm;
         confirmDialog.showModal();
     }
@@ -257,9 +260,10 @@
                     handleCategoryDelete(button);
                 } else {
                     var message = button.getAttribute('data-confirm') || 'Wirklich löschen?';
+                    var confirmLabel = button.getAttribute('data-confirm-label');
                     showConfirmDialog(message, function() {
                         executeAjaxAction(url, button);
-                    });
+                    }, confirmLabel);
                 }
             }
         });
@@ -473,7 +477,7 @@
      * Also supports clickable table rows with data-href.
      */
     document.addEventListener('click', function(event) {
-        var target = event.target.closest('[data-back], [data-href]');
+        var target = event.target.closest('[data-back], [data-href], [data-href-morning]');
         if (!target) return;
 
         var clickedInteractive = event.target.closest('a, button, [type="checkbox"]');
@@ -487,6 +491,13 @@
 
         if (target.hasAttribute('data-back')) {
             history.back();
+        } else if (target.hasAttribute('data-href-morning')) {
+            var rect = target.getBoundingClientRect();
+            var isAfternoon = (event.clientX - rect.left) > (rect.width / 2);
+            var href = isAfternoon ? target.dataset.hrefAfternoon : target.dataset.hrefMorning;
+            if (href && href.startsWith('/') && !href.startsWith('//')) {
+                location.href = href;
+            }
         } else {
             var href = target.dataset.href;
             if (href && href.startsWith('/') && !href.startsWith('//')) {

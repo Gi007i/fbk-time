@@ -28,6 +28,47 @@
 
         initCheckboxListeners();
         initBulkActions();
+        initExport();
+    }
+
+    function initExport() {
+        var exportBtn = document.getElementById('list-export-btn');
+        var exportType = document.getElementById('export-type');
+        var dataEl = document.getElementById('list-export-data');
+
+        if (!exportBtn || !dataEl) return;
+
+        exportBtn.addEventListener('click', function() {
+            var type = exportType.value;
+            var urlPdf = dataEl.dataset.urlPdf;
+            var urlIcal = dataEl.dataset.urlIcal;
+            var urlMatrix = dataEl.dataset.urlMatrix;
+            var params = [];
+
+            if (dataEl.dataset.dateFrom) params.push('date_from=' + dataEl.dataset.dateFrom);
+            if (dataEl.dataset.dateTo) params.push('date_to=' + dataEl.dataset.dateTo);
+            if (dataEl.dataset.userId) params.push('user_id=' + dataEl.dataset.userId);
+            if (dataEl.dataset.categoryId) params.push('category_id=' + dataEl.dataset.categoryId);
+
+            var query = params.length ? '?' + params.join('&') : '';
+
+            var matrixParams = [];
+            if (dataEl.dataset.dateFrom) matrixParams.push('week_start=' + dataEl.dataset.dateFrom);
+            if (dataEl.dataset.dateTo) matrixParams.push('week_end=' + dataEl.dataset.dateTo);
+            var matrixQuery = matrixParams.length ? '?' + matrixParams.join('&') : '';
+
+            switch (type) {
+                case 'pdf-list':
+                    window.location.href = urlPdf + query;
+                    break;
+                case 'pdf-matrix':
+                    window.location.href = urlMatrix + matrixQuery;
+                    break;
+                case 'ical':
+                    window.location.href = urlIcal + query;
+                    break;
+            }
+        });
     }
 
     function initCheckboxListeners() {

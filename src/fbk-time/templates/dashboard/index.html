@@ -15,7 +15,7 @@
     {% if today_absent %}
     <ul>
         {% for occ in today_absent %}
-        <li>
+        <li data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
             <span class="category-badge category-{{ occ.category.id }}">
                 {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
             </span>
@@ -24,11 +24,11 @@
             <small>(Vormittag)</small>
             {% elif occ.is_half_day_afternoon %}
             <small>(Nachmittag)</small>
-            {% elif occ.absence.start_time and occ.absence.end_time %}
-            <small>({{ occ.absence.start_time.strftime('%H:%M') }} - {{ occ.absence.end_time.strftime('%H:%M') }})</small>
+            {% elif occ.start_time and occ.end_time %}
+            <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
             {% endif %}
-            {% if occ.absence.substitute %}
-            <small>Vertretung: {{ occ.absence.substitute.name }}</small>
+            {% if occ.substitute %}
+            <small>Vertretung: {{ occ.substitute.name }}</small>
             {% endif %}
         </li>
         {% endfor %}
@@ -41,7 +41,7 @@
     {% if today_present %}
     <ul>
         {% for occ in today_present %}
-        <li>
+        <li data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
             <span class="category-badge category-{{ occ.category.id }}">
                 {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
             </span>
@@ -50,8 +50,8 @@
             <small>(Vormittag)</small>
             {% elif occ.is_half_day_afternoon %}
             <small>(Nachmittag)</small>
-            {% elif occ.absence.start_time and occ.absence.end_time %}
-            <small>({{ occ.absence.start_time.strftime('%H:%M') }} - {{ occ.absence.end_time.strftime('%H:%M') }})</small>
+            {% elif occ.start_time and occ.end_time %}
+            <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
             {% endif %}
         </li>
         {% endfor %}

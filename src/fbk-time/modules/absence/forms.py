@@ -3,7 +3,8 @@
 Provides forms for absence CRUD operations.
 """
 
-from datetime import timedelta
+from datetime import date, timedelta
+from dateutil.relativedelta import relativedelta
 
 from flask_wtf import FlaskForm
 from wtforms import (
@@ -11,6 +12,8 @@ from wtforms import (
     SelectMultipleField
 )
 from wtforms.validators import DataRequired, InputRequired, Optional, Length, ValidationError
+
+from modules.absence.recurrence import recurrence_service
 
 
 class AbsenceForm(FlaskForm):
@@ -108,10 +111,18 @@ class AbsenceForm(FlaskForm):
     )
 
     def validate_end_date(self, field):
-        """Ensure end date is not before start date."""
+        """Ensure end date is after start date and within planning horizon."""
         if self.start_date.data and field.data:
             if field.data < self.start_date.data:
                 raise ValidationError('Enddatum darf nicht vor dem Startdatum liegen.')
+        if field.data:
+            from core.settings_manager import settings_manager
+            months = settings_manager.get('limits_max_future_months')
+            max_date = date.today() + relativedelta(months=months)
+            if field.data > max_date:
+                raise ValidationError(
+                    f'Enddatum darf maximal {months} Monate in der Zukunft liegen.'
+                )
 
     def validate_end_time(self, field):
         """Ensure end time is after start time when custom times are used."""
@@ -121,11 +132,15 @@ class AbsenceForm(FlaskForm):
                     raise ValidationError('Endzeit muss nach der Startzeit liegen.')
 
     def validate_recurrence_end_date(self, field):
-        """Ensure recurrence end date is within 1 year of start date."""
-        if self.is_recurring.data and field.data and self.start_date.data:
-            max_end = self.start_date.data + timedelta(days=365)
-            if field.data > max_end:
-                raise ValidationError('Serie kann maximal 1 Jahr dauern.')
+        """Ensure recurrence end date is within planning horizon."""
+        if self.is_recurring.data and field.data:
+            from core.settings_manager import settings_manager
+            months = settings_manager.get('limits_max_future_months')
+            max_date = date.today() + relativedelta(months=months)
+            if field.data > max_date:
+                raise ValidationError(
+                    f'Serien-Enddatum darf maximal {months} Monate in der Zukunft liegen.'
+                )
             if field.data < self.start_date.data:
                 raise ValidationError('Serien-Enddatum darf nicht vor dem Startdatum liegen.')
 
@@ -168,8 +183,6 @@ class AbsenceForm(FlaskForm):
                 'recurrence_end_date': None
             }
 
-        from modules.absence.recurrence import recurrence_service
-
         weekdays = self.recurrence_weekdays.data if self.recurrence_frequency.data in ('weekly', 'biweekly') else None
 
         end_date = recurrence_service.validate_recurrence_end_date(
@@ -194,8 +207,6 @@ class AbsenceForm(FlaskForm):
         self.is_recurring.data = absence.is_recurring
 
         if absence.is_recurring and absence.rrule:
-            from modules.absence.recurrence import recurrence_service
-
             parsed = recurrence_service.parse_rrule_string(absence.rrule)
             self.recurrence_frequency.data = parsed['frequency']
             self.recurrence_weekdays.data = parsed['weekdays']
@@ -235,15 +246,26 @@ class OccurrenceEditForm(FlaskForm):
         ]
     )
 
-    def get_modifications(self):
-        """Return modifications dictionary for RecurrenceException."""
-        time_type = self.time_type.data
+    def get_effective_state(self) -> dict:
+        """Return the complete desired state for the occurrence.
+
+        Maps the UI time_type selection to the stored enum value
+        ('all_day', 'morning', 'afternoon'). All four fields are
+        always provided so the caller can compare each field
+        against the parent absence and decide which fields need
+        to be stored as overrides.
+        """
+        time_type_map = {
+            'all_day': 'all_day',
+            'half_day_morning': 'morning',
+            'half_day_afternoon': 'afternoon'
+        }
+        notes = self.notes.data.strip() if self.notes.data else None
         return {
             'category_id': self.category_id.data,
-            'is_half_day_morning': time_type == 'half_day_morning',
-            'is_half_day_afternoon': time_type == 'half_day_afternoon',
+            'time_type': time_type_map.get(self.time_type.data, 'all_day'),
             'substitute_id': self.substitute_id.data,
-            'notes': self.notes.data
+            'notes': notes or None
         }
 
 

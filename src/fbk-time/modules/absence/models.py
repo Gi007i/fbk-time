@@ -184,14 +184,22 @@ class RecurrenceException(db.Model):
         db.ForeignKey('categories.id', ondelete='SET NULL'),
         nullable=True
     )
-    modified_is_half_day_morning = db.Column(db.Boolean, nullable=True)
-    modified_is_half_day_afternoon = db.Column(db.Boolean, nullable=True)
+    modified_category_overridden = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
+    modified_time_type = db.Column(db.String(20), nullable=True)
     modified_substitute_id = db.Column(
         db.Integer,
         db.ForeignKey('users.id', ondelete='SET NULL'),
         nullable=True
     )
+    modified_substitute_overridden = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
     modified_notes = db.Column(db.Text, nullable=True)
+    modified_notes_overridden = db.Column(
+        db.Boolean, nullable=False, default=False
+    )
 
     created_at = db.Column(db.DateTime, default=_utc_now)
 

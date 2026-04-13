@@ -52,8 +52,10 @@
         <dt><strong>Erstellt</strong></dt>
         <dd>{{ user.created_at|format_date(include_time=True) if user.created_at else '-' }}</dd>
 
+        {% if current_user.is_admin or current_user.id == user.id %}
         <dt><strong>Letzter Login</strong></dt>
         <dd>{{ user.last_login|format_date(include_time=True) if user.last_login else 'Noch nie' }}</dd>
+        {% endif %}
 
         <dt><strong>Abwesenheiten</strong></dt>
         <dd>{{ absence_count }}</dd>

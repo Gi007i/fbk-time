@@ -182,6 +182,34 @@
         </details>
 
         <details>
+            <summary>Limits</summary>
+
+            <div class="grid">
+                <label for="limits_max_future_months">
+                    {{ form.limits_max_future_months.label.text }}
+                    {{ form.limits_max_future_months(id="limits_max_future_months",
+                       **{'aria-invalid': 'true' if form.limits_max_future_months.errors else none}) }}
+                    {% if form.limits_max_future_months.errors %}
+                    <small>{{ form.limits_max_future_months.errors[0] }}</small>
+                    {% else %}
+                    <small>Wie weit in die Zukunft Abwesenheiten und Serien geplant werden können.</small>
+                    {% endif %}
+                </label>
+
+                <label for="limits_bulk_delete_items">
+                    {{ form.limits_bulk_delete_items.label.text }}
+                    {{ form.limits_bulk_delete_items(id="limits_bulk_delete_items",
+                       **{'aria-invalid': 'true' if form.limits_bulk_delete_items.errors else none}) }}
+                    {% if form.limits_bulk_delete_items.errors %}
+                    <small>{{ form.limits_bulk_delete_items.errors[0] }}</small>
+                    {% else %}
+                    <small>Maximale Anzahl Einträge pro Massenlöschung.</small>
+                    {% endif %}
+                </label>
+            </div>
+        </details>
+
+        <details>
             <summary>Standardwerte für neue Benutzer</summary>
 
             <div class="grid">

@@ -219,3 +219,19 @@ class AdminSettingsForm(FlaskForm):
             Regexp(r'^#[0-9A-Fa-f]{6}$', message='Farbe muss im Format #RRGGBB sein.')
         ]
     )
+
+    # Limits
+    limits_max_future_months = IntegerField(
+        'Maximaler Planungshorizont (Monate)',
+        validators=[
+            InputRequired(message='Wert erforderlich.'),
+            NumberRange(min=1, max=24, message='Wert muss zwischen 1 und 24 liegen.')
+        ]
+    )
+    limits_bulk_delete_items = IntegerField(
+        'Maximale Anzahl Einträge pro Massenlöschung',
+        validators=[
+            InputRequired(message='Wert erforderlich.'),
+            NumberRange(min=10, max=1000, message='Wert muss zwischen 10 und 1000 liegen.')
+        ]
+    )

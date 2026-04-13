@@ -53,7 +53,7 @@
             Wiederholen
         </label>
 
-        <article id="recurrence-fields" class="{% if not form.is_recurring.data and not form.recurrence_end_date.errors and not form.recurrence_weekdays.errors %}hidden{% endif %}">
+        <div id="recurrence-fields" class="{% if not form.is_recurring.data and not form.recurrence_end_date.errors and not form.recurrence_weekdays.errors %}hidden{% endif %}">
             <label>
                 Wiederholungsart
                 {{ form.recurrence_frequency(id="recurrence_frequency") }}
@@ -77,14 +77,14 @@
                 Serie endet am
                 {{ form.recurrence_end_date(id="recurrence_end_date", type="date",
                    **{'aria-invalid': 'true' if form.recurrence_end_date.errors else none}) }}
-                <small>Maximal 1 Jahr ab Startdatum</small>
+                <small>Innerhalb des Planungshorizonts</small>
                 {% if form.recurrence_end_date.errors %}
                 <small>{{ form.recurrence_end_date.errors[0] }}</small>
                 {% endif %}
             </label>
 
             <small id="recurrence-preview"></small>
-        </article>
+        </div>
 
         <fieldset>
             <legend>Zeittyp</legend>

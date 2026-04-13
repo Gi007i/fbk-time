@@ -6,8 +6,10 @@ Provides conflict detection and validation for absences.
 from datetime import date, datetime, time, timedelta
 from typing import List, Optional, Tuple, Union
 
+from dateutil.rrule import rrulestr
+
 from core.extensions import db
-from modules.absence.models import Absence
+from modules.absence.models import Absence, RecurrenceException
 from modules.auth.models import User
 from modules.category.models import Category
 from utils.helpers import format_date_for_user
@@ -21,11 +23,13 @@ SlotType = Union[str, Tuple[str, time, time]]
 
 
 class ConflictResult:
-    """Result of a conflict check."""
+    """Result of a conflict check.
 
-    def __init__(self, has_conflicts: bool = False):
-        self.has_conflicts = has_conflicts
-        self.cross_substitution_warning: bool = False
+    Conflicts are reported as non-blocking warnings via ``messages``.
+    Callers surface them to the user but still allow the save to proceed.
+    """
+
+    def __init__(self):
         self.messages: List[str] = []
 
     def add_warning(self, message: str):
@@ -64,8 +68,8 @@ def check_absence_conflicts(
     """
     result = ConflictResult()
 
-    is_recurring = rrule_str and recurrence_end_date
-    range_end = recurrence_end_date if is_recurring else end_date
+    is_recurring = bool(rrule_str)
+    range_end = (recurrence_end_date or end_date) if is_recurring else end_date
 
     new_dates = list(_expand_new_entry_dates(
         start_date, end_date, rrule_str, recurrence_end_date
@@ -74,13 +78,12 @@ def check_absence_conflicts(
 
     # Check user conflicts with time slot awareness
     conflicting_dates = _get_user_conflict_dates_with_slots(
-        user_id, start_date, end_date, new_dates,
+        user_id, start_date, range_end, new_dates,
         exclude_absence_id, is_recurring, time_flags
     )
 
     if conflicting_dates:
         sorted_dates = sorted(conflicting_dates)
-        result.has_conflicts = True
         if len(sorted_dates) <= 3:
             dates_str = ', '.join(format_date_for_user(d) for d in sorted_dates)
         else:
@@ -89,19 +92,18 @@ def check_absence_conflicts(
                 f'{format_date_for_user(sorted_dates[1])} '
                 f'und {len(sorted_dates) - 2} weitere Tage'
             )
-        result.messages.append(
+        result.add_warning(
             f'Überschneidung mit bestehender Abwesenheit an: {dates_str}'
         )
 
     if substitute_id:
-        substitute_absence_dates = _get_user_absence_dates(
+        substitute_absence_dates = get_user_absence_dates(
             substitute_id, start_date, range_end, exclude_absence_id
         )
         substitute_conflicts = new_dates_set & substitute_absence_dates
 
         if substitute_conflicts:
             sorted_dates = sorted(substitute_conflicts)
-            result.has_conflicts = True
             if len(sorted_dates) <= 3:
                 dates_str = ', '.join(format_date_for_user(d) for d in sorted_dates)
             else:
@@ -110,7 +112,7 @@ def check_absence_conflicts(
                     f'{format_date_for_user(sorted_dates[1])} '
                     f'und {len(sorted_dates) - 2} weitere Tage'
                 )
-            result.messages.append(
+            result.add_warning(
                 f'Vertretung {_get_user_name(substitute_id)} ist selbst abwesend an: '
                 f'{dates_str}'
             )
@@ -146,7 +148,6 @@ def check_absence_conflicts(
         cross_conflicts = new_dates_set & cross_dates
 
         if cross_conflicts:
-            result.cross_substitution_warning = True
             result.add_warning(
                 'Kreuzvertretung erkannt: Die Personen vertreten sich gegenseitig '
                 'im gleichen Zeitraum'
@@ -174,6 +175,42 @@ def validate_substitute_required(
 
     if category.requires_substitute and not substitute_id:
         return False, f'Kategorie "{category.name}" erfordert eine Vertretung'
+
+    return True, None
+
+
+def validate_category_assignable(
+    category_id: int,
+    current_category_id: Optional[int]
+) -> Tuple[bool, Optional[str]]:
+    """Reject newly assigning a disabled category.
+
+    Disabled categories remain visible on legacy records so that
+    existing data keeps rendering, but they must not be freshly
+    assigned to another record. A record that already carries a
+    disabled category may keep it (no-op change) so that unrelated
+    edits on old data do not fail.
+
+    Args:
+        category_id: The desired category ID (new value from the form).
+        current_category_id: The category ID currently stored on the
+            record. ``None`` for create operations.
+
+    Returns:
+        Tuple of (is_valid, error_message).
+    """
+    if category_id == current_category_id:
+        return True, None
+
+    category = db.session.get(Category, category_id)
+    if not category:
+        return False, 'Ungültige Kategorie'
+
+    if not category.active:
+        return False, (
+            f'Kategorie "{category.name}" ist deaktiviert und kann nicht '
+            f'neu zugewiesen werden'
+        )
 
     return True, None
 
@@ -225,7 +262,7 @@ def _get_user_name(user_id: int) -> str:
     return user.name if user else f'Person {user_id}'
 
 
-def _get_user_absence_dates(
+def get_user_absence_dates(
     user_id: int,
     range_start: date,
     range_end: date,
@@ -254,7 +291,7 @@ def _get_user_absence_dates(
 def _get_user_conflict_dates_with_slots(
     user_id: int,
     start_date: date,
-    end_date: date,
+    range_end: date,
     new_dates: List[date],
     exclude_absence_id: Optional[int],
     is_recurring: bool,
@@ -268,7 +305,8 @@ def _get_user_conflict_dates_with_slots(
     Args:
         user_id: User ID.
         start_date: Start date of new absence.
-        end_date: End date of new absence.
+        range_end: End of range to load existing occurrences for
+            (recurrence_end_date for series, end_date otherwise).
         new_dates: List of dates for new absence.
         exclude_absence_id: Absence ID to exclude (for edits).
         is_recurring: Whether new absence is recurring.
@@ -280,7 +318,6 @@ def _get_user_conflict_dates_with_slots(
     if not time_flags:
         time_flags = {'is_all_day': True}
 
-    range_end = new_dates[-1] if new_dates else end_date
     existing_occurrences = _get_expanded_user_occurrences(
         user_id, start_date, range_end, exclude_absence_id
     )
@@ -311,8 +348,9 @@ def _get_user_conflict_dates_with_slots(
                 time_flags.get('end_time')
             )
         else:
+            absence_end = new_dates[-1]
             new_slot = _get_slot_for_date(
-                new_date, start_date, end_date,
+                new_date, start_date, absence_end,
                 time_flags.get('is_all_day', True),
                 time_flags.get('is_half_day_morning', False),
                 time_flags.get('is_half_day_afternoon', False),
@@ -337,7 +375,12 @@ def _get_substitute_assignment_dates(
 ) -> List[dict]:
     """Get all dates where user is assigned as substitute.
 
-    Expands recurring absences to find all assignment dates.
+    Resolves recurring absences and their exceptions so that the
+    reported assignments reflect the effective per-occurrence state:
+    - Dates where the master substitute is ``substitute_id`` but a
+      modified exception replaced it are excluded.
+    - Dates where another series normally has a different substitute
+      but a modified exception assigned ``substitute_id`` are included.
 
     Args:
         substitute_id: User ID of the substitute.
@@ -348,7 +391,22 @@ def _get_substitute_assignment_dates(
     Returns:
         List of dicts with date, absence_id, user_id (the absent person).
     """
-    query = Absence.query.filter(Absence.substitute_id == substitute_id)
+    # Candidate absences: either the master substitute matches, or at
+    # least one exception assigns the substitute via override. The union
+    # keeps the expansion loop aware of both sources of assignment.
+    override_absence_ids = db.session.query(
+        RecurrenceException.absence_id
+    ).filter(
+        RecurrenceException.modified_substitute_overridden == True,
+        RecurrenceException.modified_substitute_id == substitute_id
+    ).subquery()
+
+    query = Absence.query.filter(
+        db.or_(
+            Absence.substitute_id == substitute_id,
+            Absence.id.in_(override_absence_ids)
+        )
+    )
 
     if exclude_absence_id:
         query = query.filter(Absence.id != exclude_absence_id)
@@ -358,17 +416,30 @@ def _get_substitute_assignment_dates(
 
     for absence in absences:
         if absence.is_recurring and absence.rrule:
+            # expand_occurrences already filters 'deleted' exceptions.
+            # For each remaining occurrence we determine the effective
+            # substitute: an override wins over the master assignment.
             for occ_date, exception in recurrence_service.expand_occurrences(
                 absence, range_start, range_end
             ):
-                occ_data = recurrence_service.get_occurrence_data(absence, occ_date)
-                if occ_data:
-                    assignments.append({
-                        'date': occ_date,
-                        'absence_id': absence.id,
-                        'user_id': absence.user_id
-                    })
+                if exception is not None and exception.modified_substitute_overridden:
+                    effective_substitute_id = exception.modified_substitute_id
+                else:
+                    effective_substitute_id = absence.substitute_id
+
+                if effective_substitute_id != substitute_id:
+                    continue
+
+                assignments.append({
+                    'date': occ_date,
+                    'absence_id': absence.id,
+                    'user_id': absence.user_id
+                })
         else:
+            # Non-recurring absences cannot carry RecurrenceException
+            # records, so the master substitute is always effective.
+            if absence.substitute_id != substitute_id:
+                continue
             if absence.start_date > range_end or absence.end_date < range_start:
                 continue
 
@@ -417,7 +488,7 @@ def _get_expanded_user_occurrences(
 
     for absence in absences:
         if absence.is_recurring and absence.rrule:
-            for occ_date, exception in recurrence_service.expand_occurrences(
+            for occ_date, _exception in recurrence_service.expand_occurrences(
                 absence, range_start, range_end
             ):
                 occ_data = recurrence_service.get_occurrence_data(absence, occ_date)
@@ -493,8 +564,8 @@ def validate_time_slot_overlap(
     Returns:
         Tuple of (is_valid, error_message).
     """
-    is_recurring = rrule_str and recurrence_end_date
-    range_end = recurrence_end_date if is_recurring else end_date
+    is_recurring = bool(rrule_str)
+    range_end = (recurrence_end_date or end_date) if is_recurring else end_date
 
     existing_occurrences = _get_expanded_user_occurrences(
         user_id, start_date, range_end, exclude_absence_id
@@ -561,9 +632,7 @@ def _expand_new_entry_dates(
     Returns:
         List of dates covered by the new entry.
     """
-    if rrule_str and recurrence_end_date:
-        from dateutil.rrule import rrulestr
-
+    if rrule_str:
         dtstart = start_date.strftime('%Y%m%dT000000')
         rrule_full = f"DTSTART:{dtstart}\nRRULE:{rrule_str}"
 
@@ -573,7 +642,8 @@ def _expand_new_entry_dates(
             return [start_date]
 
         dt_start = datetime.combine(start_date, datetime.min.time())
-        dt_end = datetime.combine(recurrence_end_date, datetime.max.time())
+        effective_end = recurrence_end_date or end_date
+        dt_end = datetime.combine(effective_end, datetime.max.time())
 
         return [dt.date() for dt in rule.between(dt_start, dt_end, inc=True)]
 

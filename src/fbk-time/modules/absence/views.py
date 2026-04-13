@@ -18,6 +18,7 @@ from utils.request_validators import (
 )
 from utils.pagination import paginate_list
 from .forms import AbsenceForm, OccurrenceEditForm
+from .models import RecurrenceException
 from .recurrence import recurrence_service
 from .services import (
     can_modify_absence,
@@ -27,13 +28,16 @@ from .services import (
     delete_absence,
     modify_occurrence,
     delete_occurrence,
+    restore_occurrence,
     get_active_users_for_form,
     get_active_categories,
     get_substitute_choices,
     get_absences_list,
+    filter_occurrences,
     get_absence_history,
     get_absence_or_404,
-    get_absence_exception_counts
+    get_absence_exception_counts,
+    get_exception_for_date
 )
 from modules.auth.models import UserRole
 from modules.category.services import get_all_categories_ordered
@@ -63,24 +67,25 @@ def list_absences():
     today = date.today()
     date_from = validate_date_param('date_from', default=today.replace(day=1))
 
-    if date_from is None:
-        date_from = today.replace(day=1)
-
     date_to = validate_date_param('date_to')
     if date_to is None:
         _, last_day = monthrange(date_from.year, date_from.month)
         date_to = date_from.replace(day=last_day)
 
-    absences = get_absences_list(date_from, date_to, user_id, category_id)
+    if date_to < date_from:
+        abort(400, 'Invalid date range: end before start')
+
+    absences = get_absences_list(date_from, date_to, user_id)
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
         absences, date_from, date_to
     )
 
-    if has_substitute == 'yes':
-        occurrences = [o for o in occurrences if o['absence'].substitute_id]
-    elif has_substitute == 'no':
-        occurrences = [o for o in occurrences if not o['absence'].substitute_id]
+    occurrences = filter_occurrences(
+        occurrences,
+        category_id=category_id,
+        has_substitute=has_substitute
+    )
 
     occurrences.sort(key=lambda o: o['date'])
 
@@ -138,10 +143,18 @@ def calendar():
 
     user_id = validate_int_param('user_id', min_value=1)
     category_id = validate_int_param('category_id', min_value=1)
+    has_substitute = request.args.get('has_substitute')
+    if has_substitute and has_substitute not in ('yes', 'no'):
+        abort(400, 'Invalid has_substitute')
 
-    absences = get_absences_list(range_start, range_end, user_id, category_id)
+    absences = get_absences_list(range_start, range_end, user_id)
     expanded_occurrences = recurrence_service.get_all_occurrences_for_range(
         absences, range_start, range_end
+    )
+    expanded_occurrences = filter_occurrences(
+        expanded_occurrences,
+        category_id=category_id,
+        has_substitute=has_substitute
     )
 
     holidays = get_holidays_for_month(year, month)
@@ -151,6 +164,9 @@ def calendar():
         holidays.update(get_holidays_for_month(week_end.year, week_end.month))
 
     users = get_active_users_for_form()
+    # Calendar intentionally exposes all categories (including inactive
+    # ones) so that the filter dropdown and legend cover historical
+    # absences whose category has since been disabled.
     categories = get_all_categories_ordered()
 
     return render_template(
@@ -202,7 +218,8 @@ def create():
             end_date=form.end_date.data,
             substitute_id=form.substitute_id.data,
             time_flags=time_flags,
-            recurrence_data=recurrence_data
+            recurrence_data=recurrence_data,
+            current_category_id=None
         )
 
         if not is_valid:
@@ -282,6 +299,12 @@ def detail(id):
                     'is_half_day_afternoon': occ_data['is_half_day_afternoon']
                 })
 
+        deleted_occurrences = [
+            {'date': exc.exception_date}
+            for exc in absence.exceptions.filter_by(exception_type='deleted')
+            .order_by(RecurrenceException.exception_date).all()
+        ]
+
     return render_template(
         'absences/detail.html',
         absence=absence,
@@ -289,7 +312,8 @@ def detail(id):
         history=history,
         working_days=working_days,
         recurrence_info=recurrence_info,
-        occurrences=occurrences
+        occurrences=occurrences,
+        deleted_occurrences=deleted_occurrences if absence.is_recurring else []
     )
 
 
@@ -337,6 +361,9 @@ def edit(id):
         form.set_recurrence_from_absence(absence)
 
     if form.validate_on_submit():
+        if not is_manager and form.user_id.data != current_user.id:
+            abort(403)
+
         time_flags = form.get_time_flags()
         recurrence_data = form.get_recurrence_data()
 
@@ -348,7 +375,8 @@ def edit(id):
             substitute_id=form.substitute_id.data,
             time_flags=time_flags,
             exclude_absence_id=id,
-            recurrence_data=recurrence_data
+            recurrence_data=recurrence_data,
+            current_category_id=absence.category_id
         )
 
         if not is_valid:
@@ -448,26 +476,37 @@ def occurrence_edit(id, date_str):
 
     occurrence_date = validate_date_string(date_str)
 
+    existing_exception = get_exception_for_date(absence, occurrence_date)
+    if existing_exception is None and not recurrence_service.is_valid_occurrence_date(
+        absence, occurrence_date
+    ):
+        return redirect(url_for('absences.detail', id=id))
+
     form = OccurrenceEditForm()
 
+    occurrence_data = recurrence_service.get_occurrence_data(absence, occurrence_date)
+    if occurrence_data is None:
+        return redirect(url_for('absences.detail', id=id))
+
     categories = get_active_categories()
-    if absence.category_id not in {c.id for c in categories}:
+    category_ids = {c.id for c in categories}
+    if absence.category_id not in category_ids:
         categories = list(categories) + [absence.category]
+        category_ids.add(absence.category_id)
+    effective_category = occurrence_data.get('category')
+    if effective_category is not None and effective_category.id not in category_ids:
+        categories = list(categories) + [effective_category]
 
     form.category_id.choices = [(c.id, c.name) for c in categories]
 
     substitute_users = get_substitute_choices(exclude_user_id=absence.user_id)
     form.substitute_id.choices = [('', '-- Keine Vertretung --')] + [
-        (str(u.id), u.name) for u in substitute_users
+        (u.id, u.name) for u in substitute_users
     ]
 
     if request.method == 'GET':
-        occurrence_data = recurrence_service.get_occurrence_data(absence, occurrence_date)
-        if occurrence_data is None:
-            return redirect(url_for('absences.detail', id=id))
-
         form.category_id.data = occurrence_data['category_id']
-        form.substitute_id.data = str(occurrence_data['substitute_id']) if occurrence_data['substitute_id'] else ''
+        form.substitute_id.data = occurrence_data['substitute_id']
         form.notes.data = occurrence_data['notes']
 
         if occurrence_data['is_half_day_morning']:
@@ -478,9 +517,9 @@ def occurrence_edit(id, date_str):
             form.time_type.data = 'all_day'
 
     if form.validate_on_submit():
-        modifications = form.get_modifications()
+        effective_state = form.get_effective_state()
         try:
-            message = modify_occurrence(absence, occurrence_date, modifications)
+            message = modify_occurrence(absence, occurrence_date, effective_state)
         except ValueError as e:
             if is_ajax_request():
                 return ajax_response(success=False, message=str(e))
@@ -537,6 +576,39 @@ def occurrence_delete(id, date_str):
     db.session.commit()
 
     return_to = get_return_url('absences.list_absences')
+
+    if is_ajax_request():
+        return ajax_response(success=True, message=message, redirect=return_to)
+
+    return redirect(return_to)
+
+
+@bp.route('/<int:id>/occurrence/<date_str>/restore', methods=['POST'])
+def occurrence_restore(id, date_str):
+    """Restore a deleted occurrence of a recurring absence."""
+    absence = get_absence_or_404(id)
+
+    if not can_modify_absence(absence):
+        abort(403)
+
+    if not absence.is_recurring:
+        message = 'Diese Abwesenheit ist keine Serie.'
+        if is_ajax_request():
+            return ajax_response(success=False, message=message)
+        return redirect(url_for('absences.detail', id=id))
+
+    occurrence_date = validate_date_string(date_str)
+
+    try:
+        message = restore_occurrence(absence, occurrence_date)
+    except ValueError as e:
+        if is_ajax_request():
+            return ajax_response(success=False, message=str(e))
+        return redirect(url_for('absences.detail', id=id))
+
+    db.session.commit()
+
+    return_to = url_for('absences.detail', id=id)
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)

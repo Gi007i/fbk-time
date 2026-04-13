@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.4.0] - 2026-04-12
+
+### Added
+- Kombinierte Halbtage: VM und NM mit verschiedenen Kategorien auf einem Tag darstellbar (Team-Übersicht, PDF-Matrix, Split-Klick auf jeweilige Hälfte)
+- Dashboard „Heute": Einträge klickbar zur Detailansicht
+- Export in Listenansicht mit Übernahme aller aktiven Filter
+- Rollenbasierte Exports: User exportiert nur eigene Daten, Manager/Admin alle
+- Änderungshistorie: Admin sieht den Namen des Ändernden
+- PDF-Export: Monatliche Seitenaufteilung bei großen Zeiträumen (Liste und Matrix)
+- Serientermine: Gelöschte Termine wiederherstellen und geänderte Termine auf Serienwerte zurücksetzen
+- Systemeinstellungen: Konfigurierbarer Planungshorizont (1–24 Monate) und Massenlöschungs-Limit
+- Upgrade-Script mit Backup, Verify und Restore für v1.3.x → v1.4.0
+
+### Changed
+- Tooltips: Konsistentes Verhalten in Firefox und Chrome, Halbtag-Abkürzungen vereinheitlicht (VM/NM)
+- Kalender-Legende: Visueller Trenner zwischen Kategorien und Erklärung
+- Serien-Formular: Wiederholungsfelder ohne eigene Hintergrundfarbe (article → div)
+- PDF-Export: Aufsteigende Sortierung nach Datum
+- Recurrence-Exceptions: Konsistentes Override-Flag-Modell (category, substitute, notes)
+- Abhängigkeiten aktualisiert (SQLAlchemy, holidays, gunicorn, pip-licenses)
+
+### Fixed
+- Tooltips: Zeilenumbrüche in Chrome nicht dargestellt
+- Export: Fremde Abwesenheitsdaten über URL-Manipulation exportierbar (IDOR)
+- Vertretungsprüfung berücksichtigt jetzt Occurrence-Level Overrides bei Serien
+- Occurrence-Bearbeitung: Vertretung wurde im Formular nicht vorausgewählt
+- Formular-Validierung: Doppelte validate_end_date überschrieb Enddatum-Prüfung
+- Validierung: Wiederkehrende Abwesenheiten ohne Serien-Enddatum wurden falsch als nicht-wiederkehrend behandelt
+
 ## [1.3.0] - 2026-03-22
 
 ### Changed

@@ -74,7 +74,9 @@ def update_system_settings(
     user_default_date_format: str,
     user_default_items_per_page: int,
     user_default_holiday_region: str,
-    user_default_text_color: str
+    user_default_text_color: str,
+    limits_max_future_months: int,
+    limits_bulk_delete_items: int
 ) -> None:
     """Update all system settings.
 
@@ -103,6 +105,8 @@ def update_system_settings(
         user_default_items_per_page: Default pagination for new users.
         user_default_holiday_region: Default holiday region for new users.
         user_default_text_color: Default text color for new users.
+        limits_max_future_months: Max days for absences and recurring series.
+        limits_bulk_delete_items: Max items allowed per bulk delete call.
     """
     # Lockout settings
     settings_manager.set('lockout_threshold', lockout_threshold)
@@ -139,6 +143,10 @@ def update_system_settings(
     settings_manager.set('user_default_items_per_page', user_default_items_per_page)
     settings_manager.set('user_default_holiday_region', user_default_holiday_region)
     settings_manager.set('user_default_text_color', user_default_text_color.upper())
+
+    # Limits
+    settings_manager.set('limits_max_future_months', limits_max_future_months)
+    settings_manager.set('limits_bulk_delete_items', limits_bulk_delete_items)
 
     settings_manager.flush()
 

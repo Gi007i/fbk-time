@@ -17,6 +17,13 @@
 .text-positive { color: var(--pico-ins-color); }
 .nowrap { white-space: nowrap; }
 
+[data-tooltip]::before {
+    white-space: pre-line;
+    text-overflow: clip;
+    max-width: 20rem;
+    width: max-content;
+}
+
 .page-header {
     grid-template-columns: auto auto;
     justify-content: start;
@@ -177,7 +184,9 @@ body > footer {
     }
 }
 
-tr[data-href] {
+tr[data-href],
+li[data-href],
+td[data-href-morning] {
     cursor: pointer;
 }
 
@@ -213,11 +222,6 @@ tr[data-href] {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-}
-
-.calendar .absence-more[data-tooltip]::before {
-    white-space: pre;
-    text-align: left;
 }
 
 /* =============================================
@@ -431,6 +435,14 @@ tr[data-href] {
     flex-wrap: wrap;
     gap: 0.5rem 1rem;
     align-items: center;
+}
+
+.legend-divider {
+    display: inline-block;
+    width: 1px;
+    height: 1.2em;
+    background-color: var(--pico-muted-border-color);
+    vertical-align: middle;
 }
 
 /* =============================================

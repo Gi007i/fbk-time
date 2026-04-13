@@ -110,7 +110,9 @@ def system_settings():
             user_default_date_format=form.user_default_date_format.data,
             user_default_items_per_page=form.user_default_items_per_page.data,
             user_default_holiday_region=form.user_default_holiday_region.data,
-            user_default_text_color=form.user_default_text_color.data
+            user_default_text_color=form.user_default_text_color.data,
+            limits_max_future_months=form.limits_max_future_months.data,
+            limits_bulk_delete_items=form.limits_bulk_delete_items.data
         )
 
         if is_ajax_request():
@@ -151,6 +153,9 @@ def system_settings():
         form.user_default_items_per_page.data = settings_manager.get('user_default_items_per_page')
         form.user_default_holiday_region.data = settings_manager.get('user_default_holiday_region')
         form.user_default_text_color.data = settings_manager.get('user_default_text_color')
+
+        form.limits_max_future_months.data = settings_manager.get('limits_max_future_months')
+        form.limits_bulk_delete_items.data = settings_manager.get('limits_bulk_delete_items')
 
     if request.method == 'POST' and is_ajax_request():
         errors = {field.name: field.errors[0] for field in form if field.errors}

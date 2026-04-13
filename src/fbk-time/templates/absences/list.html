@@ -85,7 +85,7 @@
             <tr data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
                 <td>
                     <input type="checkbox" data-bulk-item
-                           value="{{ occ.absence.id }}{% if occ.is_recurring %}:{{ occ.date }}{% endif %}">
+                           value="{{ occ.absence.id }}{% if occ.is_recurring %}:{{ occ.date.isoformat() }}{% endif %}">
                 </td>
                 <td><strong>{{ occ.user.name }}</strong></td>
                 <td class="list-mobile-col">{{ occ.category.name }} ({{ 'A' if occ.category.is_present else 'X' }})</td>
@@ -111,7 +111,7 @@
                     Ganztags
                     {% endif %}
                 </td>
-                <td class="list-desktop-col">{{ occ.absence.substitute.name if occ.absence.substitute else '-' }}</td>
+                <td class="list-desktop-col">{{ occ.substitute.name if occ.substitute else '-' }}</td>
                 <td class="list-desktop-col">
                     {% if occ.is_recurring %}
                     <mark>Serie{% if occ.is_exception %} (geändert){% endif %}</mark>
@@ -163,6 +163,37 @@
 {% endif %}
 {% else %}
 <p><small>Keine Abwesenheiten im gewählten Zeitraum.</small></p>
+{% endif %}
+
+{% if occurrences %}
+<article>
+    <strong>Export-Format</strong>
+    <div class="grid">
+        <select id="export-type">
+            <option value="pdf-list">PDF - Tabelle</option>
+            <option value="pdf-matrix">PDF - Kalender-Matrix</option>
+            <option value="ical">iCal-Datei</option>
+        </select>
+        <button type="button" id="list-export-btn" class="outline">Exportieren</button>
+        <div></div>
+    </div>
+</article>
+
+<div id="list-export-data" class="hidden"
+     data-date-from="{{ filters.date_from }}"
+     data-date-to="{{ filters.date_to }}"
+     {% if current_user.is_manager %}
+     data-url-pdf="{{ url_for('export.export_pdf') }}"
+     data-url-ical="{{ url_for('export.export_ical') }}"
+     data-url-matrix="{{ url_for('export.export_team_matrix') }}"
+     {% else %}
+     data-url-pdf="{{ url_for('export.export_user_pdf', user_id=current_user.id) }}"
+     data-url-ical="{{ url_for('export.export_user_ical', user_id=current_user.id) }}"
+     data-url-matrix="{{ url_for('export.export_user_matrix', user_id=current_user.id) }}"
+     {% endif %}
+     {% if filters.user_id %}data-user-id="{{ filters.user_id }}"{% endif %}
+     {% if filters.category_id %}data-category-id="{{ filters.category_id }}"{% endif %}>
+</div>
 {% endif %}
 
 <nav aria-label="Abwesenheits-Ansichten">

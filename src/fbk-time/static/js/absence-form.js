@@ -269,17 +269,11 @@
             return;
         }
 
-        var start = new Date(startDate);
-        var maxEnd = new Date(start);
-        maxEnd.setFullYear(maxEnd.getFullYear() + 1);
-
-        var maxDateStr = maxEnd.toISOString().split('T')[0];
         recurrenceEndDate.disabled = false;
-        recurrenceEndDate.max = maxDateStr;
         recurrenceEndDate.min = startDate;
 
         if (!recurrenceEndDate.value) {
-            var defaultEnd = new Date(start);
+            var defaultEnd = new Date(startDate);
             defaultEnd.setMonth(defaultEnd.getMonth() + 3);
             recurrenceEndDate.value = defaultEnd.toISOString().split('T')[0];
         }

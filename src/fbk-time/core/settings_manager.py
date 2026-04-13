@@ -186,15 +186,26 @@ class SettingsManager:
             self._initialized = True
 
     def seed_defaults(self):
-        """Write default settings from template into empty database.
+        """Upsert default settings from the template into the database.
 
-        Reads defaults from data/settings-template.json.
+        Idempotent: inserts keys that are missing (fresh install or a
+        newer template introduced after an upgrade) and leaves existing
+        values untouched. Reads defaults from data/settings-template.json.
+
+        Returns:
+            List of keys that were newly inserted.
         """
         from core.extensions import db
         from modules.settings.models import Setting, SettingDataType
 
+        inserted_keys = []
+
         with self._lock:
+            existing_keys = {s.key for s in Setting.query.all()}
+
             for key, data in _TEMPLATE.items():
+                if key in existing_keys:
+                    continue
                 setting = Setting(
                     key=key,
                     value='',
@@ -204,10 +215,15 @@ class SettingsManager:
                 setting.set_typed_value(data['default'])
                 db.session.add(setting)
                 self._cache[key] = data['default']
+                inserted_keys.append(key)
 
-            db.session.commit()
+            if inserted_keys:
+                db.session.commit()
+
             self._local_version = self._cache.get('cache_version', 0)
             self._initialized = True
+
+        return inserted_keys
 
     def is_initialized(self):
         """Check if settings have been loaded."""

@@ -30,6 +30,7 @@ def generate_category_css() -> str:
     - .category-{id}: Background and text color
     - .half-day-morning.category-{id}: Left-half gradient
     - .half-day-afternoon.category-{id}: Right-half gradient
+    - .combined-half-day.morning-{id}.afternoon-{id}: Split gradient for two categories
 
     Colors are validated to prevent CSS injection.
 
@@ -37,14 +38,13 @@ def generate_category_css() -> str:
         Generated CSS content string.
     """
     categories = Category.query.all()
+    valid_categories = [
+        cat for cat in categories
+        if is_valid_hex_color(cat.color) and is_valid_hex_color(cat.text_color)
+    ]
     css_lines = []
 
-    for cat in categories:
-        if not is_valid_hex_color(cat.color):
-            continue
-        if not is_valid_hex_color(cat.text_color):
-            continue
-
+    for cat in valid_categories:
         css_lines.append(
             f'.category-{cat.id} {{ '
             f'background-color: {cat.color}; '
@@ -63,5 +63,15 @@ def generate_category_css() -> str:
             f'background: linear-gradient(to right, transparent 50%, {cat.color} 50%); '
             f'}}'
         )
+
+    for cat_m in valid_categories:
+        for cat_a in valid_categories:
+            if cat_m.id == cat_a.id:
+                continue
+            css_lines.append(
+                f'.combined-half-day.morning-{cat_m.id}.afternoon-{cat_a.id} {{ '
+                f'background: linear-gradient(to right, {cat_m.color} 50%, {cat_a.color} 50%); '
+                f'}}'
+            )
 
     return '\n'.join(css_lines)
