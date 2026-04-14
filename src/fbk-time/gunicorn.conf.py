@@ -16,6 +16,11 @@ with open(_settings_path, 'r', encoding='utf-8') as f:
 _server = _settings['system']['server']
 _logs = _settings['system']['logs']
 
+_runtime_path = Path(_server.get('runtime_path', 'data'))
+if not _runtime_path.is_absolute():
+    _runtime_path = _base_dir / _runtime_path
+_runtime_path.mkdir(mode=0o755, parents=True, exist_ok=True)
+
 _access_log_path = _base_dir / _logs['access_log']
 _error_log_path = _base_dir / _logs['error_log']
 
@@ -47,7 +52,8 @@ limit_request_field_size = 8192
 
 graceful_timeout = 30
 
-pidfile = str(_base_dir / "data" / "gunicorn.pid")
+pidfile = str(_runtime_path / "gunicorn.pid")
+control_socket = str(_runtime_path / "gunicorn.ctl")
 
 proc_name = "fbk-time"
 

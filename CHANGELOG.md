@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.1] - 2026-04-14
+
+### Added
+- Gunicorn: Konfigurierbarer Runtime-Pfad für PID-Datei und Control Socket
+- Upgrade-Skripte: Gebündelte statische SQLite-Binaries (x86_64, aarch64) für Systeme mit SQLite < 3.35
+
 ## [1.4.0] - 2026-04-12
 
 ### Added

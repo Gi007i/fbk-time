@@ -11,7 +11,13 @@ Reworks the recurrence_exceptions schema:
 Runs in a single transaction. Creates a timestamped backup of the
 database file before touching it. Rolls back on any failure.
 
-Dependencies: Python stdlib only. No third-party packages required.
+Dependencies: Python stdlib + ``sqlite_runner`` from the parent
+``upgrades/`` directory. No third-party packages required.
+
+When the host system ships a SQLite version older than 3.35 (e.g.
+RHEL 9 with 3.34), the script automatically falls back to a bundled
+static sqlite3 binary via the ``sqlite_runner`` module. The operator
+can override the binary path with ``--sqlite-binary``.
 
 The script is location-agnostic: pass --app-path pointing at the
 FBK-Time installation directory (e.g. /var/www/fbk-time) and it
@@ -19,15 +25,19 @@ will resolve the database location from that installation's
 settings.json. The script can live anywhere on disk.
 """
 
+from __future__ import annotations
+
 import argparse
 import json
 import os
-import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Any
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import sqlite_runner
 
 
 TARGET_VERSION = '1.4.0'
@@ -62,8 +72,8 @@ class Logger:
 
 
 def _resolve_db_path(
-    app_path: Optional[str],
-    explicit_db: Optional[str],
+    app_path: str | None,
+    explicit_db: str | None,
     logger: Logger
 ) -> Path:
     """Return the SQLite database path.
@@ -77,6 +87,10 @@ def _resolve_db_path(
             logger.error(f'Database file not found: {db_path}')
             sys.exit(1)
         return db_path
+
+    if not app_path:
+        logger.error('Either --app-path or --db is required')
+        sys.exit(1)
 
     app_dir = Path(app_path).expanduser().resolve()
     if not app_dir.exists():
@@ -108,7 +122,7 @@ def _resolve_db_path(
 
 
 def _resolve_backup_dir(
-    backup_dir: Optional[str],
+    backup_dir: str | None,
     db_path: Path,
     logger: Logger
 ) -> Path:
@@ -130,36 +144,28 @@ def _resolve_backup_dir(
     return target
 
 
-_VERSION_PATTERN = re.compile(r'^(\d+)\.(\d+)\.(\d+)')
+def _resolve_sqlite_binary(
+    args: argparse.Namespace,
+    logger: Logger
+) -> Path | None:
+    """Resolve the SQLite binary via sqlite_runner.
+
+    Returns None when the system SQLite is sufficient, or a Path to
+    the bundled/user-provided binary otherwise.
+    """
+    return sqlite_runner.resolve_binary(
+        required=REQUIRED_SQLITE_VERSION,
+        user_override=getattr(args, 'sqlite_binary', None),
+        force=args.force,
+        logger=logger,
+    )
 
 
-def _check_sqlite_version(conn: sqlite3.Connection, logger: Logger) -> bool:
-    version_str = conn.execute('SELECT sqlite_version()').fetchone()[0]
-    match = _VERSION_PATTERN.match(version_str or '')
-    if not match:
-        logger.error(f'Cannot parse SQLite version string: {version_str!r}')
-        return False
-    version_tuple = tuple(int(g) for g in match.groups())
-    if version_tuple < REQUIRED_SQLITE_VERSION:
-        logger.error(
-            f'SQLite {".".join(map(str, REQUIRED_SQLITE_VERSION))}+ '
-            f'required for DROP COLUMN support (found {version_str})'
-        )
-        return False
-    logger.success(f'SQLite version {version_str}')
-    return True
-
-
-def _check_sqlite_version_standalone(db_path: Path, logger: Logger) -> bool:
-    """Run the SQLite version check before taking a backup."""
-    conn = sqlite3.connect(str(db_path))
-    try:
-        return _check_sqlite_version(conn, logger)
-    finally:
-        conn.close()
-
-
-def _check_integrity_standalone(db_path: Path, logger: Logger) -> bool:
+def _check_integrity_standalone(
+    db_path: Path,
+    binary: Path | None,
+    logger: Logger
+) -> bool:
     """Run a PRAGMA integrity_check on the live database before upgrading.
 
     A corrupt live database would otherwise silently be copied into
@@ -167,7 +173,7 @@ def _check_integrity_standalone(db_path: Path, logger: Logger) -> bool:
     check before any write operation gives the operator a chance to
     abort and restore from an earlier backup.
     """
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite_runner.connect(db_path, binary=binary)
     try:
         row = conn.execute('PRAGMA integrity_check').fetchone()
         if not row or row[0] != 'ok':
@@ -182,9 +188,12 @@ def _check_integrity_standalone(db_path: Path, logger: Logger) -> bool:
         conn.close()
 
 
-def _is_schema_on_target(db_path: Path) -> bool:
+def _is_schema_on_target(
+    db_path: Path,
+    binary: Path | None
+) -> bool:
     """Return True if the schema is already on the v1.4.0 layout."""
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite_runner.connect(db_path, binary=binary)
     try:
         columns = _get_column_names(conn)
     finally:
@@ -199,7 +208,7 @@ def _is_schema_on_target(db_path: Path) -> bool:
     )
 
 
-def _get_column_names(conn: sqlite3.Connection) -> set:
+def _get_column_names(conn: Any) -> set[str]:
     """Return the column names of the recurrence_exceptions table.
 
     The table name is hardcoded rather than parameterized because
@@ -227,9 +236,14 @@ def _secure_file_permissions(path: Path, logger: Logger) -> None:
         )
 
 
-def cmd_verify(db_path: Path, logger: Logger) -> bool:
+def cmd_verify(
+    db_path: Path,
+    binary: Path | None,
+    logger: Logger
+) -> bool:
+    """Check whether the schema matches the v1.4.0 layout."""
     logger.section(f'v{TARGET_VERSION} Schema Verification')
-    conn = sqlite3.connect(str(db_path))
+    conn = sqlite_runner.connect(db_path, binary=binary)
     try:
         columns = _get_column_names(conn)
         required_new = {
@@ -259,6 +273,7 @@ def cmd_verify(db_path: Path, logger: Logger) -> bool:
             logger.warning(
                 f'Legacy columns still present: {", ".join(sorted(remaining_legacy))}'
             )
+        logger.section(f'v{TARGET_VERSION} Verification Failed')
         return False
     finally:
         conn.close()
@@ -267,26 +282,21 @@ def cmd_verify(db_path: Path, logger: Logger) -> bool:
 def _create_backup(
     db_path: Path,
     backup_dir: Path,
+    binary: Path | None,
     logger: Logger
-) -> Optional[Path]:
-    """Create a transaction-consistent backup using SQLite's online API.
+) -> Path | None:
+    """Create a transaction-consistent backup via sqlite_runner.
 
-    Uses Connection.backup() instead of a file copy so that:
-    - Uncommitted data in the WAL (write-ahead log) is correctly included.
-    - The backup is guaranteed to be a transactionally consistent snapshot.
-    - No need to copy the -wal and -shm sidecar files separately.
+    Uses the native online backup API or the CLI .backup command,
+    depending on whether a bundled binary is in use. Both methods
+    produce a self-contained, consistent snapshot including WAL data.
     """
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
     backup_name = f'{db_path.stem}.backup-v{TARGET_VERSION}-{timestamp}{db_path.suffix}'
     backup_path = backup_dir / backup_name
 
-    source = None
-    destination = None
     try:
-        source = sqlite3.connect(str(db_path))
-        destination = sqlite3.connect(str(backup_path))
-        source.backup(destination)
-        destination.commit()
+        sqlite_runner.create_backup(db_path, backup_path, binary=binary)
     except Exception as exc:
         logger.error(f'Backup failed: {exc}')
         if backup_path.exists():
@@ -295,18 +305,14 @@ def _create_backup(
             except OSError:
                 pass
         return None
-    finally:
-        if destination is not None:
-            destination.close()
-        if source is not None:
-            source.close()
 
     _secure_file_permissions(backup_path, logger)
     logger.success(f'Backup created: {backup_path}')
     return backup_path
 
 
-def _add_new_columns(conn: sqlite3.Connection, columns: set, logger: Logger) -> None:
+def _add_new_columns(conn: Any, columns: set[str], logger: Logger) -> None:
+    """Add the v1.4.0 override-flag columns to recurrence_exceptions."""
     if 'modified_time_type' not in columns:
         conn.execute(
             'ALTER TABLE recurrence_exceptions '
@@ -339,7 +345,8 @@ def _add_new_columns(conn: sqlite3.Connection, columns: set, logger: Logger) -> 
         logger.success('Added column modified_category_overridden')
 
 
-def _backfill(conn: sqlite3.Connection, columns: set, logger: Logger) -> None:
+def _backfill(conn: Any, columns: set[str], logger: Logger) -> None:
+    """Populate new columns from legacy half-day boolean flags."""
     has_legacy_morning = 'modified_is_half_day_morning' in columns
     has_legacy_afternoon = 'modified_is_half_day_afternoon' in columns
 
@@ -405,13 +412,14 @@ _NEW_LIMIT_SETTINGS = (
 )
 
 
-def _seed_limits_settings(conn: sqlite3.Connection, logger: Logger) -> None:
+def _seed_limits_settings(conn: Any, logger: Logger) -> None:
     """Seed new v1.4.0 runtime settings that must exist for the app to run.
 
     The Flask app reads these keys on every request and raises KeyError
     when they are missing. Inserted with INSERT OR IGNORE so that reruns
     of the upgrade and already-seeded installations stay no-op.
     """
+    # Naive UTC timestamp to match the existing DB column convention
     now_iso = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(
         sep=' ', timespec='microseconds'
     )
@@ -432,7 +440,8 @@ def _seed_limits_settings(conn: sqlite3.Connection, logger: Logger) -> None:
         logger.info('Limits settings already present')
 
 
-def _drop_legacy_columns(conn: sqlite3.Connection, columns: set, logger: Logger) -> None:
+def _drop_legacy_columns(conn: Any, columns: set[str], logger: Logger) -> None:
+    """Remove the superseded half-day boolean columns."""
     if 'modified_is_half_day_morning' in columns:
         conn.execute(
             'ALTER TABLE recurrence_exceptions '
@@ -448,26 +457,26 @@ def _drop_legacy_columns(conn: sqlite3.Connection, columns: set, logger: Logger)
 
 
 def _verify_post_upgrade(
-    conn: sqlite3.Connection,
+    conn: Any,
     count_before: int,
     logger: Logger
 ) -> None:
-    count_after = conn.execute(
+    count_after = int(conn.execute(
         'SELECT COUNT(*) FROM recurrence_exceptions'
-    ).fetchone()[0]
+    ).fetchone()[0])
     if count_before != count_after:
         raise RuntimeError(
             f'Row count mismatch: before={count_before} after={count_after}'
         )
 
-    inconsistent = conn.execute(
+    inconsistent = int(conn.execute(
         """
         SELECT COUNT(*) FROM recurrence_exceptions
         WHERE exception_type = 'modified'
           AND modified_time_type IS NOT NULL
           AND modified_time_type NOT IN ('all_day', 'morning', 'afternoon')
         """
-    ).fetchone()[0]
+    ).fetchone()[0])
     if inconsistent:
         raise RuntimeError(
             f'{inconsistent} modified_time_type values are invalid'
@@ -482,6 +491,7 @@ def cmd_restore(
     db_path: Path,
     backup_file: Path,
     force: bool,
+    binary: Path | None,
     logger: Logger
 ) -> bool:
     """Restore the live database from a user-specified backup file.
@@ -504,7 +514,7 @@ def cmd_restore(
         return False
 
     try:
-        probe = sqlite3.connect(str(backup_file))
+        probe = sqlite_runner.connect(backup_file, binary=binary)
         try:
             result = probe.execute(
                 'PRAGMA integrity_check'
@@ -537,36 +547,28 @@ def cmd_restore(
     safety_name = f'{db_path.stem}.pre-restore-{timestamp}{db_path.suffix}'
     safety_path = db_path.parent / safety_name
 
-    source = None
-    destination = None
     try:
-        source = sqlite3.connect(str(db_path))
-        destination = sqlite3.connect(str(safety_path))
-        source.backup(destination)
-        destination.commit()
+        sqlite_runner.create_backup(db_path, safety_path, binary=binary)
     except Exception as exc:
         logger.error(f'Failed to create safety snapshot: {exc}')
         return False
-    finally:
-        if destination is not None:
-            destination.close()
-        if source is not None:
-            source.close()
 
     _secure_file_permissions(safety_path, logger)
     logger.success(f'Pre-restore safety snapshot: {safety_path}')
 
-    src_conn = None
-    dst_conn = None
     try:
-        src_conn = sqlite3.connect(str(backup_file))
-        dst_conn = sqlite3.connect(str(db_path))
-        src_conn.backup(dst_conn)
-        dst_conn.commit()
+        sqlite_runner.create_backup(
+            backup_file, db_path, binary=binary
+        )
+        conn = sqlite_runner.connect(db_path, binary=binary)
         try:
-            dst_conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
-        except sqlite3.Error:
-            pass
+            conn.execute('PRAGMA wal_checkpoint(TRUNCATE)')
+        except sqlite3.Error as exc:
+            logger.warning(
+                f'WAL checkpoint failed (non-fatal): {exc}'
+            )
+        finally:
+            conn.close()
     except Exception as exc:
         logger.error(f'Restore failed: {exc}')
         logger.info(
@@ -575,11 +577,6 @@ def cmd_restore(
             f'pre-restore state.'
         )
         return False
-    finally:
-        if dst_conn is not None:
-            dst_conn.close()
-        if src_conn is not None:
-            src_conn.close()
 
     logger.success('Database restored from backup')
     logger.info(f'Safety snapshot retained at {safety_path}')
@@ -590,19 +587,18 @@ def cmd_upgrade(
     db_path: Path,
     backup_dir: Path,
     force: bool,
+    binary: Path | None,
     logger: Logger
 ) -> bool:
+    """Apply the v1.4.0 schema upgrade with backup and rollback."""
     logger.section(f'v{TARGET_VERSION} Schema Upgrade')
     logger.info(f'Database: {db_path}')
     logger.info(f'Backup directory: {backup_dir}')
 
-    if not _check_sqlite_version_standalone(db_path, logger):
+    if not _check_integrity_standalone(db_path, binary, logger):
         return False
 
-    if not _check_integrity_standalone(db_path, logger):
-        return False
-
-    if _is_schema_on_target(db_path):
+    if _is_schema_on_target(db_path, binary):
         logger.success('Schema is already on the v1.4.0 layout')
         return True
 
@@ -612,12 +608,15 @@ def cmd_upgrade(
             logger.warning('Upgrade cancelled by user')
             return False
 
-    backup_path = _create_backup(db_path, backup_dir, logger)
+    backup_path = _create_backup(db_path, backup_dir, binary, logger)
     if backup_path is None:
         return False
 
-    conn = sqlite3.connect(str(db_path))
-    conn.isolation_level = None  # Manual transaction control
+    conn = sqlite_runner.connect(db_path, binary=binary)
+    # CLIConnection uses manual transactions by default (no autocommit);
+    # native sqlite3 needs isolation_level=None for explicit BEGIN/COMMIT
+    if isinstance(conn, sqlite3.Connection):
+        conn.isolation_level = None
     try:
         # Hold an EXCLUSIVE lock for the duration of the upgrade so that
         # no concurrent writer can interleave between the column snapshot
@@ -626,17 +625,19 @@ def cmd_upgrade(
         try:
             conn.execute('PRAGMA locking_mode = EXCLUSIVE')
         except sqlite3.Error as exc:
-            logger.warning(
-                f'Could not enable EXCLUSIVE locking mode (non-fatal): {exc}'
+            logger.error(
+                f'Could not enable EXCLUSIVE locking mode: {exc}'
             )
+            logger.info('Ensure the application is stopped before upgrading.')
+            return False
 
         conn.execute('BEGIN IMMEDIATE')
         try:
             columns = _get_column_names(conn)
 
-            count_before = conn.execute(
+            count_before = int(conn.execute(
                 'SELECT COUNT(*) FROM recurrence_exceptions'
-            ).fetchone()[0]
+            ).fetchone()[0])
             logger.info(f'Existing exceptions: {count_before}')
 
             _add_new_columns(conn, columns, logger)
@@ -647,7 +648,10 @@ def cmd_upgrade(
             conn.execute('COMMIT')
             logger.success('Upgrade committed')
         except Exception as exc:
-            conn.execute('ROLLBACK')
+            try:
+                conn.execute('ROLLBACK')
+            except Exception as rollback_exc:
+                logger.warning(f'Rollback also failed: {rollback_exc}')
             logger.error(f'Upgrade failed, rolled back: {exc}')
             logger.info(
                 f'Transaction rolled back - live database is unchanged. '
@@ -713,8 +717,14 @@ def main() -> None:
         '  # Work on an exotic database file (override, no settings.json)\n'
         '  python upgrade.py upgrade --db /tmp/restored.db\n'
         '\n'
-        'The script is location-agnostic. Copy it anywhere, run it,\n'
-        'delete it after use.'
+        '  # Use a custom SQLite binary (e.g. on RHEL 9 with old system SQLite)\n'
+        '  python upgrade.py upgrade --app-path /var/www/fbk-time \\\n'
+        '                            --sqlite-binary /opt/sqlite3/bin/sqlite3\n'
+        '\n'
+        'The script is location-agnostic. It requires the sqlite_runner\n'
+        'module from the parent upgrades/ directory. Bundled static\n'
+        'SQLite binaries are auto-detected when the system version is\n'
+        'too old.'
     )
 
     # Parent parser with options shared across all subcommands.
@@ -736,6 +746,14 @@ def main() -> None:
         metavar='FILE',
         help='Explicit SQLite database file. Skips settings.json '
              'lookup. Use for restored backups or non-standard layouts.'
+    )
+    common.add_argument(
+        '--sqlite-binary',
+        dest='sqlite_binary',
+        metavar='FILE',
+        help='Path to a static sqlite3 binary. When omitted, the '
+             'system SQLite is checked and a bundled binary is offered '
+             'if the system version is too old.'
     )
     common.add_argument(
         '--force', action='store_true',
@@ -801,15 +819,18 @@ def main() -> None:
 
     try:
         db_path = _resolve_db_path(args.app_path, args.db, logger)
+        binary = _resolve_sqlite_binary(args, logger)
 
         if args.command == 'upgrade':
             backup_dir = _resolve_backup_dir(args.backup_dir, db_path, logger)
-            ok = cmd_upgrade(db_path, backup_dir, args.force, logger)
+            ok = cmd_upgrade(db_path, backup_dir, args.force, binary, logger)
         elif args.command == 'restore':
             backup_file = Path(args.backup_file).expanduser().resolve()
-            ok = cmd_restore(db_path, backup_file, args.force, logger)
+            ok = cmd_restore(
+                db_path, backup_file, args.force, binary, logger
+            )
         else:
-            ok = cmd_verify(db_path, logger)
+            ok = cmd_verify(db_path, binary, logger)
         sys.exit(0 if ok else 1)
     except KeyboardInterrupt:
         print('\nCancelled')

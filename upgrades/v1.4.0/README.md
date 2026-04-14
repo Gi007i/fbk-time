@@ -2,7 +2,7 @@
 
 **From:** v1.3.x **To:** v1.4.0
 **Reversible:** Nein (alte Spalten werden entfernt – nur Restore aus Backup möglich)
-**Benötigt:** Python 3.11+, SQLite 3.35+, stdlib only
+**Benötigt:** Python 3.11+, SQLite 3.35+ (gebündelt falls System-Version zu alt)
 **Downtime:** Erforderlich
 
 ## Was macht das Upgrade
@@ -35,7 +35,7 @@ systemctl start fbk-time
 
 Pre-Checks (vor dem Backup):
 
-- SQLite-Version ≥ 3.35
+- SQLite-Version ≥ 3.35 (automatischer Fallback auf gebündeltes Binary)
 - `PRAGMA integrity_check` auf der Live-DB (bricht bei Korruption ab)
 - Schema-Kurzcheck: bereits v1.4.0 → Exit ohne Änderungen
 
@@ -58,6 +58,7 @@ Backup-Datei: `fbk-time.db.backup-v1.4.0-<UTC>.db` im DB-Verzeichnis
 | `--db FILE` | Alternative: direkter Pfad zur DB-Datei |
 | `--backup-dir DIR` | Zielverzeichnis für das Upgrade-Backup (optional) |
 | `--backup-file FILE` | Pflichtangabe für `restore` – die einzuspielende Backup-Datei |
+| `--sqlite-binary FILE` | Pfad zu einem statischen sqlite3-Binary (überspringt Auto-Erkennung) |
 | `--force` | Überspringt die interaktive Bestätigung |
 | `--quiet` | Unterdrückt Info-Ausgaben |
 
@@ -114,11 +115,16 @@ python upgrade.py upgrade --db /tmp/restored.db
 python upgrade.py --help
 ```
 
-## Standort des Skripts
+## Standort und Voraussetzungen
 
-Das Skript ist standortunabhängig. Es kann von überall laufen, solange
-es Lese-/Schreibzugriff auf die angegebene DB-Datei hat. Üblich:
+Das Skript benötigt `sqlite_runner.py` und `bin/` aus dem
+übergeordneten `upgrades/`-Verzeichnis. Es müssen nur diese drei
+Teile auf den Server kopiert werden — nicht der gesamte
+`upgrades/`-Ordner (siehe `upgrades/README.md` für Details).
 
-- Temporär nach `/var/www/fbk-time/upgrades/v1.4.0/` kopieren, ausführen,
-  nach erfolgreichem Upgrade löschen
-- Oder aus einem Clone des Dev-Repos laufen lassen
+**Wichtig:** Die gebündelten SQLite-Binaries in `upgrades/bin/`
+müssen auf dem Server ausführbar sein:
+
+```bash
+chmod +x upgrades/bin/linux-x86_64/sqlite3
+```
