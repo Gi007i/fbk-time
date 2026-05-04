@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0] - 2026-05-04
+
+### Added
+- Handbuch: Integrierte Online-Hilfe
+- Tooltips an allen Formularfeldern in Anwendung und Handbuch
+- Profil: Anzeigename und E-Mail selbst bearbeitbar
+- Automatischer Logout bei abgelaufener Sitzung
+
+### Changed
+- Anwendungsstruktur: cross-cutting concerns aus `app.py` in eigene `core/`-Module aufgeteilt (Jinja-Filter, Context-Processors, Error-Handler, Session-Hooks, Versions-Konstante)
+
+### Fixed
+- Admin konnte Systemeinstellungen nach Remember-Me-Wiederanmeldung nicht öffnen
+- Listenansicht-Filter „Mit/Ohne Vertretung" wirkte nicht auf den Export
+- „Angemeldet bleiben" für Mitarbeitende führte beim nächsten Aufruf zum sofortigen Abmelden
+- Sitzungsablauf wirkte nicht auf Sitzungen, die per „Angemeldet bleiben" wiederhergestellt wurden
+
 ## [1.4.1] - 2026-04-14
 
 ### Added

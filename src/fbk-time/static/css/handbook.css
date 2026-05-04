@@ -1,0 +1,99 @@
+/**
+ * Handbook Layout CSS
+ *
+ * Scoped styles for the in-app handbook section.
+ *
+ * @license MIT
+ * @copyright 2026 FBK-Time
+ * @see __GITHUB_REPO_URL__
+ * @see __GITLAB_REPO_URL__
+ */
+
+/* =============================================
+   BREADCRUMB
+   ============================================= */
+.handbook-breadcrumb {
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.handbook-breadcrumb ol {
+    padding: 0;
+    margin: 0;
+    gap: 0.5rem;
+    list-style: none;
+}
+
+.handbook-breadcrumb li {
+    color: var(--pico-muted-color);
+}
+
+.handbook-breadcrumb li[aria-current="page"] {
+    color: var(--pico-color);
+}
+
+.handbook-breadcrumb li + li::before {
+    content: '›';
+    margin-right: 0.5rem;
+    color: var(--pico-muted-color);
+}
+
+/* =============================================
+   CHAPTER MENU
+   ============================================= */
+.handbook-menu {
+    margin-bottom: 2rem;
+}
+
+.handbook-menu > summary {
+    font-weight: 600;
+}
+
+.handbook-menu h6 {
+    margin-top: 1.25rem;
+    margin-bottom: 0.5rem;
+    color: var(--pico-muted-color);
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+}
+
+.handbook-menu h6:first-of-type {
+    margin-top: 1rem;
+}
+
+.handbook-menu a[aria-current="page"] {
+    font-weight: 600;
+}
+
+/* =============================================
+   CONTENT
+   ============================================= */
+.handbook-content > :first-child {
+    margin-top: 0;
+}
+
+.handbook-content h2 {
+    margin-top: 2.5rem;
+}
+
+.handbook-content h3 {
+    margin-top: 2rem;
+}
+
+.handbook-content pre {
+    overflow-x: auto;
+}
+
+.handbook-content code {
+    overflow-wrap: anywhere;
+}
+
+/* =============================================
+   PAGER
+   ============================================= */
+.handbook-pager {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--pico-muted-border-color);
+}

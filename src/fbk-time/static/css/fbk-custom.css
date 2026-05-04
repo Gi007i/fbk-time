@@ -24,6 +24,15 @@
     width: max-content;
 }
 
+/* =============================================
+   INFO TOOLTIP ICONS
+   ============================================= */
+.info-tip {
+    border-bottom: none;
+    color: var(--pico-muted-color);
+    cursor: help;
+}
+
 .page-header {
     grid-template-columns: auto auto;
     justify-content: start;

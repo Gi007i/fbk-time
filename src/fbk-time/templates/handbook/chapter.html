@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block title %}{{ current.title }} - Handbuch - FBK-Time{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/handbook.css') }}">
+{% endblock %}
+
+{% block content %}
+<nav aria-label="Brotkrumen" class="handbook-breadcrumb">
+    <ol>
+        <li><a href="{{ url_for('handbook.index') }}">Handbuch</a></li>
+        <li>{{ current.section }}</li>
+        <li aria-current="page">{{ current.title }}</li>
+    </ol>
+</nav>
+
+<details class="handbook-menu">
+    <summary>Kapitelübersicht</summary>
+    <aside>
+        <nav aria-label="Kapitelübersicht">
+            {% for section, chapters in sections %}
+            <h6>{{ section }}</h6>
+            <ul>
+                {% for chapter in chapters %}
+                <li>
+                    <a href="{{ url_for('handbook.chapter', slug=chapter.slug) }}"
+                       {% if chapter.slug == current.slug %}aria-current="page"{% endif %}>
+                        {{ chapter.title }}
+                        {% if chapter.badge %}<mark>{{ chapter.badge }}</mark>{% endif %}
+                    </a>
+                </li>
+                {% endfor %}
+            </ul>
+            {% endfor %}
+        </nav>
+    </aside>
+</details>
+
+<article class="handbook-content">
+    {% if current.badge %}
+    <p><mark>Dieses Kapitel richtet sich an die Rolle {{ current.badge }}.</mark></p>
+    {% endif %}
+    {% include content_template %}
+</article>
+
+<nav aria-label="Kapitelnavigation" class="handbook-pager">
+    {% if previous_chapter %}
+    <a href="{{ url_for('handbook.chapter', slug=previous_chapter.slug) }}"
+       role="button" class="secondary outline" rel="prev">← Zurück</a>
+    {% else %}<span></span>{% endif %}
+    {% if next_chapter %}
+    <a href="{{ url_for('handbook.chapter', slug=next_chapter.slug) }}"
+       role="button" class="secondary outline" rel="next">Weiter →</a>
+    {% else %}<span></span>{% endif %}
+</nav>
+{% endblock %}

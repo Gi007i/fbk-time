@@ -14,81 +14,69 @@
 
             <div class="grid">
                 <label for="lockout_threshold">
-                    {{ form.lockout_threshold.label.text }}
+                    {{ form.lockout_threshold.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Nach wie vielen falschen Anmeldeversuchen wird das Konto gesperrt? Wert {{ form.lockout_threshold | field_range }}.">&#x24D8;</span>
                     {{ form.lockout_threshold(id="lockout_threshold",
                        **{'aria-invalid': 'true' if form.lockout_threshold.errors else none}) }}
                     {% if form.lockout_threshold.errors %}
                     <small>{{ form.lockout_threshold.errors[0] }}</small>
-                    {% else %}
-                    <small>Nach wie vielen Fehlversuchen wird das Konto gesperrt?</small>
                     {% endif %}
                 </label>
 
                 <label for="lockout_duration_minutes">
-                    {{ form.lockout_duration_minutes.label.text }}
+                    {{ form.lockout_duration_minutes.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie lange bleibt das Konto nach Erreichen der Fehlversuch-Schwelle gesperrt? In Minuten, {{ form.lockout_duration_minutes | field_range }}.">&#x24D8;</span>
                     {{ form.lockout_duration_minutes(id="lockout_duration_minutes",
                        **{'aria-invalid': 'true' if form.lockout_duration_minutes.errors else none}) }}
                     {% if form.lockout_duration_minutes.errors %}
                     <small>{{ form.lockout_duration_minutes.errors[0] }}</small>
-                    {% else %}
-                    <small>Wie lange bleibt das Konto gesperrt?</small>
                     {% endif %}
                 </label>
             </div>
 
             <label>
                 {{ form.lockout_delay_enabled(id="lockout_delay_enabled") }}
-                {{ form.lockout_delay_enabled.label.text }}
+                {{ form.lockout_delay_enabled.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: nach jedem Fehlversuch dauert die Antwort etwas länger – die Wartezeit verdoppelt sich von Versuch zu Versuch. Bremst automatische Angriffe, ohne das Konto direkt zu sperren.">&#x24D8;</span>
             </label>
 
             <div class="grid">
                 <label for="lockout_delay_base_seconds">
-                    {{ form.lockout_delay_base_seconds.label.text }}
+                    {{ form.lockout_delay_base_seconds.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie lange dauert die Wartezeit beim ersten Fehlversuch? Sie verdoppelt sich bei weiteren Fehlversuchen bis zur Maximaldauer. In Sekunden, {{ form.lockout_delay_base_seconds | field_range }}.">&#x24D8;</span>
                     {{ form.lockout_delay_base_seconds(id="lockout_delay_base_seconds",
                        **{'aria-invalid': 'true' if form.lockout_delay_base_seconds.errors else none}) }}
                     {% if form.lockout_delay_base_seconds.errors %}
                     <small>{{ form.lockout_delay_base_seconds.errors[0] }}</small>
-                    {% else %}
-                    <small>Startverzögerung (verdoppelt sich bei jedem Fehlversuch)</small>
                     {% endif %}
                 </label>
 
                 <label for="lockout_delay_max_seconds">
-                    {{ form.lockout_delay_max_seconds.label.text }}
+                    {{ form.lockout_delay_max_seconds.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Obere Grenze der Wartezeit. Über diesen Wert hinaus verdoppelt sie sich nicht weiter. In Sekunden, {{ form.lockout_delay_max_seconds | field_range }}.">&#x24D8;</span>
                     {{ form.lockout_delay_max_seconds(id="lockout_delay_max_seconds",
                        **{'aria-invalid': 'true' if form.lockout_delay_max_seconds.errors else none}) }}
                     {% if form.lockout_delay_max_seconds.errors %}
                     <small>{{ form.lockout_delay_max_seconds.errors[0] }}</small>
-                    {% else %}
-                    <small>Maximale Verzögerung zwischen Versuchen</small>
                     {% endif %}
                 </label>
             </div>
 
             <label for="lockout_attempt_retention_hours">
-                {{ form.lockout_attempt_retention_hours.label.text }}
+                {{ form.lockout_attempt_retention_hours.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie lange werden gespeicherte Fehlversuche aufbewahrt? Nach Ablauf werden sie bei aktiver Bereinigung automatisch entfernt. In Stunden, {{ form.lockout_attempt_retention_hours | field_range }}.">&#x24D8;</span>
                 {{ form.lockout_attempt_retention_hours(id="lockout_attempt_retention_hours",
                    **{'aria-invalid': 'true' if form.lockout_attempt_retention_hours.errors else none}) }}
                 {% if form.lockout_attempt_retention_hours.errors %}
                 <small>{{ form.lockout_attempt_retention_hours.errors[0] }}</small>
-                {% else %}
-                <small>Wie lange werden Fehlversuche gespeichert?</small>
                 {% endif %}
             </label>
 
             <label>
                 {{ form.lockout_cleanup_enabled(id="lockout_cleanup_enabled") }}
-                {{ form.lockout_cleanup_enabled.label.text }}
+                {{ form.lockout_cleanup_enabled.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: alte Fehlversuche werden im eingestellten Intervall automatisch entfernt. Ohne Bereinigung wachsen die Einträge unbegrenzt.">&#x24D8;</span>
             </label>
 
             <label for="lockout_cleanup_interval_hours">
-                {{ form.lockout_cleanup_interval_hours.label.text }}
+                {{ form.lockout_cleanup_interval_hours.label.text }} <span class="info-tip" data-placement="right" data-tooltip="In welchem Abstand soll automatisch bereinigt werden? Nur wirksam, wenn die automatische Bereinigung aktiv ist. In Stunden, {{ form.lockout_cleanup_interval_hours | field_range }}.">&#x24D8;</span>
                 {{ form.lockout_cleanup_interval_hours(id="lockout_cleanup_interval_hours",
                    **{'aria-invalid': 'true' if form.lockout_cleanup_interval_hours.errors else none}) }}
                 {% if form.lockout_cleanup_interval_hours.errors %}
                 <small>{{ form.lockout_cleanup_interval_hours.errors[0] }}</small>
-                {% else %}
-                <small>Wie oft wird die Datenbank bereinigt?</small>
                 {% endif %}
             </label>
         </details>
@@ -98,7 +86,7 @@
 
             <div class="grid">
                 <label for="password_min_length">
-                    {{ form.password_min_length.label.text }}
+                    {{ form.password_min_length.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie viele Zeichen muss ein Passwort mindestens haben? Wert {{ form.password_min_length | field_range }}.">&#x24D8;</span>
                     {{ form.password_min_length(id="password_min_length",
                        **{'aria-invalid': 'true' if form.password_min_length.errors else none}) }}
                     {% if form.password_min_length.errors %}
@@ -107,7 +95,7 @@
                 </label>
 
                 <label for="password_max_length">
-                    {{ form.password_max_length.label.text }}
+                    {{ form.password_max_length.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie lang darf ein Passwort höchstens sein? Wert {{ form.password_max_length | field_range }}.">&#x24D8;</span>
                     {{ form.password_max_length(id="password_max_length",
                        **{'aria-invalid': 'true' if form.password_max_length.errors else none}) }}
                     {% if form.password_max_length.errors %}
@@ -138,7 +126,7 @@
 
             <label>
                 {{ form.password_force_change_on_first_login(id="password_force_change_on_first_login") }}
-                {{ form.password_force_change_on_first_login.label.text }}
+                {{ form.password_force_change_on_first_login.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: neu angelegte Konten müssen ihr Passwort beim ersten Login ändern. Bei Admin-Passwortreset und Login-Aktivierung wird die Änderung unabhängig dieser Einstellung verlangt.">&#x24D8;</span>
             </label>
         </details>
 
@@ -147,36 +135,31 @@
 
             <label>
                 {{ form.inactive_account_auto_disable(id="inactive_account_auto_disable") }}
-                {{ form.inactive_account_auto_disable.label.text }}
+                {{ form.inactive_account_auto_disable.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: Konten, die sich länger als die eingestellten Tage nicht angemeldet haben, werden automatisch deaktiviert. Ein Admin kann sie später wieder aktivieren.">&#x24D8;</span>
             </label>
 
             <label for="inactive_account_days">
-                {{ form.inactive_account_days.label.text }}
+                {{ form.inactive_account_days.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Nach wie vielen Tagen ohne Login soll ein Konto automatisch deaktiviert werden? Nur wirksam, wenn die automatische Deaktivierung aktiv ist. Wert {{ form.inactive_account_days | field_range }}.">&#x24D8;</span>
                 {{ form.inactive_account_days(id="inactive_account_days",
                    **{'aria-invalid': 'true' if form.inactive_account_days.errors else none}) }}
                 {% if form.inactive_account_days.errors %}
                 <small>{{ form.inactive_account_days.errors[0] }}</small>
-                {% else %}
-                <small>Nach wie vielen Tagen Inaktivität wird ein Konto deaktiviert?</small>
                 {% endif %}
             </label>
 
             <div class="form-group">
                 <label>
                     {{ form.self_registration_enabled(id="self_registration_enabled") }}
-                    {{ form.self_registration_enabled.label.text }}
+                    {{ form.self_registration_enabled.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: neue Personen können sich auf der Anmeldeseite selbst registrieren. Sie erhalten zunächst die Rolle Benutzer und müssen vom Admin freigeschaltet werden. Nur im Mehrbenutzermodus wirksam.">&#x24D8;</span>
                 </label>
-                <small>Nur im Mehrbenutzermodus verfügbar. Registrierte Benutzer erhalten die Rolle 'User' und müssen freigeschaltet werden.</small>
             </div>
 
             <label for="operation_mode">
-                {{ form.operation_mode.label.text }}
+                {{ form.operation_mode.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Mehrbenutzer: alle Mitarbeitenden melden sich mit eigenem Login an.&#10;Einzelbenutzer: nur Admin und Manager melden sich an, alle übrigen Konten werden ohne Login geführt.">&#x24D8;</span>
                 {{ form.operation_mode(id="operation_mode",
                    **{'aria-invalid': 'true' if form.operation_mode.errors else none}) }}
                 {% if form.operation_mode.errors %}
                 <small>{{ form.operation_mode.errors[0] }}</small>
-                {% else %}
-                <small>Mehrbenutzer: Alle können sich anmelden. Einzelbenutzer: Nur Admin/Manager, User werden verwaltet.</small>
                 {% endif %}
             </label>
         </details>
@@ -186,24 +169,20 @@
 
             <div class="grid">
                 <label for="limits_max_future_months">
-                    {{ form.limits_max_future_months.label.text }}
+                    {{ form.limits_max_future_months.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie weit in die Zukunft dürfen Abwesenheiten und Serien geplant werden? In Monaten, {{ form.limits_max_future_months | field_range }}.">&#x24D8;</span>
                     {{ form.limits_max_future_months(id="limits_max_future_months",
                        **{'aria-invalid': 'true' if form.limits_max_future_months.errors else none}) }}
                     {% if form.limits_max_future_months.errors %}
                     <small>{{ form.limits_max_future_months.errors[0] }}</small>
-                    {% else %}
-                    <small>Wie weit in die Zukunft Abwesenheiten und Serien geplant werden können.</small>
                     {% endif %}
                 </label>
 
                 <label for="limits_bulk_delete_items">
-                    {{ form.limits_bulk_delete_items.label.text }}
+                    {{ form.limits_bulk_delete_items.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie viele Einträge dürfen in einem Schritt aus einer Liste gelöscht werden? Wert {{ form.limits_bulk_delete_items | field_range }}.">&#x24D8;</span>
                     {{ form.limits_bulk_delete_items(id="limits_bulk_delete_items",
                        **{'aria-invalid': 'true' if form.limits_bulk_delete_items.errors else none}) }}
                     {% if form.limits_bulk_delete_items.errors %}
                     <small>{{ form.limits_bulk_delete_items.errors[0] }}</small>
-                    {% else %}
-                    <small>Maximale Anzahl Einträge pro Massenlöschung.</small>
                     {% endif %}
                 </label>
             </div>
@@ -214,7 +193,7 @@
 
             <div class="grid">
                 <label for="user_default_theme">
-                    {{ form.user_default_theme.label.text }}
+                    {{ form.user_default_theme.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welches Design ist für neu angelegte Konten voreingestellt? Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
                     {{ form.user_default_theme(id="user_default_theme",
                        **{'aria-invalid': 'true' if form.user_default_theme.errors else none}) }}
                     {% if form.user_default_theme.errors %}
@@ -223,7 +202,7 @@
                 </label>
 
                 <label for="user_default_date_format">
-                    {{ form.user_default_date_format.label.text }}
+                    {{ form.user_default_date_format.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welches Datumsformat ist für neu angelegte Konten voreingestellt? Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
                     {{ form.user_default_date_format(id="user_default_date_format",
                        **{'aria-invalid': 'true' if form.user_default_date_format.errors else none}) }}
                     {% if form.user_default_date_format.errors %}
@@ -234,7 +213,7 @@
 
             <div class="grid">
                 <label for="user_default_items_per_page">
-                    {{ form.user_default_items_per_page.label.text }}
+                    {{ form.user_default_items_per_page.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie viele Einträge pro Seite sind für neu angelegte Konten voreingestellt? Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
                     {{ form.user_default_items_per_page(id="user_default_items_per_page",
                        **{'aria-invalid': 'true' if form.user_default_items_per_page.errors else none}) }}
                     {% if form.user_default_items_per_page.errors %}
@@ -243,7 +222,7 @@
                 </label>
 
                 <label for="user_default_holiday_region">
-                    {{ form.user_default_holiday_region.label.text }}
+                    {{ form.user_default_holiday_region.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Feiertags-Region ist für neu angelegte Konten voreingestellt? Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
                     {{ form.user_default_holiday_region(id="user_default_holiday_region",
                        **{'aria-invalid': 'true' if form.user_default_holiday_region.errors else none}) }}
                     {% if form.user_default_holiday_region.errors %}
@@ -253,7 +232,7 @@
             </div>
 
             <label for="user_default_text_color">
-                {{ form.user_default_text_color.label.text }}
+                {{ form.user_default_text_color.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Schriftfarbe ist beim Anlegen neuer Kategorien voreingestellt? Manager und Admins können den eigenen Wert in den Persönlichen Einstellungen anpassen.">&#x24D8;</span>
                 <div class="grid">
                     {{ form.user_default_text_color(id="user_default_text_color", type="color",
                        **{'aria-invalid': 'true' if form.user_default_text_color.errors else none}) }}

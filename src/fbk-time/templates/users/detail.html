@@ -24,15 +24,7 @@
         <dd>{{ user.email or '-' }}</dd>
 
         <dt><strong>Rolle</strong></dt>
-        <dd>
-            {% if user.role == UserRole.ADMIN %}
-            Admin
-            {% elif user.role == UserRole.MANAGER %}
-            Manager
-            {% else %}
-            User
-            {% endif %}
-        </dd>
+        <dd>{{ user.role|role_label }}</dd>
 
         <dt><strong>Status</strong></dt>
         <dd>

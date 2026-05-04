@@ -37,6 +37,7 @@
                         {% if current_user.is_admin %}
                         <li><a href="{{ url_for('settings.system_settings') }}"{% if request.endpoint == 'settings.system_settings' %} aria-current="page"{% endif %}>Systemeinstellungen</a></li>
                         {% endif %}
+                        <li><a href="{{ url_for('handbook.index') }}"{% if request.endpoint and request.endpoint.startswith('handbook.') %} aria-current="page"{% endif %}>Handbuch</a></li>
                         <li><a href="{{ url_for('auth.logout') }}" data-logout>Abmelden</a></li>
                     </ul>
                 </details>

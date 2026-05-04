@@ -34,7 +34,7 @@ class UserCreateForm(FlaskForm):
 
     # Role field - only visible for admin, hidden for manager
     role = SelectField('Rolle', choices=[
-        (UserRole.USER.value, 'User'),
+        (UserRole.USER.value, 'Benutzer'),
         (UserRole.MANAGER.value, 'Manager'),
         (UserRole.ADMIN.value, 'Admin')
     ], coerce=lambda x: UserRole(x) if x and not isinstance(x, UserRole) else x)
@@ -78,7 +78,7 @@ class UserEditForm(FlaskForm):
 
     # Role field - only visible and editable for admin
     role = SelectField('Rolle', choices=[
-        (UserRole.USER.value, 'User'),
+        (UserRole.USER.value, 'Benutzer'),
         (UserRole.MANAGER.value, 'Manager'),
         (UserRole.ADMIN.value, 'Admin')
     ], coerce=lambda x: UserRole(x) if x and not isinstance(x, UserRole) else x)

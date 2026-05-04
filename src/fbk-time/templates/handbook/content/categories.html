@@ -1,0 +1,49 @@
+<h1>Kategorien verwalten</h1>
+
+<p>Kategorien klassifizieren Abwesenheiten – z.B. Urlaub, Krank, Home Office, Dienstreise oder Fortbildung. Manager und Admins legen sie unter <strong>Kategorien</strong> an, bearbeiten und entfernen sie.</p>
+
+<h2>Kategorie anlegen</h2>
+
+<p><strong>Name.</strong> So heißt die Kategorie in allen Auswahllisten und Ansichten. Kurze Namen verbessern die Lesbarkeit im Kalender.</p>
+
+<p><strong>Farbe.</strong> Wählen Sie über das Farbfeld die Darstellungsfarbe. Sie wird in Kalender, Team-Übersicht, Exporten und Legenden verwendet. Empfohlen sind Farbtöne, die auch in gedämpften Abstufungen gut unterscheidbar bleiben.</p>
+
+<p><strong>Schriftfarbe.</strong> Farbe des Texts auf der Kategoriefläche. Voreingestellt ist Weiß. Bei hellen Hintergrundfarben sollten Sie Schwarz wählen, sonst sind halbe Tage auf gedämpften Flächen schlecht lesbar.</p>
+
+<p><strong>Sortierung.</strong> Eine Ganzzahl zwischen {{ cfg.sort_order_min }} und {{ cfg.sort_order_max }}. Kleinere Werte erscheinen zuerst. Ohne Priorisierung werden Kategorien alphabetisch sortiert.</p>
+
+<p><strong>Icon.</strong> Optionale Kennzeichnung neben dem Namen. Zulässig sind Emoji, Unicode-Zeichen oder kurze Buchstabenfolgen. Der Inhalt wird unverändert angezeigt – ein festes Icon-Set gibt es nicht.</p>
+
+<p><strong>Anwesend.</strong> Jede Kategorie hat eine Grundeinstellung: Arbeitet die Person an diesem Tag (z.B. Home Office) oder ist sie nicht erreichbar (z.B. Urlaub)? Diese Einstellung wirkt sich in Kalender, Dashboard und iCal-Export aus.</p>
+
+<ul>
+<li><strong>Aktiv (anwesend)</strong> – Kategorien wie Home Office oder Dienstreise. Die Person arbeitet, ist aber nicht im Büro. Keine Vertretungskonflikt-Meldung; der iCal-Export kennzeichnet die Zeit als „Frei“.</li>
+<li><strong>Inaktiv (abwesend)</strong> – Kategorien wie Urlaub, Krank oder Beurlaubt. Die Person arbeitet nicht. Vertretungskonflikte werden gemeldet; der iCal-Export kennzeichnet die Zeit als „Außer Haus“.</li>
+</ul>
+
+<p>Wenn Sie diese Einstellung später ändern, wirkt sich das auf alle zugehörigen Einträge aus.</p>
+
+<p><strong>Vertretung erforderlich.</strong> Ist das Häkchen gesetzt, warnt das Dashboard, sobald jemand eine Abwesenheit dieser Kategorie ohne Vertretung speichert. Empfohlen für Urlaub und mehrtägige Fortbildungen.</p>
+
+<p><strong>Status.</strong> Aktive Kategorien erscheinen in Auswahllisten. Inaktive Kategorien bleiben in bestehenden Abwesenheiten erhalten, stehen aber nicht mehr zur Neuauswahl. So können Sie Kategorien ausmustern, ohne Altdaten zu verlieren.</p>
+
+<h2>Kategorie bearbeiten</h2>
+
+<p>Änderungen an Name, Farbe oder Einstellungen wirken sich sofort auf alle bestehenden Abwesenheiten der Kategorie aus. So bleiben historische und neue Einträge einheitlich.</p>
+
+<p>Achten Sie beim Umbenennen darauf: Der neue Name erscheint auch in historischen Einträgen. Bei Auswertungen mit festen Begriffen sollten Sie das berücksichtigen.</p>
+
+<h2>Kategorie löschen</h2>
+
+<p>Das Löschen läuft in zwei Stufen ab. Ist die Kategorie noch einer oder mehreren Abwesenheiten zugeordnet, fragt die Anwendung nach dem weiteren Vorgehen:</p>
+
+<ul>
+<li><strong>Auf eine andere Kategorie übertragen.</strong> Sie wählen eine Ersatzkategorie aus, die bestehenden Einträge werden umgehängt. Die Historie bleibt erhalten.</li>
+<li><strong>Alle zugehörigen Einträge löschen.</strong> Alle Abwesenheiten der Kategorie werden entfernt. Diese Option ist für Fehlanlagen gedacht. <strong>Achtung: Das lässt sich nicht rückgängig machen.</strong></li>
+</ul>
+
+<p>Hat die Kategorie keine zugeordneten Einträge, reicht die Standard-Bestätigung – eine Ersatzkategorie ist dann nicht nötig.</p>
+
+<h2>Hinweise zur Pflege</h2>
+
+<p>Eine überschaubare Anzahl an Kategorien erleichtert die tägliche Auswahl. Eine typische Grundausstattung sind Urlaub, Krank, Home Office und Sonstiges – weitere Kategorien ergänzen Sie bei Bedarf.</p>

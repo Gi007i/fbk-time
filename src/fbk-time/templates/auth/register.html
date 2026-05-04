@@ -15,7 +15,7 @@
             {{ form.hidden_tag() }}
 
             <label>
-                Benutzername
+                Benutzername <span class="info-tip" data-placement="right" data-tooltip="Mit diesem Namen melden Sie sich später an, {{ form.username | field_range }} Zeichen. Nach der Registrierung muss ein Admin Ihr Konto erst freischalten, bevor Sie sich anmelden können.">&#x24D8;</span>
                 {% if form.username.errors %}
                 {{ form.username(autocomplete="username", autofocus=true, **{'aria-invalid': 'true'}) }}
                 <small>{{ form.username.errors[0] }}</small>
@@ -25,7 +25,7 @@
             </label>
 
             <label>
-                Vollständiger Name
+                Vollständiger Name <span class="info-tip" data-placement="right" data-tooltip="Wie soll Ihr Name in Listen, Kalender und Team-Übersicht angezeigt werden? Z.B. „Max Mustermann“.">&#x24D8;</span>
                 {% if form.name.errors %}
                 {{ form.name(autocomplete="name", **{'aria-invalid': 'true'}) }}
                 <small>{{ form.name.errors[0] }}</small>
@@ -35,7 +35,7 @@
             </label>
 
             <label>
-                E-Mail (optional)
+                E-Mail (optional) <span class="info-tip" data-placement="right" data-tooltip="Optional. Falls eingegeben, muss die Adresse eindeutig sein. Wird derzeit nur zur Information gespeichert.">&#x24D8;</span>
                 {% if form.email.errors %}
                 {{ form.email(autocomplete="email", **{'aria-invalid': 'true'}) }}
                 <small>{{ form.email.errors[0] }}</small>

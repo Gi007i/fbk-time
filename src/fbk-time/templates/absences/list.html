@@ -192,7 +192,8 @@
      data-url-matrix="{{ url_for('export.export_user_matrix', user_id=current_user.id) }}"
      {% endif %}
      {% if filters.user_id %}data-user-id="{{ filters.user_id }}"{% endif %}
-     {% if filters.category_id %}data-category-id="{{ filters.category_id }}"{% endif %}>
+     {% if filters.category_id %}data-category-id="{{ filters.category_id }}"{% endif %}
+     {% if filters.has_substitute %}data-has-substitute="{{ filters.has_substitute }}"{% endif %}>
 </div>
 {% endif %}
 

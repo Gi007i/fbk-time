@@ -1,0 +1,33 @@
+<h1>Anmeldung und Passwort</h1>
+
+<h2>Anmelden</h2>
+
+<p>Auf der Startseite geben Sie Benutzername und Passwort ein. Der Benutzername gilt unabhängig von Groß- und Kleinschreibung. Beim Passwort zählt jedes Zeichen.</p>
+
+<p>Schlägt die Anmeldung fehl, erscheint eine allgemeine Meldung. Aus Sicherheitsgründen sagt die Anwendung Ihnen nicht, ob Benutzername oder Passwort falsch waren.</p>
+
+<p>Nach mehreren fehlgeschlagenen Anmeldeversuchen wird Ihr Konto vorübergehend gesperrt. Nach Ablauf der Sperrdauer können Sie sich wieder anmelden; vorher kann ein Manager Sie manuell entsperren. Die genauen Schwellenwerte und Sperrfristen legt die Administration fest.</p>
+
+<p>Nach jedem Fehlversuch wartet die Anwendung etwas länger, bis sie den nächsten Versuch annimmt.</p>
+
+<p>Konten ohne Aktivität werden nach einer eingestellten Frist automatisch deaktiviert. Reaktivieren kann sie ein Manager oder Admin.</p>
+
+<h2>Erstes Passwort</h2>
+
+<p>Beim Einrichten eines neuen Kontos vergibt der Manager ein Startpasswort.{% if cfg.password_force_change_on_first_login %} Beim ersten Login müssen Sie es ändern – erst danach stehen Ihnen die übrigen Funktionen zur Verfügung.{% else %} Sie müssen es beim ersten Login nicht ändern, können das aber jederzeit auf Ihrer Profilseite nachholen.{% endif %}</p>
+
+<h2>Passwort ändern</h2>
+
+<p>Ihr Passwort ändern Sie auf der Profilseite (Benutzermenü → <strong>Mein Profil</strong>) im Abschnitt <strong>Sicherheit</strong>. Zur Bestätigung geben Sie das aktuelle Passwort ein; das neue Passwort tippen Sie zweimal.</p>
+
+<p>Die geltenden Anforderungen (Mindestlänge, erforderliche Zeichenarten) sehen Sie unter dem Eingabefeld. Die genauen Werte legt der Admin fest.</p>
+
+<h2>Passwort vergessen</h2>
+
+<p>Eine automatische Zurücksetzung per E-Mail gibt es nicht. Wenn Sie Ihr Passwort vergessen haben, vergibt ein Manager oder Admin ein neues Startpasswort. Der Ablauf ist dann wie bei der Erstanmeldung: Beim nächsten Login legen Sie ein eigenes Passwort fest.</p>
+
+<h2>Abmelden</h2>
+
+<p>Sie melden sich über das Benutzermenü oben rechts ab (siehe Kapitel <strong>Einleitung</strong>). Die Sitzung endet damit sofort.</p>
+
+<p>Das Schließen des Browserfensters allein reicht nicht aus, um die Sitzung sofort zu beenden. An gemeinsam genutzten Arbeitsplätzen sollten Sie sich daher immer explizit abmelden.</p>

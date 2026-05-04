@@ -9,7 +9,7 @@ from utils.response_helpers import ajax_response
 from utils.pagination import get_pagination
 from utils.validators import validate_password_strength
 from core.settings_manager import settings_manager
-from utils.decorators import manager_required, admin_required, fresh_session_required
+from utils.decorators import manager_required, admin_required
 from modules.auth.models import UserRole, UserStatus
 from modules.auth.services import get_lockout_status_for_users
 from .forms import UserCreateForm, UserEditForm
@@ -346,7 +346,6 @@ def toggle_status(id):
 
 
 @bp.route('/<int:id>/delete', methods=['POST'])
-@fresh_session_required
 @admin_required
 def delete(id):
     """Delete a user (Admin only)."""

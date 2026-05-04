@@ -49,6 +49,7 @@
             if (dataEl.dataset.dateTo) params.push('date_to=' + dataEl.dataset.dateTo);
             if (dataEl.dataset.userId) params.push('user_id=' + dataEl.dataset.userId);
             if (dataEl.dataset.categoryId) params.push('category_id=' + dataEl.dataset.categoryId);
+            if (dataEl.dataset.hasSubstitute) params.push('has_substitute=' + dataEl.dataset.hasSubstitute);
 
             var query = params.length ? '?' + params.join('&') : '';
 

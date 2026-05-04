@@ -1,0 +1,51 @@
+<h1>Abwesenheit anlegen</h1>
+
+<p>Öffnen Sie im Benutzermenü oben rechts den Eintrag <strong>Abwesenheiten</strong>. Über die Schaltfläche <strong>Neu</strong> – verfügbar in Team-Übersicht, Liste und Kalender – öffnen Sie das Anlageformular.</p>
+
+<h2>Pflichtfelder</h2>
+
+<p><strong>Startdatum und Enddatum.</strong> Beide Tage werden in die Abwesenheit einbezogen. Ein Zeitraum vom 1. bis 3. eines Monats umfasst somit drei Kalendertage.</p>
+
+<p><strong>Kategorie.</strong> Bestimmt die Art der Abwesenheit. Die Auswahl wird von einem Manager gepflegt. Neue Kategorien legen Mitarbeitende nicht selbst an.</p>
+
+<p>Weitere Pflichtangaben gibt es nicht.</p>
+
+<h2>Optionale Felder</h2>
+
+<p><strong>Vertretung.</strong> Die Person, die Sie während Ihrer Abwesenheit vertritt. Zur Auswahl stehen Mitarbeitende mit Rolle <strong>Benutzer</strong> im Status <strong>Aktiv</strong> oder <strong>Verwaltet</strong> – Manager und Admins nicht.</p>
+
+<p>Bei manchen Kategorien (z.B. Urlaub) hat der Manager die Vertretung zur Pflicht gemacht. Ohne Eintrag können Sie dann nicht speichern. Ist die gewählte Vertretung im selben Zeitraum selbst abwesend, erscheint nach dem Speichern ein Warnhinweis auf dem Dashboard – der Eintrag wird trotzdem gespeichert.</p>
+
+<p><strong>Zeittyp.</strong> Bei eintägigen Abwesenheiten haben Sie die Optionen <strong>Ganztags</strong>, <strong>Halbtags Vormittag</strong>, <strong>Halbtags Nachmittag</strong> und <strong>Benutzerdefinierte Zeit</strong>. Details finden Sie im Kapitel <strong>Halbe Tage</strong>.</p>
+
+<p>Bei mehrtägigen Abwesenheiten markieren die Halbtags-Optionen den ersten oder letzten Tag der Serie: <strong>Halbtags Vormittag</strong> bedeutet, dass der erste Tag nur nachmittags abwesend ist; <strong>Halbtags Nachmittag</strong> bedeutet, dass der letzte Tag nur vormittags abwesend ist.</p>
+
+<p>Wenn Sie kein Halbtags-Szenario haben, können Sie das Formular speichern.</p>
+
+<p><strong>Person.</strong> Das Feld ist ausschließlich für Manager und Admins sichtbar und ermöglicht die Anlage eines Eintrags für eine andere Person. Für Mitarbeitende ohne Verwaltungsrechte ist die Zuordnung automatisch das eigene Konto.</p>
+
+<p><strong>Notizen.</strong> Freitextfeld für ergänzende Informationen, beispielsweise Erreichbarkeit oder alternative Ansprechpartner.</p>
+
+<p>Notizen sind für alle Personen sichtbar, die auch die Abwesenheit einsehen. Vertrauliche Informationen sollten dort nicht eingetragen werden.</p>
+
+<h2>Wiederkehrende Termine</h2>
+
+<p>Für regelmäßig wiederkehrende Abwesenheiten aktivieren Sie die Option <strong>Wiederholen</strong>. Die Felder für Wiederholungsmuster, Intervall und Enddatum der Serie werden daraufhin eingeblendet.</p>
+
+<p>Wenn Sie keine Serie anlegen, können Sie das Formular speichern.</p>
+
+<h2>Zeitliche Obergrenze</h2>
+
+<p>Sie können Abwesenheiten bis zu {{ cfg.limits_max_future_months }} Monate in die Zukunft anlegen. Das gilt auch für einzelne Tage, nicht nur für Serien. Für Termine, die weiter in der Zukunft liegen, wenden Sie sich bitte an einen Manager.</p>
+
+<h2>Speichern</h2>
+
+<p>Beim Speichern prüft die Anwendung:</p>
+
+<ul>
+<li>Gültigkeit der Datumsangaben,</li>
+<li>dass das Enddatum nicht vor dem Startdatum liegt,</li>
+<li>Überschneidungen mit bestehenden eigenen Abwesenheiten im gewählten Zeitraum.</li>
+</ul>
+
+<p>Schlägt eine Prüfung fehl, erscheint eine Fehlermeldung am betroffenen Feld; der Eintrag wird nicht gespeichert. Hinweise zu Vertretungskonflikten blockieren das Speichern nicht.</p>

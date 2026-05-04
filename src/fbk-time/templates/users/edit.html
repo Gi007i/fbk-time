@@ -14,7 +14,7 @@
         {{ form.hidden_tag() }}
 
         <label for="name">
-            Anzeigename *
+            Anzeigename <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Wie soll der/die Mitarbeitende in Listen, Kalender und Team-Übersicht angezeigt werden?">&#x24D8;</span></span>
             {{ form.name(id="name", placeholder="z.B. Max Mustermann",
                **{'aria-invalid': 'true' if form.name.errors else none}) }}
             {% if form.name.errors %}
@@ -23,13 +23,11 @@
         </label>
 
         <label for="email">
-            E-Mail
+            E-Mail <span class="info-tip" data-placement="right" data-tooltip="Optional. Falls eingegeben, muss die Adresse eindeutig sein. Wird derzeit nur zur Information gespeichert und nicht für Benachrichtigungen verwendet.">&#x24D8;</span>
             {{ form.email(id="email", type="email", placeholder="z.B. max.mustermann@firma.de",
                **{'aria-invalid': 'true' if form.email.errors else none}) }}
             {% if form.email.errors %}
             <small>{{ form.email.errors[0] }}</small>
-            {% else %}
-            <small>Optional. Wird für Benachrichtigungen verwendet.</small>
             {% endif %}
         </label>
 
@@ -37,7 +35,7 @@
         <p>Benutzer hat bereits ein Passwort. Der Login wird ohne Passwort-Eingabe aktiviert.</p>
         {% elif show_password_field %}
         <label for="password" id="password-field"{% if hide_password_initially %} class="hidden"{% endif %}>
-            {% if password_required %}Passwort *{% else %}Neues Passwort{% endif %}
+            {% if password_required %}Passwort <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Für die Login-Aktivierung muss ein Passwort gesetzt werden. Es muss der Passwort-Richtlinie entsprechen.">&#x24D8;</span></span>{% else %}Neues Passwort <span class="info-tip" data-placement="right" data-tooltip="Lassen Sie das Feld leer, um das aktuelle Passwort beizubehalten. Sonst muss das neue Passwort der Passwort-Richtlinie entsprechen.">&#x24D8;</span>{% endif %}
             {{ form.password(id="password",
                placeholder="Passwort eingeben" if password_required else "Leer lassen um Passwort nicht zu ändern",
                **{'aria-invalid': 'true' if form.password.errors or password_error else none}) }}
@@ -45,10 +43,6 @@
             <small>{{ form.password.errors[0] }}</small>
             {% elif password_error %}
             <small>{{ password_error }}</small>
-            {% elif password_required %}
-            <small>Passwort ist erforderlich um den Login zu aktivieren.</small>
-            {% else %}
-            <small>Nur ausfüllen, wenn das Passwort geändert werden soll.</small>
             {% endif %}
         </label>
         {% endif %}
@@ -56,26 +50,22 @@
         {% if not activate_login %}
         {% if current_user.is_admin and form.role %}
         <label for="role">
-            Rolle
+            Rolle <span class="info-tip" data-placement="right" data-tooltip="Benutzer: legt eigene Abwesenheiten an, ändert und löscht sie.&#10;Manager: zusätzlich Abwesenheiten und Kategorien aller Mitarbeitenden verwalten sowie Konten mit Rolle Benutzer anlegen, bearbeiten und freischalten.&#10;Admin: zusätzlich Systemeinstellungen, alle Konten verwalten und Rollen vergeben.">&#x24D8;</span>
             {{ form.role(id="role",
                **{'aria-invalid': 'true' if form.role.errors else none}) }}
             {% if form.role.errors %}
             <small>{{ form.role.errors[0] }}</small>
-            {% else %}
-            <small>User: Kann nur eigene Abwesenheiten verwalten. Manager: Kann alle Abwesenheiten verwalten. Admin: Vollzugriff.</small>
             {% endif %}
         </label>
         {% endif %}
 
         {% if current_user.is_admin and form.status %}
         <label for="status">
-            Status
+            Status <span class="info-tip" data-placement="right" data-tooltip="Aktiv: Person kann sich anmelden.&#10;Ausstehend: Konto wurde selbst registriert und wartet auf Freischaltung.&#10;Gesperrt: durch Admin manuell gesperrt.&#10;Deaktiviert: Login blockiert – Admin kann das Konto wieder aktivieren.&#10;Verwaltet: Konto ohne Login (Einzelbenutzermodus).">&#x24D8;</span>
             {{ form.status(id="status",
                **{'aria-invalid': 'true' if form.status.errors else none}) }}
             {% if form.status.errors %}
             <small>{{ form.status.errors[0] }}</small>
-            {% else %}
-            <small>Nur aktive Benutzer können sich anmelden.</small>
             {% endif %}
         </label>
         {% endif %}

@@ -66,12 +66,12 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=_utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
 
-    # User Settings (defaults from settings.json user_defaults)
-    theme = db.Column(db.String(20), default='light', nullable=False)
-    date_format = db.Column(db.String(20), default='DD.MM.YYYY', nullable=False)
-    items_per_page = db.Column(db.Integer, default=10, nullable=False)
-    holiday_region = db.Column(db.String(50), default='none', nullable=False)
-    default_text_color = db.Column(db.String(7), default='#FFFFFF', nullable=False)
+    # User Settings (values set from settings_manager on user creation)
+    theme = db.Column(db.String(20), nullable=False)
+    date_format = db.Column(db.String(20), nullable=False)
+    items_per_page = db.Column(db.Integer, nullable=False)
+    holiday_region = db.Column(db.String(50), nullable=False)
+    default_text_color = db.Column(db.String(7), nullable=False)
 
     # Relationships
     absences = db.relationship(

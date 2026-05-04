@@ -1,0 +1,57 @@
+<h1>Mitarbeitende verwalten</h1>
+
+<p>Dieses Kapitel richtet sich an Manager und Admins. Für Mitarbeitende ohne Verwaltungsrechte ist der Menüpunkt <strong>Mitarbeitende</strong> nicht erreichbar.</p>
+
+<h2>Übersicht</h2>
+
+<p>Unter <strong>Mitarbeitende</strong> sehen Sie alle im System hinterlegten Personen. Die Liste enthält Benutzername, Anzeigename, E-Mail-Adresse, Rolle, Status und das Datum der letzten Anmeldung. Filtern und Sortieren funktionieren wie in der Abwesenheitsliste.</p>
+
+<h2>Neu anlegen</h2>
+
+<p>Über die Schaltfläche <strong>Neu</strong> in der Listenansicht legen Sie ein Konto an. Pflichtfelder sind Benutzername, Anzeigename und ein Startpasswort.</p>
+
+<p>Das Startpasswort vergeben Sie als Manager und übermitteln es der Person über einen geeigneten Kanal. Beim ersten Login muss sie es ändern; das Startpasswort verliert damit seine Gültigkeit.</p>
+
+<p>Neu angelegte Konten haben standardmäßig den Status <strong>Aktiv</strong> und sind sofort einsatzbereit. Der erzwungene Passwortwechsel beim Erstlogin gilt unabhängig davon.</p>
+
+<p>Im Single-User-Modus wird ein Konto mit Rolle <strong>Benutzer</strong> automatisch als <strong>Verwaltet</strong> angelegt – ein Passwort ist dann nicht nötig.</p>
+
+<h2>Rollen</h2>
+
+<p>Die Anwendung unterscheidet drei Rollen:</p>
+
+<ul>
+<li><strong>Benutzer.</strong> Pflegt eigene Abwesenheiten und kann die Einträge anderer einsehen. Keine Verwaltungsrechte.</li>
+<li><strong>Manager.</strong> Alles, was Benutzer dürfen, plus Verwaltung von Mitarbeitenden und Kategorien.</li>
+<li><strong>Admin.</strong> Alles, was Manager dürfen, plus Zugriff auf die Systemeinstellungen.</li>
+</ul>
+
+<p>Die Rolle ändern Sie in der Detailansicht des Mitarbeitenden. Der letzte aktive Admin kann seine eigene Rolle nicht ändern – so bleibt mindestens ein Admin-Konto erhalten.</p>
+
+<h2>Status</h2>
+
+<ul>
+<li><strong>Aktiv.</strong> Regulärer Zustand – die Person kann sich anmelden.</li>
+<li><strong>Ausstehend.</strong> Übergangszustand bei der Selbstregistrierung (sofern aktiviert). Bei regulärer Neuanlage durch einen Manager kommt dieser Status nicht vor.</li>
+<li><strong>Gesperrt.</strong> Folge zu vieler Fehlanmeldungen oder manuelle Sperrung durch einen Admin. Entsperrt wird per Klick in der Detailansicht.</li>
+<li><strong>Deaktiviert.</strong> Konto vorübergehend stillgelegt, z.B. bei Elternzeit oder Sabbatical. Die Daten bleiben erhalten, eine Anmeldung ist nicht möglich.</li>
+<li><strong>Verwaltet.</strong> Nur im Single-User-Betrieb relevant – einer Betriebsart, in der sich nur der Admin anmeldet und alle anderen Konten stellvertretend pflegt. Das Konto hat kein eigenes Login. Eine spätere Umwandlung in ein Login-Konto ist möglich.</li>
+</ul>
+
+<p>Konten ohne Aktivität wechseln nach der in den Systemeinstellungen eingestellten Frist automatisch in den Status <strong>Deaktiviert</strong>. Ein unerwartet deaktiviertes Konto nach längerer Pause hat meist diesen Hintergrund. Admin-Konten sind von der Automatik ausgenommen.</p>
+
+<h2>Passwort zurücksetzen</h2>
+
+<p>Hat ein Mitarbeitender sein Passwort verloren, öffnen Sie das Bearbeitungsformular und tragen im Feld <strong>Neues Passwort</strong> ein neues Startpasswort ein. Sie übermitteln es der Person über einen geeigneten Kanal. Beim nächsten Login muss sie es durch ein eigenes Passwort ersetzen.</p>
+
+<h2>Konto löschen</h2>
+
+<p>Beim Löschen werden das Konto sowie <strong>alle zugehörigen Abwesenheiten</strong> und die Änderungshistorie entfernt. Das lässt sich nicht rückgängig machen.</p>
+
+<p>Ist die Person als Vertretung in fremden Abwesenheiten eingetragen, wird dort das Vertretungs-Feld geleert. Die übrigen Daten dieser Abwesenheiten bleiben erhalten.</p>
+
+<p>Beim Ausscheiden aus dem Unternehmen ist meist die Deaktivierung sinnvoller – so bleiben Einträge für historische Auswertungen erhalten. Eine Löschung ist nur bei Fehlanlagen oder einem DSGVO-Löschungsanspruch angebracht.</p>
+
+<h2>Änderungshistorie</h2>
+
+<p>Jede Änderung an einer Abwesenheit wird protokolliert: Zeitpunkt, betroffenes Feld sowie alter und neuer Wert. Die Historie finden Sie in der Detailansicht der Abwesenheit – sie macht Terminverschiebungen nachvollziehbar.</p>

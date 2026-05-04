@@ -130,7 +130,25 @@ def authenticate_user(username, password):
     return user, None
 
 
-def login_admin(user, remember=False):
+def initialize_session(user):
+    """Populate session metadata for an authenticated user.
+
+    Sets the keys consumed by the session-lifecycle and role-validation
+    hooks: persistence flag, creation timestamp, role identifier, and
+    (for USER role) the current session version. Used by login_user_session,
+    change-password regeneration, and remember-me cookie restoration.
+
+    Args:
+        user: Authenticated user instance.
+    """
+    session.permanent = True
+    session['_created_at'] = datetime.now(timezone.utc).isoformat()
+    session['user_role'] = user.role.value
+    if user.role == UserRole.USER:
+        session['_session_version'] = settings_manager.get('user_session_version')
+
+
+def login_user_session(user, remember=False):
     """Log in a user with session fixation prevention.
 
     Regenerates session ID before login to prevent session fixation attacks.
@@ -151,21 +169,20 @@ def login_admin(user, remember=False):
     db.session.commit()
 
     login_user(user, remember=remember)
-    session.permanent = True
-    session['_created_at'] = datetime.now(timezone.utc).isoformat()
-    session['user_role'] = user.role.value
-
-    # Store session version for USER role to allow invalidation on mode switch
-    if user.role == UserRole.USER:
-        session['_session_version'] = settings_manager.get('user_session_version')
+    initialize_session(user)
 
     return True
 
 
-def logout_admin():
+def logout_user_session():
     """Log out the current user."""
     logout_user()
+    # Preserve flask_login's _remember flag so the after_request handler
+    # can still delete the remember cookie after we wipe the session.
+    remember_flag = session.get('_remember')
     session.clear()
+    if remember_flag is not None:
+        session['_remember'] = remember_flag
 
 
 def calculate_login_delay(identifier):
@@ -483,7 +500,12 @@ def register_pending_user(
         name=name.strip(),
         email=email.strip().lower() if email else None,
         password_hash=hash_password(password),
-        status=UserStatus.PENDING
+        status=UserStatus.PENDING,
+        theme=settings_manager.get('user_default_theme'),
+        date_format=settings_manager.get('user_default_date_format'),
+        items_per_page=settings_manager.get('user_default_items_per_page'),
+        holiday_region=settings_manager.get('user_default_holiday_region'),
+        default_text_color=settings_manager.get('user_default_text_color')
     )
     db.session.add(user)
     return user

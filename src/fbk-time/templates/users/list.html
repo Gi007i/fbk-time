@@ -32,7 +32,7 @@
                     <option value="all" {% if role_filter == 'all' %}selected{% endif %}>Alle</option>
                     <option value="admin" {% if role_filter == 'admin' %}selected{% endif %}>Admin</option>
                     <option value="manager" {% if role_filter == 'manager' %}selected{% endif %}>Manager</option>
-                    <option value="user" {% if role_filter == 'user' %}selected{% endif %}>User</option>
+                    <option value="user" {% if role_filter == 'user' %}selected{% endif %}>Benutzer</option>
                 </select>
             </label>
         </fieldset>
@@ -50,7 +50,7 @@
     <summary>
         <strong>{{ user.name }}</strong>
         <small>({{ user.username }})</small>
-        {% if user.role == UserRole.ADMIN %}<kbd>Admin</kbd>{% elif user.role == UserRole.MANAGER %}<kbd>Manager</kbd>{% endif %}
+        {% if user.role == UserRole.ADMIN or user.role == UserRole.MANAGER %}<kbd>{{ user.role|role_label }}</kbd>{% endif %}
         {% if user.status == UserStatus.DISABLED %}<del>Deaktiviert</del>{% elif user.status == UserStatus.LOCKED %}<mark>Gesperrt</mark>{% elif user.status == UserStatus.PENDING %}<mark>Ausstehend</mark>{% elif user.status == UserStatus.MANAGED %}<ins>Verwaltet</ins>{% endif %}
     </summary>
 
@@ -67,7 +67,7 @@
                 </tr>
                 <tr>
                     <th>Rolle</th>
-                    <td>{{ user.role.value | capitalize }}</td>
+                    <td>{{ user.role|role_label }}</td>
                 </tr>
                 <tr>
                     <th>Status</th>

@@ -3,7 +3,6 @@
 Provides login, logout, and registration routes with security protections.
 """
 
-from datetime import datetime, timezone
 from urllib.parse import urlparse, urljoin
 
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
@@ -17,14 +16,15 @@ from .forms import LoginForm, RegistrationForm, ChangePasswordForm
 from .models import UserRole
 from .services import (
     authenticate_user,
-    login_admin,
-    logout_admin,
+    login_user_session,
+    logout_user_session,
     is_login_throttled,
     record_failed_attempt,
     clear_failed_attempts,
     is_ip_throttled,
     record_failed_ip_attempt,
     hash_password,
+    initialize_session,
     ph,
     register_pending_user
 )
@@ -52,7 +52,7 @@ def check_force_password_change():
         session_version = session.get('_session_version')
         current_version = settings_manager.get('user_session_version')
         if session_version is None or session_version != current_version:
-            logout_admin()
+            logout_user_session()
             if request.endpoint not in ('auth.login', 'auth.logout', 'auth.register'):
                 return redirect(url_for('auth.login'))
             return None
@@ -127,7 +127,7 @@ def login():
 
         if user:
             clear_failed_attempts(username)
-            login_admin(user, remember=form.remember.data)
+            login_user_session(user, remember=form.remember.data)
 
             if user.force_password_change:
                 flash('Bitte ändern Sie Ihr Passwort.', 'warning')
@@ -155,7 +155,7 @@ def login():
 @login_required
 def logout():
     """Handle user logout via POST to prevent CSRF logout attacks."""
-    logout_admin()
+    logout_user_session()
     flash('Sie wurden abgemeldet.', 'info')
     return redirect(url_for('auth.login'))
 
@@ -222,20 +222,14 @@ def change_password():
         current_user.has_real_password = True
         db.session.commit()
 
-        # Cache user reference and role before clearing session
+        # Cache user reference and return URL before clearing session
         user = current_user._get_current_object()
-        user_role = user.role
         return_url = get_return_url('dashboard.index')
 
-        # Regenerate session with same metadata as login_admin()
+        # Regenerate session to invalidate any concurrently active session
         session.clear()
         login_user(user)
-        session.permanent = True
-        session['_created_at'] = datetime.now(timezone.utc).isoformat()
-        session['user_role'] = user_role.value
-
-        if user_role == UserRole.USER:
-            session['_session_version'] = settings_manager.get('user_session_version')
+        initialize_session(user)
 
         flash('Passwort erfolgreich geändert.', 'success')
         return redirect(return_url)

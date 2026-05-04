@@ -34,7 +34,7 @@
             </label>
 
             <label for="text_color">
-                Schriftfarbe *
+                Schriftfarbe <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Farbe des Texts auf der Kategoriefläche. Wählen Sie eine Farbe, die sich gut von der Hintergrundfarbe abhebt – bei hellem Hintergrund am besten Schwarz.">&#x24D8;</span></span>
                 {{ form.text_color(id="text_color", type="color",
                    **{'aria-invalid': 'true' if form.text_color.errors else none}) }}
                 {% if form.text_color.errors %}
@@ -61,7 +61,7 @@
 
         <div class="form-group">
             <label>
-                Vorschau
+                Vorschau <span class="info-tip" data-placement="right" data-tooltip="So sieht Ihre Kategorie später in Kalender, Team-Übersicht und Listen aus.">&#x24D8;</span>
                 <div>
                     <span class="category-badge category-preview" id="category-preview">
                         <span class="category-icon" id="preview-icon">{% if category.icon %}{{ category.icon }} {% endif %}</span>
@@ -69,42 +69,36 @@
                     </span>
                 </div>
             </label>
-            <small>So wird die Kategorie im Kalender und in Listen angezeigt.</small>
         </div>
 
         <label for="sort_order">
-            Sortierung
+            Sortierung <span class="info-tip" data-placement="right" data-tooltip="Bestimmt die Reihenfolge in Auswahllisten. Niedrigere Werte ({{ form.sort_order | field_range }}) erscheinen zuerst, bei gleichem Wert wird alphabetisch sortiert.">&#x24D8;</span>
             {{ form.sort_order(id="sort_order", type="number", min="0", max="999",
                **{'aria-invalid': 'true' if form.sort_order.errors else none}) }}
             {% if form.sort_order.errors %}
             <small>{{ form.sort_order.errors[0] }}</small>
-            {% else %}
-            <small>Niedrigere Werte erscheinen weiter oben in Listen.</small>
             {% endif %}
         </label>
 
         <div class="form-group">
             <label>
                 {{ form.requires_substitute(id="requires_substitute") }}
-                Vertretung erforderlich
+                Vertretung erforderlich <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv, lässt sich eine Abwesenheit dieser Kategorie nur speichern, wenn eine Vertretung angegeben ist. Sinnvoll z.B. für Urlaub oder mehrtägige Fortbildungen.">&#x24D8;</span>
             </label>
-            <small>Bei dieser Kategorie muss eine Vertretung angegeben werden.</small>
         </div>
 
         <div class="form-group">
             <label>
                 {{ form.is_present(id="is_present") }}
-                Anwesend
+                Anwesend <span class="info-tip" data-placement="right" data-tooltip="Aktiv: Person arbeitet trotz Eintrag (z.B. Homeoffice, Dienstreise) und kann als Vertretung einspringen.&#10;Inaktiv: Person ist nicht erreichbar (z.B. Urlaub, Krankheit) und braucht ggf. eine Vertretung.">&#x24D8;</span>
             </label>
-            <small>Diese Kategorie bedeutet, dass die Person arbeitet (z.B. Home Office), aber nicht vor Ort ist.</small>
         </div>
 
         <div class="form-group">
             <label>
                 {{ form.active(id="active") }}
-                Aktiv
+                Aktiv <span class="info-tip" data-placement="right" data-tooltip="Inaktive Kategorien stehen bei neuen Abwesenheiten nicht mehr zur Auswahl. Bestehende Einträge bleiben unverändert.">&#x24D8;</span>
             </label>
-            <small>Inaktive Kategorien erscheinen nicht in Auswahllisten.</small>
         </div>
 
         <hr>

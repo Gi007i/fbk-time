@@ -10,17 +10,15 @@
         {{ form.hidden_tag() }}
 
         <label>
-            {{ form.holiday_region.label.text }}
+            {{ form.holiday_region.label.text }} <span class="info-tip" data-placement="right" data-tooltip="In welcher Region sollen Feiertage in Kalender und Team-Übersicht angezeigt werden? Diese Einstellung gilt nur für Sie persönlich.">&#x24D8;</span>
             {{ form.holiday_region(**{'aria-invalid': 'true' if form.holiday_region.errors else none}) }}
             {% if form.holiday_region.errors %}
             <small>{{ form.holiday_region.errors[0] }}</small>
-            {% else %}
-            <small>Welche Feiertage sollen im Kalender angezeigt werden?</small>
             {% endif %}
         </label>
 
         <fieldset{% if form.theme.errors %} aria-invalid="true"{% endif %}>
-            <legend>{{ form.theme.label.text }}</legend>
+            <legend>{{ form.theme.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Hell oder Dunkel als feste Wahl, oder Automatisch für die Anpassung an Ihre Geräteeinstellung (z.B. nach Tageszeit).">&#x24D8;</span></legend>
             {% for subfield in form.theme %}
             <label>
                 {{ subfield() }}
@@ -29,13 +27,11 @@
             {% endfor %}
             {% if form.theme.errors %}
             <small>{{ form.theme.errors[0] }}</small>
-            {% else %}
-            <small>Automatisch wählt basierend auf Systemeinstellung</small>
             {% endif %}
         </fieldset>
 
         <label>
-            {{ form.date_format.label.text }}
+            {{ form.date_format.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie sollen Datumsangaben in Listen, Kalender und Detailansichten dargestellt werden?">&#x24D8;</span>
             {{ form.date_format(**{'aria-invalid': 'true' if form.date_format.errors else none}) }}
             {% if form.date_format.errors %}
             <small>{{ form.date_format.errors[0] }}</small>
@@ -43,18 +39,16 @@
         </label>
 
         <label>
-            {{ form.pagination.label.text }}
+            {{ form.pagination.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie viele Einträge möchten Sie pro Seite in Listen sehen? Mit „Alle“ werden alle Einträge ohne Seitenaufteilung angezeigt.">&#x24D8;</span>
             {{ form.pagination(**{'aria-invalid': 'true' if form.pagination.errors else none}) }}
             {% if form.pagination.errors %}
             <small>{{ form.pagination.errors[0] }}</small>
-            {% else %}
-            <small>Anzahl der Einträge pro Seite in Listen</small>
             {% endif %}
         </label>
 
         {% if current_user.is_manager %}
         <label>
-            {{ form.default_text_color.label.text }}
+            {{ form.default_text_color.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Schriftfarbe ist beim Anlegen neuer Kategorien voreingestellt? Pro Kategorie weiterhin individuell wählbar.">&#x24D8;</span>
             <div class="grid">
                 {{ form.default_text_color(type="color", **{'aria-invalid': 'true' if form.default_text_color.errors else none}) }}
                 <div></div>
@@ -62,8 +56,6 @@
             </div>
             {% if form.default_text_color.errors %}
             <small>{{ form.default_text_color.errors[0] }}</small>
-            {% else %}
-            <small>Diese Farbe wird als Standard für neue Kategorien verwendet</small>
             {% endif %}
         </label>
         {% endif %}

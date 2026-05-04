@@ -10,7 +10,7 @@
         {{ form.hidden_tag() }}
 
         <label for="username">
-            Benutzername *
+            Benutzername <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Mit diesem Namen meldet sich die Person später an, {{ form.username | field_range }} Zeichen. Eindeutig im System – wählen Sie ihn sorgfältig.">&#x24D8;</span></span>
             {{ form.username(id="username", placeholder="z.B. mmustermann",
                **{'aria-invalid': 'true' if form.username.errors else none}) }}
             {% if form.username.errors %}
@@ -20,7 +20,7 @@
 
         {% if not hide_password %}
         <label for="password" id="password-field"{% if single_user_mode %} class="hidden"{% endif %}>
-            Passwort *
+            Passwort <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Startpasswort für die Anmeldung. Im Einzelbenutzermodus mit Rolle Benutzer wird das Konto ohne Login angelegt – ein Passwort ist dann nicht nötig.">&#x24D8;</span></span>
             {{ form.password(id="password", placeholder=password_policy.placeholder,
                **{'aria-invalid': 'true' if form.password.errors or password_error else none}) }}
             {% if form.password.errors %}
@@ -34,7 +34,7 @@
         {% endif %}
 
         <label for="name">
-            Anzeigename *
+            Anzeigename <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Wie soll der/die Mitarbeitende in Listen, Kalender und Team-Übersicht angezeigt werden? Z.B. „Max Mustermann“.">&#x24D8;</span></span>
             {{ form.name(id="name", placeholder="z.B. Max Mustermann",
                **{'aria-invalid': 'true' if form.name.errors else none}) }}
             {% if form.name.errors %}
@@ -43,25 +43,21 @@
         </label>
 
         <label for="email">
-            E-Mail
+            E-Mail <span class="info-tip" data-placement="right" data-tooltip="Optional. Falls eingegeben, muss die Adresse eindeutig sein. Wird derzeit nur zur Information gespeichert und nicht für Benachrichtigungen verwendet.">&#x24D8;</span>
             {{ form.email(id="email", type="email", placeholder="z.B. max.mustermann@firma.de",
                **{'aria-invalid': 'true' if form.email.errors else none}) }}
             {% if form.email.errors %}
             <small>{{ form.email.errors[0] }}</small>
-            {% else %}
-            <small>Optional. Wird für Benachrichtigungen verwendet.</small>
             {% endif %}
         </label>
 
         {% if current_user.is_admin %}
         <label for="role">
-            Rolle
+            Rolle <span class="info-tip" data-placement="right" data-tooltip="Benutzer: legt eigene Abwesenheiten an, ändert und löscht sie.&#10;Manager: zusätzlich Abwesenheiten und Kategorien aller Mitarbeitenden verwalten sowie Konten mit Rolle Benutzer anlegen, bearbeiten und freischalten.&#10;Admin: zusätzlich Systemeinstellungen, alle Konten verwalten und Rollen vergeben.">&#x24D8;</span>
             {{ form.role(id="role",
                **{'aria-invalid': 'true' if form.role.errors else none}) }}
             {% if form.role.errors %}
             <small>{{ form.role.errors[0] }}</small>
-            {% else %}
-            <small>User: Kann nur eigene Abwesenheiten verwalten. Manager: Kann alle Abwesenheiten verwalten. Admin: Vollzugriff.</small>
             {% endif %}
         </label>
         {% endif %}

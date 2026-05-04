@@ -1,0 +1,33 @@
+<h1>Serientermine</h1>
+
+<p>Regelmäßig wiederkehrende Abwesenheiten legen Sie als Serie an. So erfassen Sie z.B. einen wöchentlichen Home-Office-Tag in einem Schritt.</p>
+
+<h2>Serie anlegen</h2>
+
+<p>Aktivieren Sie im Anlageformular die Option <strong>Wiederholen</strong>. Die zugehörigen Felder werden daraufhin eingeblendet.</p>
+
+<p><strong>Wiederholungsmuster.</strong> Täglich, wöchentlich oder zweiwöchentlich.</p>
+
+<p><strong>Wochentage</strong> (bei wöchentlich und zweiwöchentlich). Auswahl der Wochentage, an denen die Abwesenheit eintritt. Mehrfachauswahl ist zulässig.</p>
+
+<p><strong>Täglich.</strong> Geeignet für durchgehend geltende Abwesenheiten innerhalb eines festen Zeitraums, etwa mehrwöchige Schulungen oder längere Krankmeldungen.</p>
+
+<p><strong>Enddatum der Serie.</strong> Geben Sie kein Enddatum an, läuft die Serie bis zur vom Admin festgelegten Obergrenze (standardmäßig {{ cfg.limits_max_future_months }} Monate ab heute). Danach müssen Sie die Serie verlängern.</p>
+
+<h2>Begrenzung der Serienlänge</h2>
+
+<p>Die Begrenzung ist Absicht. Eine Serie ohne Enddatum erzeugt sehr viele Einzeltermine, die bei späteren Änderungen alle mitgezogen werden müssen. Ein überschaubarer Zeitraum vereinfacht die Pflege.</p>
+
+<h2>Einzelnen Termin ändern</h2>
+
+<p>Weicht ein einzelner Tag vom Muster ab, klicken Sie im Kalender oder in der Listenansicht auf den Eintrag an diesem Tag und ändern Sie das gewünschte Feld. Die Änderung wirkt ausschließlich auf diesen Tag; die übrige Serie bleibt unverändert.</p>
+
+<p>Abweichend bearbeitete Termine lassen sich später auf die Serienvorgabe zurücksetzen. Einzeln gelöschte Termine sind ebenfalls wiederherstellbar, solange die Serie besteht.</p>
+
+<p>Einzeln angepasste Termine werden automatisch entfernt, wenn der betreffende Tag nicht mehr zur Serie gehört (z.B. nachdem Sie das Enddatum vorgezogen haben).</p>
+
+<h2>Gesamte Serie bearbeiten oder löschen</h2>
+
+<p>Änderungen an den Grunddaten der Serie (Muster, Wochentage, Enddatum, Kategorie, Vertretung) nehmen Sie in der Serien-Detailansicht vor – sie wirken auf alle künftigen Termine. Einzeln angepasste Termine behalten ihre abweichenden Einstellungen, bis Sie sie auf die Serienvorgabe zurücksetzen.</p>
+
+<p>Beim Löschen der gesamten Serie werden alle Termine entfernt, einschließlich der zuvor abweichend bearbeiteten Tage.</p>

@@ -33,8 +33,7 @@ class SettingsForm(FlaskForm):
             ('DE-ST', 'Sachsen-Anhalt'),
             ('DE-SH', 'Schleswig-Holstein'),
             ('DE-TH', 'Thüringen')
-        ],
-        default='none'
+        ]
     )
     theme = RadioField(
         'Design',
@@ -42,13 +41,11 @@ class SettingsForm(FlaskForm):
             ('light', 'Hell'),
             ('dark', 'Dunkel'),
             ('auto', 'Automatisch')
-        ],
-        default='light'
+        ]
     )
     date_format = SelectField(
         'Datumsformat',
-        choices=[],  # Set dynamically in view with current year
-        default='DD.MM.YYYY'
+        choices=[]  # Set dynamically in view with current year
     )
     pagination = SelectField(
         'Einträge pro Seite',
@@ -60,8 +57,7 @@ class SettingsForm(FlaskForm):
             ('100', '100'),
             ('0', 'Alle')
         ],
-        coerce=int,
-        default=25
+        coerce=int
     )
     default_text_color = StringField(
         'Standard-Schriftfarbe für Kategorien',
@@ -69,8 +65,7 @@ class SettingsForm(FlaskForm):
             DataRequired(message='Standard-Schriftfarbe ist erforderlich.'),
             Length(min=7, max=7, message='Schriftfarbe muss im Format #RRGGBB sein.'),
             Regexp(r'^#[0-9A-Fa-f]{6}$', message='Schriftfarbe muss im Format #RRGGBB sein.')
-        ],
-        default='#FFFFFF'
+        ]
     )
 
 

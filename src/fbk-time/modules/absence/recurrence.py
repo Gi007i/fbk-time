@@ -476,7 +476,7 @@ class RecurrenceService:
         start_date: date,
         end_date: Optional[date]
     ) -> date:
-        """Validate and constrain recurrence end date to max 1 year.
+        """Validate and constrain recurrence end date to the configured planning horizon.
 
         Args:
             start_date: Start date of the recurring absence.

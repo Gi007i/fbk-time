@@ -23,7 +23,7 @@
         {% endif %}
 
         <label>
-            Kategorie
+            Kategorie <span class="info-tip" data-placement="right" data-tooltip="Wählen Sie die Art Ihrer Abwesenheit, z.B. Urlaub, Krankheit oder Homeoffice. Bei manchen Kategorien müssen Sie zusätzlich eine Vertretung angeben.">&#x24D8;</span>
             {{ form.category_id(**{'aria-invalid': 'true' if form.category_id.errors else none}) }}
             {% if form.category_id.errors %}
             <small>{{ form.category_id.errors[0] }}</small>
@@ -32,7 +32,7 @@
 
         <div class="grid">
             <label>
-                Von
+                Von <span class="info-tip" data-placement="right" data-tooltip="Wann beginnt Ihre Abwesenheit? Bei einem einzelnen Tag wählen Sie hier und bei Bis dasselbe Datum.">&#x24D8;</span>
                 {{ form.start_date(type="date",
                    **{'aria-invalid': 'true' if form.start_date.errors else none}) }}
                 {% if form.start_date.errors %}
@@ -40,7 +40,7 @@
                 {% endif %}
             </label>
             <label id="end-date-group">
-                Bis
+                Bis <span class="info-tip" data-placement="right" data-tooltip="Wann endet Ihre Abwesenheit? Bei einem einzelnen Tag identisch mit Von.">&#x24D8;</span>
                 {{ form.end_date(type="date",
                    **{'aria-invalid': 'true' if form.end_date.errors else none}) }}
                 {% if form.end_date.errors %}
@@ -51,18 +51,18 @@
 
         <label>
             {{ form.is_recurring(id="is_recurring") }}
-            Wiederholen
+            Wiederholen <span class="info-tip" data-placement="right" data-tooltip="Aktivieren Sie dies für regelmäßig wiederkehrende Abwesenheiten, z.B. jeden Mittwoch Homeoffice. Einzelne Termine können Sie später anpassen oder löschen.">&#x24D8;</span>
         </label>
 
         <div id="recurrence-fields" class="{% if not form.is_recurring.data and not form.recurrence_end_date.errors and not form.recurrence_weekdays.errors %}hidden{% endif %}">
             <label>
-                Wiederholungsart
+                Wiederholungsart <span class="info-tip" data-placement="right" data-tooltip="Täglich: an jedem Tag im Zeitraum.&#10;Wöchentlich: an den von Ihnen gewählten Wochentagen.&#10;Alle 2 Wochen: gleiche Wochentage, aber nur jede zweite Woche.">&#x24D8;</span>
                 {{ form.recurrence_frequency(id="recurrence_frequency") }}
             </label>
 
             <fieldset id="weekday-fields" class="{% if form.recurrence_frequency.data == 'daily' %}hidden{% endif %}"
                       {% if form.recurrence_weekdays.errors %}aria-invalid="true"{% endif %}>
-                <legend>An Wochentagen</legend>
+                <legend>An Wochentagen <span class="info-tip" data-placement="right" data-tooltip="An welchen Wochentagen soll die Abwesenheit stattfinden? Z.B. Mo und Mi für regelmäßiges Homeoffice.">&#x24D8;</span></legend>
                 <div role="group">
                     {% for value, label in form.recurrence_weekdays.choices %}
                     <label>
@@ -75,10 +75,9 @@
             </fieldset>
 
             <label>
-                Serie endet am
+                Serie endet am <span class="info-tip" data-placement="right" data-tooltip="Bis wann soll die Serie laufen? Nach diesem Datum werden keine weiteren Termine mehr angelegt.">&#x24D8;</span>
                 {{ form.recurrence_end_date(id="recurrence_end_date", type="date",
                    **{'aria-invalid': 'true' if form.recurrence_end_date.errors else none}) }}
-                <small>Innerhalb des Planungshorizonts</small>
                 {% if form.recurrence_end_date.errors %}
                 <small>{{ form.recurrence_end_date.errors[0] }}</small>
                 {% endif %}
@@ -88,7 +87,7 @@
         </div>
 
         <fieldset>
-            <legend>Zeittyp</legend>
+            <legend>Zeittyp <span class="info-tip" data-placement="right" data-tooltip="Ganztags: Sie sind den ganzen Tag abwesend.&#10;Halbtags Vormittag: Sie sind nur am Vormittag abwesend, z.B. für einen Arzttermin am Morgen.&#10;Halbtags Nachmittag: Sie sind nur am Nachmittag abwesend.&#10;Benutzerdefinierte Zeit: Sie geben eigene Start- und Endzeit innerhalb eines Tages an.">&#x24D8;</span></legend>
             <label>
                 <input type="radio" name="time_type" value="all_day" {% if form.time_type.data == 'all_day' or not form.time_type.data %}checked{% endif %}>
                 Ganztags
@@ -127,7 +126,7 @@
         </div>
 
         <label>
-            Vertretung
+            Vertretung <span class="info-tip" data-placement="right" data-tooltip="Wer übernimmt während Ihrer Abwesenheit? Je nach Kategorie ist die Angabe Pflicht oder freiwillig.">&#x24D8;</span>
             {{ form.substitute_id(id="substitute_id",
                **{'aria-invalid': 'true' if form.substitute_id.errors else none}) }}
             {% if form.substitute_id.errors %}

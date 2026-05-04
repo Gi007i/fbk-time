@@ -6,7 +6,7 @@ Provides user-specific settings management and admin system settings.
 from flask import Blueprint, render_template, redirect, url_for, request
 from flask_login import login_required, current_user
 
-from utils.decorators import login_required_api, admin_required, fresh_session_required
+from utils.decorators import login_required_api, admin_required
 from utils.session_navigation import is_ajax_request
 from utils.response_helpers import ajax_response, api_success, api_error
 from .forms import SettingsForm, AdminSettingsForm
@@ -76,7 +76,6 @@ def index():
 
 
 @bp.route('/system', methods=['GET', 'POST'])
-@fresh_session_required
 @admin_required
 def system_settings():
     """Display and update system settings (Admin only)."""
