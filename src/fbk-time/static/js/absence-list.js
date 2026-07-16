@@ -29,6 +29,39 @@
         initCheckboxListeners();
         initBulkActions();
         initExport();
+        initNameTooltips();
+    }
+
+    /**
+     * Attach a tooltip with the full name to any name cell whose label is
+     * truncated, and remove it where the label fits. Mirrors the team overview
+     * behaviour; on the card layout the name is shown in full and gets none.
+     * @returns {void}
+     */
+    function refreshNameTooltips() {
+        var cells = document.querySelectorAll('.list-name');
+        cells.forEach(function(cell) {
+            var label = cell.querySelector('span');
+            if (!label) return;
+            if (label.scrollWidth > label.clientWidth) {
+                cell.setAttribute('data-tooltip', label.textContent);
+            } else {
+                cell.removeAttribute('data-tooltip');
+            }
+        });
+    }
+
+    /**
+     * Wire up name tooltips on load and recompute them after viewport changes.
+     * @returns {void}
+     */
+    function initNameTooltips() {
+        refreshNameTooltips();
+        var resizeTimeout;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimeout);
+            resizeTimeout = setTimeout(refreshNameTooltips, 150);
+        });
     }
 
     function initExport() {
@@ -38,25 +71,33 @@
 
         if (!exportBtn || !dataEl) return;
 
+        /**
+         * Build an export query with date bounds and the active subject filter.
+         * @param {string} startKey - Query key for the range start.
+         * @param {string} endKey - Query key for the range end.
+         * @returns {string} Query string ('?...'), empty when no parameters.
+         */
+        function buildQuery(startKey, endKey) {
+            var params = [];
+            if (dataEl.dataset.dateFrom) params.push(startKey + '=' + encodeURIComponent(dataEl.dataset.dateFrom));
+            if (dataEl.dataset.dateTo) params.push(endKey + '=' + encodeURIComponent(dataEl.dataset.dateTo));
+
+            var query = params.length ? '?' + params.join('&') : '';
+            var filters = window.FBKTime.buildFilterQuery(dataEl.dataset);
+            if (filters) {
+                query += query ? filters : '?' + filters.substring(1);
+            }
+            return query;
+        }
+
         exportBtn.addEventListener('click', function() {
             var type = exportType.value;
             var urlPdf = dataEl.dataset.urlPdf;
             var urlIcal = dataEl.dataset.urlIcal;
             var urlMatrix = dataEl.dataset.urlMatrix;
-            var params = [];
 
-            if (dataEl.dataset.dateFrom) params.push('date_from=' + dataEl.dataset.dateFrom);
-            if (dataEl.dataset.dateTo) params.push('date_to=' + dataEl.dataset.dateTo);
-            if (dataEl.dataset.userId) params.push('user_id=' + dataEl.dataset.userId);
-            if (dataEl.dataset.categoryId) params.push('category_id=' + dataEl.dataset.categoryId);
-            if (dataEl.dataset.hasSubstitute) params.push('has_substitute=' + dataEl.dataset.hasSubstitute);
-
-            var query = params.length ? '?' + params.join('&') : '';
-
-            var matrixParams = [];
-            if (dataEl.dataset.dateFrom) matrixParams.push('week_start=' + dataEl.dataset.dateFrom);
-            if (dataEl.dataset.dateTo) matrixParams.push('week_end=' + dataEl.dataset.dateTo);
-            var matrixQuery = matrixParams.length ? '?' + matrixParams.join('&') : '';
+            var query = buildQuery('date_from', 'date_to');
+            var matrixQuery = buildQuery('week_start', 'week_end');
 
             switch (type) {
                 case 'pdf-list':

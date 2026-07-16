@@ -15,7 +15,6 @@
     var startTimeInput;
     var endTimeInput;
 
-    // Recurrence fields
     var isRecurringCheckbox;
     var recurrenceFieldsContainer;
     var recurrenceFrequency;
@@ -39,7 +38,6 @@
         startTimeInput = form.querySelector('[name="start_time"]');
         endTimeInput = form.querySelector('[name="end_time"]');
 
-        // Recurrence fields
         isRecurringCheckbox = document.getElementById('is_recurring');
         recurrenceFieldsContainer = document.getElementById('recurrence-fields');
         recurrenceFrequency = document.getElementById('recurrence_frequency');
@@ -253,7 +251,6 @@
     function updateMaxRecurrenceEndDate() {
         if (!recurrenceEndDate || !startDateInput) return;
 
-        // Only update constraints if recurrence is active
         if (!isRecurringCheckbox || !isRecurringCheckbox.checked) {
             return;
         }
@@ -356,7 +353,6 @@
         return desc;
     }
 
-    // Initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {

@@ -70,18 +70,27 @@ def hash_password(password):
 def load_user(user_id):
     """Load user by ID for Flask-Login session management.
 
-    Only loads users with ACTIVE status.
+    The stored identity is ``id:credential_version`` (see User.get_id).
+    A user is loaded only when ACTIVE and the version still matches, so a
+    password change invalidates every existing session and remember-me
+    cookie.
 
     Args:
-        user_id: User ID from session.
+        user_id: Versioned identity from the session or remember cookie.
 
     Returns:
-        User instance or None if not found or not active.
+        User instance or None if not found, not active, or stale.
     """
-    user = db.session.get(User, int(user_id))
-    if user and user.status == UserStatus.ACTIVE:
-        return user
-    return None
+    raw_id, _, version = str(user_id).partition(':')
+    try:
+        user = db.session.get(User, int(raw_id))
+    except ValueError:
+        return None
+    if not user or user.status != UserStatus.ACTIVE:
+        return None
+    if version != str(user.credential_version):
+        return None
+    return user
 
 
 def authenticate_user(username, password):
@@ -134,15 +143,23 @@ def initialize_session(user):
     """Populate session metadata for an authenticated user.
 
     Sets the keys consumed by the session-lifecycle and role-validation
-    hooks: persistence flag, creation timestamp, role identifier, and
-    (for USER role) the current session version. Used by login_user_session,
-    change-password regeneration, and remember-me cookie restoration.
+    hooks: persistence flag, creation timestamp, last-activity marker,
+    role identifier, and (for USER role) the current session version. Used
+    by login_user_session, change-password regeneration, and remember-me
+    cookie restoration.
+
+    Both ``_created_at`` (absolute lifetime) and ``_last_activity`` (idle
+    timeout) are set to the current time. On remember-me cookie restoration
+    this resets both timers, so the effective sign-in ceiling is the
+    remember cookie's duration, not ``PERMANENT_SESSION_LIFETIME``.
 
     Args:
         user: Authenticated user instance.
     """
     session.permanent = True
-    session['_created_at'] = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(timezone.utc).isoformat()
+    session['_created_at'] = now
+    session['_last_activity'] = now
     session['user_role'] = user.role.value
     if user.role == UserRole.USER:
         session['_session_version'] = settings_manager.get('user_session_version')
@@ -152,7 +169,7 @@ def login_user_session(user, remember=False):
     """Log in a user with session fixation prevention.
 
     Regenerates session ID before login to prevent session fixation attacks.
-    Updates last_login timestamp.
+    Shifts last_login_at into previous_login_at, then records the new timestamp.
 
     Args:
         user: User instance to log in.
@@ -164,8 +181,9 @@ def login_user_session(user, remember=False):
     # Regenerate session ID to prevent session fixation
     session.clear()
 
-    # Update last login
-    user.last_login = datetime.now(timezone.utc)
+    # Shift current login into previous before recording the new one
+    user.previous_login_at = user.last_login_at
+    user.last_login_at = datetime.now(timezone.utc)
     db.session.commit()
 
     login_user(user, remember=remember)
@@ -311,6 +329,15 @@ def clear_failed_attempts(identifier):
         db.session.commit()
 
 
+def clear_failed_ip_attempts(ip_address):
+    """Clear an IP address's failed-attempt record after a successful login.
+
+    Without this the IP counter only ever grows, so occasional mistypes by
+    different users behind one NAT could lock the whole IP.
+    """
+    clear_failed_attempts(_get_ip_identifier(ip_address))
+
+
 _IP_LOCKOUT_MULTIPLIER = 5
 
 
@@ -410,8 +437,8 @@ def deactivate_inactive_accounts():
     """Disable accounts that have been inactive for configured period.
 
     Accounts are considered inactive if:
-    1. last_login is older than inactive_account_days, OR
-    2. last_login is NULL and created_at is older than inactive_account_days
+    1. last_login_at is older than inactive_account_days, OR
+    2. last_login_at is NULL and created_at is older than inactive_account_days
 
     Only ACTIVE accounts are affected. Admin accounts are excluded.
 
@@ -432,11 +459,11 @@ def deactivate_inactive_accounts():
         User.role != UserRole.ADMIN,
         db.or_(
             db.and_(
-                User.last_login.isnot(None),
-                User.last_login < inactive_cutoff
+                User.last_login_at.isnot(None),
+                User.last_login_at < inactive_cutoff
             ),
             db.and_(
-                User.last_login.is_(None),
+                User.last_login_at.is_(None),
                 User.created_at < inactive_cutoff
             )
         )

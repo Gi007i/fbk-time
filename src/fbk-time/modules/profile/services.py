@@ -29,7 +29,7 @@ def get_profile_data() -> dict:
         'items_per_page': current_user.items_per_page,
         'holiday_region': current_user.holiday_region,
         'created_at': current_user.created_at,
-        'last_login': current_user.last_login,
+        'previous_login_at': current_user.previous_login_at,
         'force_password_change': current_user.force_password_change
     }
 

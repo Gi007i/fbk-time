@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Datensicherung - FBK-Time{% endblock %}
+
+{% block content %}
+<div class="grid page-header">
+    <h1>Datensicherung</h1>
+    <nav><ul><li>
+        <form action="{{ url_for('backup.sync') }}" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="outline">Sync</button>
+        </form>
+    </li></ul></nav>
+</div>
+
+<details>
+    <summary><strong>Übersicht</strong></summary>
+    <figure>
+        <table>
+            <tbody>
+                <tr>
+                    <th>Sicherungen gesamt</th>
+                    <td>{{ stats.total }}</td>
+                </tr>
+                <tr>
+                    <th>Verifiziert</th>
+                    <td>{{ stats.verified }}</td>
+                </tr>
+                <tr>
+                    <th>Beschädigt</th>
+                    <td>{{ stats.corrupted }}</td>
+                </tr>
+                <tr>
+                    <th>Gesamtgröße</th>
+                    <td>{{ stats.total_size_mb }} MB</td>
+                </tr>
+                <tr>
+                    <th>Speicherort</th>
+                    <td><code>{{ backup_dir }}</code></td>
+                </tr>
+                <tr>
+                    <th>Format</th>
+                    <td><code>.tar.gz</code>-Archive</td>
+                </tr>
+            </tbody>
+        </table>
+    </figure>
+</details>
+
+<details>
+    <summary><strong>Manuelle Sicherung</strong></summary>
+    <form method="POST" action="{{ url_for('backup.create') }}">
+        {{ form.hidden_tag() }}
+        <label for="description">
+            {{ form.description.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Optionaler Kurztext zur späteren Identifikation der Sicherung (z.B. Anlass oder Kontext). Maximal 255 Zeichen.">&#x24D8;</span>
+            <div class="grid">
+                {{ form.description(id="description", placeholder='Optionale Beschreibung',
+                   **{'aria-invalid': 'true' if form.description.errors else none}) }}
+                <div></div>
+                <div></div>
+            </div>
+            {% if form.description.errors %}
+            <small class="field-error">{{ form.description.errors[0] }}</small>
+            {% endif %}
+        </label>
+        <div class="grid">
+            <button type="submit" class="outline">Sicherung starten</button>
+            <div></div>
+            <div></div>
+        </div>
+    </form>
+</details>
+
+<details open>
+    <summary><strong>Vorhandene Sicherungen</strong></summary>
+    {% if records %}
+    {% for record in records %}
+    <details>
+        <summary>
+            <strong>#{{ record.id }} - {{ record.created_at|format_date(include_time=True) if record.created_at else '-' }}</strong>
+            {% if record.status.value == 'verified' %}<ins>{{ record.status.label }}</ins>
+            {% elif record.status.value == 'corrupted' %}<mark>{{ record.status.label }}</mark>
+            {% else %}<small>{{ record.status.label }}</small>{% endif %}
+        </summary>
+
+        <figure>
+            <table>
+                <tbody>
+                    <tr>
+                        <th>ID</th>
+                        <td>#{{ record.id }}</td>
+                    </tr>
+                    <tr>
+                        <th>Typ</th>
+                        <td>{{ record.backup_type.label }}</td>
+                    </tr>
+                    <tr>
+                        <th>Status</th>
+                        <td>{{ record.status.label }}</td>
+                    </tr>
+                    <tr>
+                        <th>Größe</th>
+                        <td>{{ record.file_size_mb }} MB</td>
+                    </tr>
+                    <tr>
+                        <th>Beschreibung</th>
+                        <td>{{ record.description or '-' }}</td>
+                    </tr>
+                    <tr>
+                        <th>Archivdatei</th>
+                        <td>{% if record.archive_exists %}<ins>vorhanden</ins>{% else %}<mark>fehlt</mark>{% endif %}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </figure>
+
+        <div class="grid">
+            {% if record.archive_exists %}
+            <form method="POST" action="{{ url_for('backup.verify', backup_id=record.id) }}">
+                {{ form.hidden_tag() }}
+                <button type="submit" class="outline secondary">Verifizieren</button>
+            </form>
+            {% else %}
+            <div></div>
+            {% endif %}
+            <form method="POST" action="{{ url_for('backup.delete', backup_id=record.id) }}">
+                {{ form.hidden_tag() }}
+                <button type="submit"
+                        class="outline contrast"
+                        data-confirm="Sicherung #{{ record.id }} wirklich löschen?">
+                    Löschen
+                </button>
+            </form>
+            <div></div>
+        </div>
+    </details>
+    {% endfor %}
+
+    {% if pagination.total_pages > 1 %}
+    <nav class="pagination" aria-label="Seitennavigation">
+        {% if pagination.has_prev %}
+        <a href="{{ url_for('backup.index', page=pagination.page-1) }}">&laquo; Zurück</a>
+        {% else %}
+        <span>&laquo; Zurück</span>
+        {% endif %}
+
+        {% for p in range(1, pagination.total_pages + 1) %}
+            {% if p == pagination.page %}
+            <span class="current">{{ p }}</span>
+            {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
+            <a href="{{ url_for('backup.index', page=p) }}">{{ p }}</a>
+            {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
+            <span>...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if pagination.has_next %}
+        <a href="{{ url_for('backup.index', page=pagination.page+1) }}">Weiter &raquo;</a>
+        {% else %}
+        <span>Weiter &raquo;</span>
+        {% endif %}
+    </nav>
+    <p class="center"><small>Seite {{ pagination.page }} von {{ pagination.total_pages }} ({{ pagination.total }} Sicherungen gesamt)</small></p>
+    {% endif %}
+
+    {% else %}
+    <p><small>Noch keine Sicherungen vorhanden.</small></p>
+    {% endif %}
+</details>
+{% endblock %}

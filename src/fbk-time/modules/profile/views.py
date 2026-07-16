@@ -6,7 +6,6 @@ Provides user profile page for viewing and editing own account information.
 from flask import Blueprint, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
-from utils.session_navigation import save_return_url
 from .forms import ProfileEditForm
 from .services import get_profile_data, update_profile
 
@@ -23,7 +22,6 @@ def require_login():
 @bp.route('/', methods=['GET'])
 def index():
     """Display user profile with account information and edit form."""
-    save_return_url('Profil')
     profile = get_profile_data()
     form = ProfileEditForm(data={'name': profile['name'], 'email': profile['email']})
     return render_template('profile/index.html', profile=profile, form=form)

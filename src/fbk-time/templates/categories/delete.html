@@ -3,6 +3,11 @@
 {% block title %}Kategorie löschen - FBK-Time{% endblock %}
 
 {% block content %}
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': category.name, 'url': origin_url('categories.detail', id=category.id)}, {'label': 'Löschen'}]) }}
+{% endif %}
+
 <hgroup>
     <h1>Kategorie löschen</h1>
     <p>
@@ -12,7 +17,7 @@
 
 <article>
     {% if absences_count > 0 %}
-    <form method="POST" action="{{ url_for('categories.delete', id=category.id) }}">
+    <form method="POST" action="{{ origin_url('categories.delete', id=category.id) }}">
         {{ form.hidden_tag() }}
 
         <fieldset>
@@ -38,7 +43,7 @@
 
         <div class="grid">
             <button type="submit" class="outline contrast">Kategorie löschen</button>
-            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url('categories.detail', id=category.id) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>
@@ -46,14 +51,14 @@
     {% else %}
     <p>Diese Kategorie hat keine zugeordneten Abwesenheiten.</p>
 
-    <form method="POST" action="{{ url_for('categories.delete', id=category.id) }}">
+    <form method="POST" action="{{ origin_url('categories.delete', id=category.id) }}">
         {{ form.hidden_tag() }}
 
         <hr>
 
         <div class="grid">
             <button type="submit" class="outline contrast">Kategorie löschen</button>
-            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url('categories.detail', id=category.id) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>

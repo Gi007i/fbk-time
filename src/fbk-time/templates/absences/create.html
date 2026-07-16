@@ -3,10 +3,15 @@
 {% block title %}Neue Abwesenheit - FBK-Time{% endblock %}
 
 {% block content %}
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': 'Neue Abwesenheit'}]) }}
+{% endif %}
+
 <h1>Neue Abwesenheit</h1>
 
 <article>
-    <form id="absence-form" method="POST" action="{{ url_for('absences.create') }}" data-ajax-form>
+    <form id="absence-form" method="POST" action="{{ origin_url('absences.create') }}" data-ajax-form>
         {{ form.hidden_tag() }}
 
         {% if is_manager %}
@@ -146,7 +151,7 @@
 
         <div class="grid">
             <button type="submit" class="outline">Abwesenheit erstellen</button>
-            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url('absences.list_absences') }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>

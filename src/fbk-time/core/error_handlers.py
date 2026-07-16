@@ -9,7 +9,7 @@ import logging
 
 from flask import flash, redirect, render_template, url_for
 
-from utils.session_navigation import is_ajax_request
+from utils.response_helpers import is_ajax_request
 
 from .extensions import db
 

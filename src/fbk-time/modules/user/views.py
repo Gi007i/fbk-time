@@ -1,11 +1,11 @@
 """User management views."""
 
-from flask import Blueprint, render_template, redirect, url_for, request, abort
+from flask import Blueprint, render_template, redirect, request, abort
 from flask_login import login_required, current_user
 
 from core.extensions import db
-from utils.session_navigation import is_ajax_request, save_return_url, get_return_url
-from utils.response_helpers import ajax_response
+from utils.navigation import back_url, origin_link
+from utils.response_helpers import ajax_response, is_ajax_request
 from utils.pagination import get_pagination
 from utils.validators import validate_password_strength
 from core.settings_manager import settings_manager
@@ -42,7 +42,6 @@ def require_login():
 @manager_required
 def list_users():
     """Display list of all users."""
-    save_return_url('Mitarbeitende')
     search = request.args.get('search', '').strip()[:100]
 
     status_filter = request.args.get('status') or 'active'
@@ -130,9 +129,10 @@ def create():
         db.session.commit()
 
         message = f'Benutzer "{user.name}" wurde erstellt.'
+        return_to = back_url('users.list_users')
         if is_ajax_request():
-            return ajax_response(success=True, message=message, redirect=url_for('users.list_users'))
-        return redirect(url_for('users.list_users'))
+            return ajax_response(success=True, message=message, redirect=return_to)
+        return redirect(return_to)
 
     if request.method == 'POST' and is_ajax_request():
         errors = {field.name: field.errors[0] for field in form if field.errors}
@@ -179,7 +179,7 @@ def edit(id):
         if not current_user.is_admin:
             abort(403)
         if user.status != UserStatus.MANAGED:
-            return redirect(url_for('users.edit', id=id))
+            return redirect(origin_link('users.edit', id=id))
 
     form = UserEditForm(user=user, obj=user)
 
@@ -221,9 +221,10 @@ def edit(id):
                 message = activate_login_for_managed_user(user, form.password.data)
                 db.session.commit()
 
+            return_to = back_url('users.detail', id=user.id)
             if is_ajax_request():
-                return ajax_response(success=True, message=message, redirect=url_for('users.list_users'))
-            return redirect(url_for('users.list_users'))
+                return ajax_response(success=True, message=message, redirect=return_to)
+            return redirect(return_to)
 
         if current_user.is_admin:
             if hasattr(form, 'role'):
@@ -266,9 +267,10 @@ def edit(id):
         db.session.commit()
 
         message = f'Benutzer "{user.name}" wurde aktualisiert.'
+        return_to = back_url('users.detail', id=user.id)
         if is_ajax_request():
-            return ajax_response(success=True, message=message, redirect=url_for('users.list_users'))
-        return redirect(url_for('users.list_users'))
+            return ajax_response(success=True, message=message, redirect=return_to)
+        return redirect(return_to)
 
     password_required = activate_login and not user.has_real_password
 
@@ -311,7 +313,7 @@ def toggle_status(id):
     if not can_toggle:
         if is_ajax_request():
             return ajax_response(success=False, message=error)
-        return redirect(get_return_url('users.list_users'))
+        return redirect(back_url('users.list_users'))
 
     if not current_user.is_admin and user.role != UserRole.USER:
         abort(403)
@@ -319,7 +321,7 @@ def toggle_status(id):
     if user.status == UserStatus.MANAGED:
         if not current_user.is_admin:
             abort(403)
-        return_to = url_for('users.edit', id=user.id, activate_login=1)
+        return_to = origin_link('users.edit', id=user.id, activate_login=1)
         if is_ajax_request():
             return ajax_response(success=True, message='Weiterleitung zur Passwort-Eingabe...', redirect=return_to)
         return redirect(return_to)
@@ -333,11 +335,11 @@ def toggle_status(id):
     except ValueError as e:
         if is_ajax_request():
             return ajax_response(success=False, message=str(e))
-        return redirect(get_return_url('users.list_users'))
+        return redirect(back_url('users.list_users'))
 
     db.session.commit()
 
-    return_to = get_return_url('users.list_users')
+    return_to = back_url('users.list_users')
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)
@@ -355,14 +357,14 @@ def delete(id):
         message = 'Sie können sich nicht selbst löschen.'
         if is_ajax_request():
             return ajax_response(success=False, message=message)
-        return redirect(get_return_url('users.list_users'))
+        return redirect(back_url('users.list_users'))
 
     user_name = user.name
     db.session.delete(user)
     db.session.commit()
 
     message = f'Benutzer "{user_name}" wurde gelöscht.'
-    return_to = get_return_url('users.list_users')
+    return_to = back_url('users.list_users')
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)

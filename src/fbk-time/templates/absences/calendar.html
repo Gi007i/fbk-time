@@ -1,11 +1,12 @@
 {% extends "base.html" %}
+{% from "components/filters.html" import render as filter_panel %}
 
 {% block title %}Kalender - FBK-Time{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Kalender</h1>
-    <nav><ul><li><a href="{{ url_for('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
 <nav class="page-nav page-nav-month" aria-label="Monatsnavigation">
@@ -14,66 +15,22 @@
         {{ month_names[month] }} {{ year }}
     </h2>
     <ul>
-        <li><a href="{{ url_for('absences.calendar', year=year if month > 1 else year-1, month=month-1 if month > 1 else 12) }}" role="button" class="outline">← Vormonat</a></li>
-        <li><a href="{{ url_for('absences.calendar') }}" role="button" class="secondary" id="today-month-btn">Heute</a></li>
-        <li><a href="{{ url_for('absences.calendar', year=year if month < 12 else year+1, month=month+1 if month < 12 else 1) }}" role="button" class="outline">Nächster →</a></li>
+        <li><a href="{{ filter_url('absences.calendar', year=year if month > 1 else year-1, month=month-1 if month > 1 else 12) }}" role="button" class="outline">← Vormonat</a></li>
+        <li><a href="{{ filter_url('absences.calendar') }}" role="button" class="secondary" id="today-month-btn">Heute</a></li>
+        <li><a href="{{ filter_url('absences.calendar', year=year if month < 12 else year+1, month=month+1 if month < 12 else 1) }}" role="button" class="outline">Nächster →</a></li>
     </ul>
 </nav>
 
 <nav class="page-nav page-nav-week hidden" aria-label="Wochennavigation">
     <h2 id="calendar-title-week"></h2>
     <ul>
-        <li><a href="{{ url_for('absences.calendar', week_start=prev_week.isoformat(), year=year, month=month) }}" role="button" class="outline" id="prev-week-link">← Vorwoche</a></li>
-        <li><a href="{{ url_for('absences.calendar') }}" role="button" class="secondary" id="today-week-link">Heute</a></li>
-        <li><a href="{{ url_for('absences.calendar', week_start=next_week.isoformat(), year=year, month=month) }}" role="button" class="outline" id="next-week-link">Nächste →</a></li>
+        <li><a href="{{ filter_url('absences.calendar', week_start=prev_week.isoformat(), year=year, month=month) }}" role="button" class="outline" id="prev-week-link">← Vorwoche</a></li>
+        <li><a href="{{ filter_url('absences.calendar') }}" role="button" class="secondary" id="today-week-link">Heute</a></li>
+        <li><a href="{{ filter_url('absences.calendar', week_start=next_week.isoformat(), year=year, month=month) }}" role="button" class="outline" id="next-week-link">Nächste →</a></li>
     </ul>
 </nav>
 
-<details id="filter-panel">
-    <summary><strong>Filter</strong></summary>
-    <form method="GET" id="filter-form">
-        <input type="hidden" name="year" value="{{ year }}">
-        <input type="hidden" name="month" value="{{ month }}">
-        <input type="hidden" name="week_start" id="week_start_input" value="{{ request.args.get('week_start', '') }}">
-        <fieldset class="grid">
-            <label>
-                Person
-                <select name="user_id" id="filter-user">
-                    <option value="">Alle</option>
-                    {% for user in users %}
-                    <option value="{{ user.id }}" {% if request.args.get('user_id')|int == user.id %}selected{% endif %}>
-                        {{ user.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Kategorie
-                <select name="category_id" id="filter-category">
-                    <option value="">Alle</option>
-                    {% for category in categories %}
-                    <option value="{{ category.id }}" {% if request.args.get('category_id')|int == category.id %}selected{% endif %}>
-                        {{ category.name }}
-                    </option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Vertretung
-                <select name="has_substitute" id="filter-substitute">
-                    <option value="">Alle</option>
-                    <option value="yes" {% if request.args.get('has_substitute') == 'yes' %}selected{% endif %}>Mit Vertretung</option>
-                    <option value="no" {% if request.args.get('has_substitute') == 'no' %}selected{% endif %}>Ohne Vertretung</option>
-                </select>
-            </label>
-        </fieldset>
-        <div class="grid">
-            <button type="submit" class="outline">Filtern</button>
-            <button type="button" data-href="{{ url_for('absences.calendar', year=year, month=month) }}" class="outline secondary">Zurücksetzen</button>
-            <div></div>
-        </div>
-    </form>
-</details>
+{{ filter_panel(filters, users, categories, url_for('absences.calendar', year=year, month=month), hidden={'year': year, 'month': month, 'week_start': request.args.get('week_start', '')}) }}
 
 <article>
     <div class="calendar-container">
@@ -123,9 +80,9 @@
 
 <nav aria-label="Abwesenheits-Ansichten">
     <div role="group">
-        <a href="{{ url_for('dashboard.team_overview') }}" role="button" class="outline">Team</a>
+        <a href="{{ view_switch_url('dashboard.team_overview', year=year, month=month, week_start=request.args.get('week_start')) }}" role="button" class="outline">Team</a>
         <a href="{{ url_for('absences.calendar') }}" role="button" aria-current="page">Kalender</a>
-        <a href="{{ url_for('absences.list_absences') }}" role="button" class="outline">Liste</a>
+        <a href="{{ view_switch_url('absences.list_absences', year=year, month=month) }}" role="button" class="outline">Liste</a>
     </div>
 </nav>
 {% endblock %}
@@ -137,6 +94,11 @@
     "month": {{ month }},
     "today": "{{ today.isoformat() }}",
     "urlWeekStart": {{ request.args.get('week_start', '')|tojson }},
+    "filters": {
+        "userIds": {{ filters.user_ids|tojson }},
+        "categoryIds": {{ filters.category_ids|tojson }},
+        "hasSubstitute": {{ (filters.has_substitute or '')|tojson }}
+    },
     "holidays": {
         {% for date, name in holidays.items() %}
         {{ date.isoformat()|tojson }}: {{ name|tojson }}{% if not loop.last %},{% endif %}
@@ -154,7 +116,8 @@
             "isHalfDayMorning": {{ 'true' if occ.is_half_day_morning else 'false' }},
             "isHalfDayAfternoon": {{ 'true' if occ.is_half_day_afternoon else 'false' }},
             "isPresent": {{ 'true' if occ.category.is_present else 'false' }},
-            "isRecurring": {{ 'true' if occ.is_recurring else 'false' }}
+            "isRecurring": {{ 'true' if occ.is_recurring else 'false' }},
+            "detailUrl": {{ (origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) if occ.is_recurring else origin_url('absences.detail', id=occ.absence.id))|tojson }}
         }{% if not loop.last %},{% endif %}
         {% endfor %}
     ],

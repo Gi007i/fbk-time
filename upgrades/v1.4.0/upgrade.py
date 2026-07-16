@@ -46,25 +46,40 @@ REQUIRED_SQLITE_VERSION = (3, 35, 0)
 
 
 class Logger:
-    """Minimal colored logger using ANSI escapes."""
+    """Minimal colored logger using ANSI escapes.
+
+    Color codes are emitted only when the target stream is a TTY, so a
+    redirected upgrade run captured to a log file stays free of escape
+    sequences.
+    """
 
     def __init__(self, quiet: bool = False):
         self.quiet = quiet
+        self._stdout_color = sys.stdout.isatty()
+        self._stderr_color = sys.stderr.isatty()
+
+    @staticmethod
+    def _paint(use_color: bool, code: str, text: str) -> str:
+        return f"\033[{code}m{text}\033[0m" if use_color else text
 
     def success(self, msg: str) -> None:
         if not self.quiet:
-            print(f"\033[92m\u2713\033[0m {msg}")
+            mark = self._paint(self._stdout_color, '92', '\u2713')
+            print(f"{mark} {msg}")
 
     def error(self, msg: str) -> None:
-        print(f"\033[91m\u2717\033[0m {msg}", file=sys.stderr)
+        mark = self._paint(self._stderr_color, '91', '\u2717')
+        print(f"{mark} {msg}", file=sys.stderr)
 
     def warning(self, msg: str) -> None:
         if not self.quiet:
-            print(f"\033[93m\u26A0\033[0m {msg}")
+            mark = self._paint(self._stdout_color, '93', '\u26A0')
+            print(f"{mark} {msg}")
 
     def info(self, msg: str) -> None:
         if not self.quiet:
-            print(f"\033[94m\u2192\033[0m {msg}")
+            mark = self._paint(self._stdout_color, '94', '\u2192')
+            print(f"{mark} {msg}")
 
     def section(self, title: str) -> None:
         if not self.quiet:

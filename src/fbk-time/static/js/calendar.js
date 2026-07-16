@@ -5,20 +5,11 @@
 (function() {
     'use strict';
 
-    var MOBILE_BREAKPOINT = 768;
     var MONTH_NAMES = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
 
     var calendarData = null;
     var currentWeekStart = null;
     var isWeekView = false;
-
-    /**
-     * Check if viewport is mobile width.
-     * @returns {boolean} True if mobile viewport.
-     */
-    function isMobile() {
-        return window.innerWidth < MOBILE_BREAKPOINT;
-    }
 
     /**
      * Get Monday of the week containing the given date.
@@ -65,7 +56,7 @@
      * @returns {void}
      */
     function updateWeekStartInput() {
-        var input = document.getElementById('week_start_input');
+        var input = document.querySelector('#filter-panel input[name="week_start"]');
         if (input) {
             input.value = formatDateStr(currentWeekStart);
         }
@@ -158,7 +149,6 @@
 
             var safeUserName = window.FBKTime.escapeHtml(occ.userName);
             var safeCategoryIcon = window.FBKTime.escapeHtml(occ.categoryIcon);
-            var safeCategoryName = window.FBKTime.escapeHtml(occ.categoryName);
 
             if (isWeekView) {
                 if (occ.categoryIcon) label += '<span class="category-icon">' + safeCategoryIcon + '</span>';
@@ -176,15 +166,8 @@
                 if (occ.isRecurring) label += ' 🔁';
             }
 
-            var tooltip = safeCategoryName + ': ' + safeUserName;
-            if (occ.isHalfDayMorning) tooltip += ' (VM)';
-            else if (occ.isHalfDayAfternoon) tooltip += ' (NM)';
-            tooltip += occ.isPresent ? ' (A)' : ' (X)';
-            if (occ.isRecurring) tooltip += ' (Serie)';
-
-            var detailUrl = occ.isRecurring
-                ? '/absences/' + safeAbsenceId + '/occurrence/' + occ.date
-                : '/absences/' + safeAbsenceId;
+            var isInternal = typeof occ.detailUrl === 'string' && /^\/[^/]/.test(occ.detailUrl);
+            var detailUrl = window.FBKTime.escapeAttr(isInternal ? occ.detailUrl : '#');
 
             var tooltipAttr = window.FBKTime.escapeAttr(occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (VM)' : occ.isHalfDayAfternoon ? ' (NM)' : '') + (occ.isPresent ? ' (A)' : ' (X)') + (occ.isRecurring ? ' (Serie)' : ''));
             html += '<span data-tooltip="' + tooltipAttr + '"><a href="' + detailUrl + '" class="absence-item category-' + safeCategoryId + '">' + label + '</a></span>';
@@ -280,7 +263,7 @@
      * @returns {void}
      */
     function renderCalendar() {
-        isWeekView = isMobile();
+        isWeekView = window.FBKTime.isMobile();
         updateNavVisibility();
         updateWeekStartInput();
 
@@ -306,6 +289,7 @@
         exportBtn.addEventListener('click', function() {
             var type = exportType.value;
             var urls = calendarData.urls;
+            var extra = window.FBKTime.buildFilterQuery(calendarData.filters);
 
             if (isWeekView) {
                 var weekStart = formatDateStr(currentWeekStart);
@@ -315,13 +299,13 @@
 
                 switch (type) {
                     case 'pdf-matrix':
-                        window.location.href = urls.matrix + '?week_start=' + weekStart + '&week_end=' + weekEndStr;
+                        window.location.href = urls.matrix + '?week_start=' + weekStart + '&week_end=' + weekEndStr + extra;
                         break;
                     case 'pdf-list':
-                        window.location.href = urls.pdf + '?date_from=' + weekStart + '&date_to=' + weekEndStr;
+                        window.location.href = urls.pdf + '?date_from=' + weekStart + '&date_to=' + weekEndStr + extra;
                         break;
                     case 'ical':
-                        window.location.href = urls.ical + '?date_from=' + weekStart + '&date_to=' + weekEndStr;
+                        window.location.href = urls.ical + '?date_from=' + weekStart + '&date_to=' + weekEndStr + extra;
                         break;
                 }
             } else {
@@ -333,13 +317,13 @@
 
                 switch (type) {
                     case 'pdf-matrix':
-                        window.location.href = urls.matrix + '?week_start=' + firstDay + '&week_end=' + lastDay;
+                        window.location.href = urls.matrix + '?week_start=' + firstDay + '&week_end=' + lastDay + extra;
                         break;
                     case 'pdf-list':
-                        window.location.href = urls.pdf + '?date_from=' + firstDay + '&date_to=' + lastDay;
+                        window.location.href = urls.pdf + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
                         break;
                     case 'ical':
-                        window.location.href = urls.ical + '?date_from=' + firstDay + '&date_to=' + lastDay;
+                        window.location.href = urls.ical + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
                         break;
                 }
             }

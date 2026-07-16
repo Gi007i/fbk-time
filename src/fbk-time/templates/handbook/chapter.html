@@ -7,13 +7,12 @@
 {% endblock %}
 
 {% block content %}
-<nav aria-label="Brotkrumen" class="handbook-breadcrumb">
-    <ol>
-        <li><a href="{{ url_for('handbook.index') }}">Handbuch</a></li>
-        <li>{{ current.section }}</li>
-        <li aria-current="page">{{ current.title }}</li>
-    </ol>
-</nav>
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{{ breadcrumb([
+    {'label': 'Handbuch', 'url': url_for('handbook.index')},
+    {'label': current.section},
+    {'label': current.title}
+]) }}
 
 <details class="handbook-menu">
     <summary>Kapitelübersicht</summary>

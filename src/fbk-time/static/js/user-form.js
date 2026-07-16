@@ -17,7 +17,6 @@
 
         /**
          * Toggle password field visibility based on role selection.
-         * In single-user mode, USER role creates MANAGED users (no password).
          * @returns {void}
          */
         function togglePasswordField() {

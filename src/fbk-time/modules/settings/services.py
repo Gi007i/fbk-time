@@ -51,6 +51,7 @@ def update_user_settings(
 
 
 def update_system_settings(
+    app_timezone: str,
     lockout_threshold: int,
     lockout_duration_minutes: int,
     lockout_delay_enabled: bool,
@@ -76,11 +77,15 @@ def update_system_settings(
     user_default_holiday_region: str,
     user_default_text_color: str,
     limits_max_future_months: int,
-    limits_bulk_delete_items: int
+    limits_bulk_delete_items: int,
+    backup_scheduled_enabled: bool,
+    backup_time: str,
+    backup_retention_count: int,
 ) -> None:
     """Update all system settings.
 
     Args:
+        app_timezone: IANA timezone identifier for all UTC↔local conversions.
         lockout_threshold: Failed attempts before lockout.
         lockout_duration_minutes: How long account stays locked.
         lockout_delay_enabled: Whether progressive delay is enabled.
@@ -107,18 +112,21 @@ def update_system_settings(
         user_default_text_color: Default text color for new users.
         limits_max_future_months: Max days for absences and recurring series.
         limits_bulk_delete_items: Max items allowed per bulk delete call.
+        backup_scheduled_enabled: Whether the scheduler creates automatic backups.
+        backup_time: HH:MM (local time) at which the daily backup runs.
+        backup_retention_count: Number of newest archives to keep.
     """
-    # Lockout settings
+    settings_manager.set('app_timezone', app_timezone)
+
     settings_manager.set('lockout_threshold', lockout_threshold)
     settings_manager.set('lockout_duration_minutes', lockout_duration_minutes)
     settings_manager.set('lockout_delay_enabled', lockout_delay_enabled)
-    settings_manager.set('lockout_delay_base_seconds', lockout_delay_base_seconds or 0)
-    settings_manager.set('lockout_delay_max_seconds', lockout_delay_max_seconds or 0)
+    settings_manager.set('lockout_delay_base_seconds', lockout_delay_base_seconds)
+    settings_manager.set('lockout_delay_max_seconds', lockout_delay_max_seconds)
     settings_manager.set('lockout_attempt_retention_hours', lockout_attempt_retention_hours)
     settings_manager.set('lockout_cleanup_enabled', lockout_cleanup_enabled)
-    settings_manager.set('lockout_cleanup_interval_hours', lockout_cleanup_interval_hours or 1)
+    settings_manager.set('lockout_cleanup_interval_hours', lockout_cleanup_interval_hours)
 
-    # Password policy
     settings_manager.set('password_min_length', password_min_length)
     settings_manager.set('password_max_length', password_max_length)
     settings_manager.set('password_require_uppercase', password_require_uppercase)
@@ -127,26 +135,25 @@ def update_system_settings(
     settings_manager.set('password_require_symbols', password_require_symbols)
     settings_manager.set('password_force_change_on_first_login', password_force_change_on_first_login)
 
-    # Inactive account
     settings_manager.set('inactive_account_auto_disable', inactive_account_auto_disable)
-    settings_manager.set('inactive_account_days', inactive_account_days or 90)
+    settings_manager.set('inactive_account_days', inactive_account_days)
 
-    # Registration
     settings_manager.set('self_registration_enabled', self_registration_enabled)
 
-    # Operation mode - handle mode switch
     _handle_operation_mode_change(operation_mode)
 
-    # User defaults
     settings_manager.set('user_default_theme', user_default_theme)
     settings_manager.set('user_default_date_format', user_default_date_format)
     settings_manager.set('user_default_items_per_page', user_default_items_per_page)
     settings_manager.set('user_default_holiday_region', user_default_holiday_region)
     settings_manager.set('user_default_text_color', user_default_text_color.upper())
 
-    # Limits
     settings_manager.set('limits_max_future_months', limits_max_future_months)
     settings_manager.set('limits_bulk_delete_items', limits_bulk_delete_items)
+
+    settings_manager.set('backup_scheduled_enabled', backup_scheduled_enabled)
+    settings_manager.set('backup_time', backup_time)
+    settings_manager.set('backup_retention_count', backup_retention_count)
 
     settings_manager.flush()
 

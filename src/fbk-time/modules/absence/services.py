@@ -25,7 +25,7 @@ from .validation import (
     validate_category_assignable,
     validate_date_range,
     validate_time_slot_overlap,
-    get_user_absence_dates,
+    substitute_slot_available,
     ConflictResult,
 )
 from .history import (
@@ -409,7 +409,7 @@ def modify_occurrence(
     absence: Absence,
     occurrence_date: date,
     effective_state: dict
-) -> str:
+) -> Tuple[str, list]:
     """Modify a single occurrence of a recurring absence.
 
     Validates the effective (merged) state of the occurrence against
@@ -425,7 +425,7 @@ def modify_occurrence(
             'category_id', 'time_type', 'substitute_id', 'notes'.
 
     Returns:
-        Success message.
+        Tuple of (success message, non-blocking substitute warnings).
 
     Raises:
         ValueError: If occurrence_date is invalid, was previously
@@ -480,18 +480,32 @@ def modify_occurrence(
     if not is_valid:
         raise ValueError(error)
 
+    warnings = []
     if effective_substitute_id is not None:
-        substitute_absent_dates = get_user_absence_dates(
+        if not substitute_slot_available(
             effective_substitute_id,
             occurrence_date,
-            occurrence_date,
+            is_all_day=time_type == 'all_day',
+            is_half_day_morning=time_type == 'morning',
+            is_half_day_afternoon=time_type == 'afternoon',
             exclude_absence_id=absence.id
-        )
-        if occurrence_date in substitute_absent_dates:
+        ):
             raise ValueError(
                 f'Vertretung ist am {format_date_for_user(occurrence_date)} '
                 f'selbst abwesend'
             )
+        warnings = check_absence_conflicts(
+            user_id=absence.user_id,
+            start_date=occurrence_date,
+            end_date=occurrence_date,
+            exclude_absence_id=absence.id,
+            substitute_id=effective_substitute_id,
+            time_flags={
+                'is_all_day': time_type == 'all_day',
+                'is_half_day_morning': time_type == 'morning',
+                'is_half_day_afternoon': time_type == 'afternoon',
+            }
+        ).messages
 
     effective_before = {
         'category_id': before_data.get('category_id'),
@@ -518,7 +532,7 @@ def modify_occurrence(
         absence, occurrence_date, effective_before, effective_after
     )
 
-    return f'Termin am {format_date_for_user(occurrence_date)} wurde geändert.'
+    return f'Termin am {format_date_for_user(occurrence_date)} wurde geändert.', warnings
 
 
 def time_flags_to_type(occ_data: dict) -> Literal['all_day', 'morning', 'afternoon']:
@@ -530,7 +544,7 @@ def time_flags_to_type(occ_data: dict) -> Literal['all_day', 'morning', 'afterno
     return 'all_day'
 
 
-def restore_occurrence(absence: Absence, occurrence_date: date) -> str:
+def restore_occurrence(absence: Absence, occurrence_date: date) -> Tuple[str, list]:
     """Restore a deleted or modified occurrence to its series defaults.
 
     Validates that the restored occurrence does not conflict with
@@ -542,7 +556,7 @@ def restore_occurrence(absence: Absence, occurrence_date: date) -> str:
         occurrence_date: Date of occurrence to restore.
 
     Returns:
-        Success message.
+        Tuple of (success message, non-blocking substitute warnings).
 
     Raises:
         ValueError: If no exception exists or restoration would
@@ -567,26 +581,44 @@ def restore_occurrence(absence: Absence, occurrence_date: date) -> str:
     if not is_valid:
         raise ValueError(error)
 
+    warnings = []
     if absence.substitute_id is not None:
-        substitute_absent_dates = get_user_absence_dates(
+        if not substitute_slot_available(
             absence.substitute_id,
             occurrence_date,
-            occurrence_date,
+            is_all_day=absence.is_all_day,
+            is_half_day_morning=absence.is_half_day_morning,
+            is_half_day_afternoon=absence.is_half_day_afternoon,
+            start_time=absence.start_time,
+            end_time=absence.end_time,
             exclude_absence_id=absence.id
-        )
-        if occurrence_date in substitute_absent_dates:
+        ):
             raise ValueError(
                 f'Vertretung ist am {format_date_for_user(occurrence_date)} '
                 f'selbst abwesend'
             )
+        warnings = check_absence_conflicts(
+            user_id=absence.user_id,
+            start_date=occurrence_date,
+            end_date=occurrence_date,
+            exclude_absence_id=absence.id,
+            substitute_id=absence.substitute_id,
+            time_flags={
+                'is_all_day': absence.is_all_day,
+                'is_half_day_morning': absence.is_half_day_morning,
+                'is_half_day_afternoon': absence.is_half_day_afternoon,
+                'start_time': absence.start_time,
+                'end_time': absence.end_time,
+            }
+        ).messages
 
     was_deleted = exception.exception_type == 'deleted'
     db.session.delete(exception)
     track_occurrence_restoration(absence, occurrence_date)
 
     if was_deleted:
-        return f'Termin am {format_date_for_user(occurrence_date)} wurde wiederhergestellt.'
-    return f'Termin am {format_date_for_user(occurrence_date)} wurde auf Serienwerte zurückgesetzt.'
+        return f'Termin am {format_date_for_user(occurrence_date)} wurde wiederhergestellt.', warnings
+    return f'Termin am {format_date_for_user(occurrence_date)} wurde auf Serienwerte zurückgesetzt.', warnings
 
 
 def delete_occurrence(absence: Absence, occurrence_date: date) -> str:
@@ -651,7 +683,7 @@ def get_substitute_choices(exclude_user_id: Optional[int] = None) -> list[User]:
 def get_absences_list(
     date_from: date,
     date_to: date,
-    user_id: Optional[int] = None
+    user_ids: Optional[list[int]] = None
 ) -> list[Absence]:
     """Get absences overlapping a date range for active users.
 
@@ -662,7 +694,7 @@ def get_absences_list(
     Args:
         date_from: Start date of range.
         date_to: End date of range.
-        user_id: Optional user filter.
+        user_ids: Optional person filter (any of the given IDs).
 
     Returns:
         List of absences whose master record overlaps the range.
@@ -685,23 +717,24 @@ def get_absences_list(
         )
     )
 
-    if user_id:
-        query = query.filter(Absence.user_id == user_id)
+    if user_ids:
+        query = query.filter(Absence.user_id.in_(user_ids))
 
     return query.all()
 
 
 def filter_occurrences(
     occurrences: list[dict],
-    category_id: Optional[int] = None,
+    category_ids: Optional[list[int]] = None,
     has_substitute: Optional[str] = None
 ) -> list[dict]:
     """Filter expanded occurrences by effective state.
 
     Args:
         occurrences: List of expanded occurrence dicts.
-        category_id: Optional category filter applied to the effective
-            category of each occurrence (after exception merge).
+        category_ids: Optional category filter (any of the given IDs)
+            applied to the effective category of each occurrence (after
+            exception merge).
         has_substitute: 'yes', 'no', or None. Filters by effective
             substitute presence.
 
@@ -710,8 +743,8 @@ def filter_occurrences(
     """
     result = occurrences
 
-    if category_id:
-        result = [o for o in result if o['category_id'] == category_id]
+    if category_ids:
+        result = [o for o in result if o['category_id'] in category_ids]
 
     if has_substitute == 'yes':
         result = [o for o in result if o.get('substitute_id')]
@@ -749,6 +782,22 @@ def get_absence_exception_counts(absence: Absence) -> dict:
         'deleted_count': absence.exceptions.filter_by(exception_type='deleted').count(),
         'modified_count': absence.exceptions.filter_by(exception_type='modified').count()
     }
+
+
+def get_deleted_occurrence_dates(absence: Absence) -> list[dict]:
+    """Get the dates of deleted occurrences for a recurring absence.
+
+    Args:
+        absence: Absence instance.
+
+    Returns:
+        List of dicts with a ``date`` key, ordered by exception date.
+    """
+    return [
+        {'date': exc.exception_date}
+        for exc in absence.exceptions.filter_by(exception_type='deleted')
+        .order_by(RecurrenceException.exception_date).all()
+    ]
 
 
 def get_absence_by_id(absence_id: int) -> Absence | None:

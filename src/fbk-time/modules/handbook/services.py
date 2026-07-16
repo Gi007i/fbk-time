@@ -79,7 +79,7 @@ CHAPTERS: list[dict] = [
     },
     {
         'slug': 'calendar',
-        'title': 'Kalender und Team-Übersicht',
+        'title': 'Kalender, Team-Übersicht und Liste',
         'section': 'Ansichten',
         'badge': None,
     },
@@ -106,6 +106,18 @@ CHAPTERS: list[dict] = [
         'title': 'Kategorien verwalten',
         'section': 'Verwaltung',
         'badge': 'Manager',
+    },
+    {
+        'slug': 'system-settings',
+        'title': 'Systemeinstellungen',
+        'section': 'Verwaltung',
+        'badge': 'Admin',
+    },
+    {
+        'slug': 'backup',
+        'title': 'Datensicherung',
+        'section': 'Verwaltung',
+        'badge': 'Admin',
     },
 ]
 

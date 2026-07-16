@@ -61,7 +61,7 @@ class Absence(db.Model):
 
     rrule = db.Column(db.String(500), nullable=True)  # e.g., "FREQ=WEEKLY;BYDAY=MO"
     is_recurring = db.Column(db.Boolean, default=False, nullable=False, index=True)
-    recurrence_end_date = db.Column(db.Date, nullable=True)  # Max 1 year from start_date
+    recurrence_end_date = db.Column(db.Date, nullable=True)
 
     created_at = db.Column(db.DateTime, default=_utc_now)
     updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
@@ -106,7 +106,6 @@ class Absence(db.Model):
             delta = self.end_date - self.start_date
             base_days = delta.days + 1
 
-            # Half-day subtracts 0.5 from total
             # e.g., 15.01.-17.01. afternoon = 2.5 days (3 - 0.5)
             if self.is_half_day_morning or self.is_half_day_afternoon:
                 return base_days - 0.5

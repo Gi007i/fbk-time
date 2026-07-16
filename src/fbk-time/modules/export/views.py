@@ -6,13 +6,13 @@ Provides PDF and iCal export endpoints.
 import unicodedata
 from datetime import date, timedelta
 from typing import Optional
-from urllib.parse import urlparse, urljoin
 
 from flask import Blueprint, send_file, request, redirect, url_for, abort, flash
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
-from utils.request_validators import validate_int_param, validate_date_param, validate_year_param
+from utils.navigation import is_safe_redirect_url
+from utils.request_validators import validate_int_list_param, validate_date_param, validate_year_param
 from .pdf import export_absences_pdf, export_user_absences_pdf
 from .ical import export_absences_ical
 from .matrix import export_team_matrix_pdf
@@ -20,17 +20,23 @@ from .services import (
     get_default_date_range,
     build_export_occurrences,
     build_pdf_title,
-    build_ical_name
+    build_ical_name,
+    build_filter_summary
 )
 from modules.user.services import get_user_or_404
 
 bp = Blueprint('export', __name__, url_prefix='/export')
 
 
+_MAX_EXPORT_RANGE_DAYS = 1830  # ~5 years
+
+
 def _validate_export_range(from_date: date, to_date: date) -> None:
     """Reject unreasonable export ranges (Fail-Fast)."""
     if to_date < from_date:
         abort(400, 'Invalid date range: end before start')
+    if (to_date - from_date).days > _MAX_EXPORT_RANGE_DAYS:
+        abort(400, 'Date range too large')
 
 
 def _safe_filename_segment(value: str) -> str:
@@ -94,30 +100,9 @@ def _redirect_empty_export():
     """Redirect with flash notice when an export yields zero occurrences."""
     flash('Keine Abwesenheiten im gewählten Zeitraum gefunden.', 'warning')
     referer = request.referrer
-    if _is_safe_redirect_url(referer):
+    if is_safe_redirect_url(referer):
         return redirect(referer)
     return redirect(url_for('absences.calendar'))
-
-
-def _is_safe_redirect_url(target):
-    """Validate redirect URL to prevent open redirect attacks.
-
-    Args:
-        target: URL to validate.
-
-    Returns:
-        True if URL is safe (same host), False otherwise.
-    """
-    if not target:
-        return False
-
-    ref_url = urlparse(request.host_url)
-    test_url = urlparse(urljoin(request.host_url, target))
-
-    return (
-        test_url.scheme in ('http', 'https') and
-        ref_url.netloc == test_url.netloc
-    )
 
 
 @bp.before_request
@@ -140,8 +125,8 @@ def export_pdf():
     """Export absences as PDF document with optional filters."""
     if not current_user.is_manager:
         abort(403)
-    user_id = validate_int_param('user_id', min_value=1)
-    category_id = validate_int_param('category_id', min_value=1)
+    user_ids = validate_int_list_param('user_id', min_value=1)
+    category_ids = validate_int_list_param('category_id', min_value=1)
     has_substitute = _parse_has_substitute()
     include_notes = request.args.get('include_notes', 'false') == 'true'
 
@@ -151,8 +136,8 @@ def export_pdf():
     occurrences = build_export_occurrences(
         from_date=from_date,
         to_date=to_date,
-        user_id=user_id,
-        category_id=category_id,
+        user_ids=user_ids,
+        category_ids=category_ids,
         has_substitute=has_substitute,
         order_desc=False
     )
@@ -160,7 +145,8 @@ def export_pdf():
     if not occurrences:
         return _redirect_empty_export()
 
-    title = build_pdf_title(user_id, category_id)
+    title = build_pdf_title(user_ids, category_ids)
+    filter_summary = build_filter_summary(user_ids, category_ids, has_substitute)
 
     pdf_buffer = export_absences_pdf(
         occurrences,
@@ -168,7 +154,8 @@ def export_pdf():
         include_notes=include_notes,
         date_from=from_date,
         date_to=to_date,
-        date_format=current_user.date_format
+        date_format=current_user.date_format,
+        filter_summary=filter_summary
     )
 
     filename = f'abwesenheiten_{date.today().strftime("%Y%m%d")}.pdf'
@@ -186,8 +173,8 @@ def export_ical():
     """Export absences as iCal file with optional filters."""
     if not current_user.is_manager:
         abort(403)
-    user_id = validate_int_param('user_id', min_value=1)
-    category_id = validate_int_param('category_id', min_value=1)
+    user_ids = validate_int_list_param('user_id', min_value=1)
+    category_ids = validate_int_list_param('category_id', min_value=1)
     has_substitute = _parse_has_substitute()
 
     from_date, to_date = _resolve_date_range()
@@ -196,8 +183,8 @@ def export_ical():
     occurrences = build_export_occurrences(
         from_date=from_date,
         to_date=to_date,
-        user_id=user_id,
-        category_id=category_id,
+        user_ids=user_ids,
+        category_ids=category_ids,
         has_substitute=has_substitute,
         order_desc=False
     )
@@ -205,7 +192,7 @@ def export_ical():
     if not occurrences:
         return _redirect_empty_export()
 
-    calendar_name = build_ical_name(user_id)
+    calendar_name = build_ical_name(user_ids)
     ical_buffer = export_absences_ical(occurrences, calendar_name)
 
     filename = f'abwesenheiten_{date.today().strftime("%Y%m%d")}.ics'
@@ -225,6 +212,9 @@ def export_user_pdf(user_id):
         abort(403)
     user = get_user_or_404(user_id)
 
+    category_ids = validate_int_list_param('category_id', min_value=1)
+    has_substitute = _parse_has_substitute()
+
     from_date, to_date = _resolve_date_range(default_if_empty=False)
 
     safe_name = _safe_filename_segment(user.name.lower().replace(' ', '_'))
@@ -240,7 +230,9 @@ def export_user_pdf(user_id):
         occurrences = build_export_occurrences(
             from_date=from_date,
             to_date=to_date,
-            user_id=user_id,
+            user_ids=[user_id],
+            category_ids=category_ids,
+            has_substitute=has_substitute,
             order_desc=False
         )
 
@@ -253,7 +245,12 @@ def export_user_pdf(user_id):
             include_notes=True,
             date_from=from_date,
             date_to=to_date,
-            date_format=current_user.date_format
+            date_format=current_user.date_format,
+            filter_summary=build_filter_summary(
+                category_ids=category_ids,
+                has_substitute=has_substitute,
+                include_persons=False
+            )
         )
         filename = f'abwesenheiten_{safe_name}_{date.today().strftime("%Y%m%d")}.pdf'
 
@@ -272,13 +269,18 @@ def export_user_ical(user_id):
         abort(403)
     user = get_user_or_404(user_id)
 
+    category_ids = validate_int_list_param('category_id', min_value=1)
+    has_substitute = _parse_has_substitute()
+
     from_date, to_date = _resolve_date_range()
     _validate_export_range(from_date, to_date)
 
     occurrences = build_export_occurrences(
         from_date=from_date,
         to_date=to_date,
-        user_id=user_id,
+        user_ids=[user_id],
+        category_ids=category_ids,
+        has_substitute=has_substitute,
         order_desc=False
     )
 
@@ -308,10 +310,21 @@ def export_user_matrix(user_id):
         abort(403)
     user = get_user_or_404(user_id)
 
+    category_ids = validate_int_list_param('category_id', min_value=1)
+    has_substitute = _parse_has_substitute()
+
     week_start, week_end = _resolve_matrix_range()
     _validate_export_range(week_start, week_end)
 
-    pdf_buffer = export_team_matrix_pdf(week_start, week_end, users=[user])
+    pdf_buffer = export_team_matrix_pdf(
+        week_start, week_end, users=[user],
+        category_ids=category_ids, has_substitute=has_substitute,
+        filter_summary=build_filter_summary(
+            category_ids=category_ids,
+            has_substitute=has_substitute,
+            include_persons=False
+        )
+    )
 
     safe_name = _safe_filename_segment(user.name.lower().replace(' ', '_'))
     filename = (
@@ -333,10 +346,18 @@ def export_team_matrix():
     if not current_user.is_manager:
         abort(403)
 
+    user_ids = validate_int_list_param('user_id', min_value=1)
+    category_ids = validate_int_list_param('category_id', min_value=1)
+    has_substitute = _parse_has_substitute()
+
     week_start, week_end = _resolve_matrix_range()
     _validate_export_range(week_start, week_end)
 
-    pdf_buffer = export_team_matrix_pdf(week_start, week_end)
+    pdf_buffer = export_team_matrix_pdf(
+        week_start, week_end,
+        user_ids=user_ids, category_ids=category_ids, has_substitute=has_substitute,
+        filter_summary=build_filter_summary(user_ids, category_ids, has_substitute)
+    )
 
     filename = f'team_uebersicht_{week_start.strftime("%Y%m%d")}_{week_end.strftime("%Y%m%d")}.pdf'
 

@@ -30,7 +30,6 @@ def get_default_date_range() -> tuple[date, date]:
 def build_absence_query(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    user_id: Optional[int] = None,
     user_ids: Optional[List[int]] = None
 ):
     """Build SQLAlchemy query for absences with filters.
@@ -43,8 +42,8 @@ def build_absence_query(
     Args:
         from_date: Start date filter.
         to_date: End date filter.
-        user_id: Filter by a single user ID (mutually exclusive with user_ids).
-        user_ids: Filter by a list of user IDs (mutually exclusive with user_id).
+        user_ids: Optional person filter (any of the given IDs); an empty
+            list means no person filter.
 
     Returns:
         SQLAlchemy query object.
@@ -62,10 +61,7 @@ def build_absence_query(
         Category.active == True
     )
 
-    if user_id is not None:
-        query = query.filter(Absence.user_id == user_id)
-
-    if user_ids is not None:
+    if user_ids:
         query = query.filter(Absence.user_id.in_(user_ids))
 
     if to_date is not None:
@@ -91,52 +87,104 @@ def build_absence_query(
     return query
 
 
-def build_pdf_title(user_id: Optional[int], category_id: Optional[int]) -> str:
+def build_pdf_title(
+    user_ids: Optional[List[int]], category_ids: Optional[List[int]]
+) -> str:
     """Build title for PDF export.
 
+    A person/category name is only appended when exactly one is filtered;
+    multiple selections keep the generic title to avoid an unwieldy heading.
+
     Args:
-        user_id: Optional user filter.
-        category_id: Optional category filter.
+        user_ids: Optional person filter.
+        category_ids: Optional category filter.
 
     Returns:
         Title string for PDF.
     """
     title_parts = ['Abwesenheitsübersicht']
 
-    if user_id:
-        user = db.session.get(User, user_id)
+    if user_ids and len(user_ids) == 1:
+        user = db.session.get(User, user_ids[0])
         if user:
             title_parts.append(f'- {user.name}')
 
-    if category_id:
-        category = db.session.get(Category, category_id)
+    if category_ids and len(category_ids) == 1:
+        category = db.session.get(Category, category_ids[0])
         if category:
             title_parts.append(f'({category.name})')
 
     return ' '.join(title_parts)
 
 
-def build_ical_name(user_id: Optional[int]) -> str:
+def build_ical_name(user_ids: Optional[List[int]]) -> str:
     """Build calendar name for iCal export.
 
     Args:
-        user_id: Optional user filter.
+        user_ids: Optional person filter (name shown only for a single one).
 
     Returns:
         Calendar name string.
     """
-    if user_id:
-        user = db.session.get(User, user_id)
+    if user_ids and len(user_ids) == 1:
+        user = db.session.get(User, user_ids[0])
         if user:
             return f'Abwesenheiten - {user.name}'
 
     return 'FBK-Time Abwesenheiten'
 
 
+def build_filter_summary(
+    user_ids: Optional[List[int]] = None,
+    category_ids: Optional[List[int]] = None,
+    has_substitute: Optional[str] = None,
+    include_persons: bool = True
+) -> Optional[str]:
+    """Summarise the active export filters as names for the report footer.
+
+    Args:
+        user_ids: Active person filter.
+        category_ids: Active category filter.
+        has_substitute: 'yes', 'no', or None.
+        include_persons: Omit the person filter when False (single-person
+            exports already name the person in the title).
+
+    Returns:
+        Summary string, or None when no filter is active.
+    """
+    parts = []
+
+    if include_persons and user_ids:
+        names = [
+            u.name for u in
+            User.query.filter(User.id.in_(user_ids)).order_by(User.name).all()
+        ]
+        if names:
+            parts.append('Personen: ' + ', '.join(names))
+
+    if category_ids:
+        names = [
+            c.name for c in
+            Category.query.filter(Category.id.in_(category_ids)).order_by(Category.name).all()
+        ]
+        if names:
+            parts.append('Kategorien: ' + ', '.join(names))
+
+    if has_substitute == 'yes':
+        parts.append('Vertretung: mit')
+    elif has_substitute == 'no':
+        parts.append('Vertretung: ohne')
+
+    if not parts:
+        return None
+
+    return ' · '.join(parts)
+
+
 def get_absences_for_export(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    user_id: Optional[int] = None,
+    user_ids: Optional[List[int]] = None,
     order_desc: bool = False
 ) -> list[Absence]:
     """Get filtered absences for export, ordered by start date.
@@ -144,7 +192,7 @@ def get_absences_for_export(
     Args:
         from_date: Start date filter.
         to_date: End date filter.
-        user_id: Filter by user ID.
+        user_ids: Optional person filter (any of the given IDs).
         order_desc: If True, order by start_date DESC; otherwise ASC.
 
     Returns:
@@ -153,7 +201,7 @@ def get_absences_for_export(
     query = build_absence_query(
         from_date=from_date,
         to_date=to_date,
-        user_id=user_id
+        user_ids=user_ids
     )
 
     if order_desc:
@@ -164,8 +212,8 @@ def get_absences_for_export(
 def build_export_occurrences(
     from_date: date,
     to_date: date,
-    user_id: Optional[int] = None,
-    category_id: Optional[int] = None,
+    user_ids: Optional[List[int]] = None,
+    category_ids: Optional[List[int]] = None,
     has_substitute: Optional[str] = None,
     order_desc: bool = False
 ) -> list[dict]:
@@ -178,8 +226,8 @@ def build_export_occurrences(
     Args:
         from_date: Start of the range.
         to_date: End of the range.
-        user_id: Optional user filter.
-        category_id: Optional effective-category filter.
+        user_ids: Optional person filter (any of the given IDs).
+        category_ids: Optional effective-category filter (any of the given IDs).
         has_substitute: 'yes', 'no', or None.
         order_desc: Sort descending by date when True.
 
@@ -191,7 +239,7 @@ def build_export_occurrences(
     absences = get_absences_for_export(
         from_date=from_date,
         to_date=to_date,
-        user_id=user_id
+        user_ids=user_ids
     )
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
@@ -200,7 +248,7 @@ def build_export_occurrences(
 
     occurrences = filter_occurrences(
         occurrences,
-        category_id=category_id,
+        category_ids=category_ids,
         has_substitute=has_substitute
     )
 

@@ -10,6 +10,11 @@ from typing import Optional
 from flask import request, abort
 
 
+# Cap filter lists well below the SQLite host-parameter limit so an oversized
+# request fails fast with 400 instead of a 500 raised by the IN(...) query.
+_MAX_LIST_ITEMS = 200
+
+
 def validate_int_param(
     name: str,
     default: Optional[int] = None,
@@ -53,6 +58,47 @@ def validate_int_param(
     return value
 
 
+def validate_int_list_param(
+    name: str,
+    min_value: Optional[int] = None,
+    max_value: Optional[int] = None
+) -> list:
+    """Validate a repeated integer URL parameter into a de-duplicated list.
+
+    The empty "all" option is skipped; any non-integer or out-of-range value
+    aborts 400 (no silent fallback). Example: ``?user_id=1&user_id=2``.
+
+    Args:
+        name: Parameter name in request.args.
+        min_value: Minimum allowed value (inclusive).
+        max_value: Maximum allowed value (inclusive).
+
+    Returns:
+        Validated ints in first-seen order; empty list means no filter.
+    """
+    values = request.args.getlist(name)
+    if len(values) > _MAX_LIST_ITEMS:
+        abort(400, f'Invalid {name}')
+
+    result = []
+    seen = set()
+    for value_str in values:
+        if value_str == '':
+            continue
+        try:
+            value = int(value_str)
+        except ValueError:
+            abort(400, f'Invalid {name}')
+        if min_value is not None and value < min_value:
+            abort(400, f'Invalid {name}')
+        if max_value is not None and value > max_value:
+            abort(400, f'Invalid {name}')
+        if value not in seen:
+            seen.add(value)
+            result.append(value)
+    return result
+
+
 def validate_date_param(
     name: str,
     default: Optional[date] = None,
@@ -73,7 +119,7 @@ def validate_date_param(
     """
     value_str = request.args.get(name)
 
-    if value_str is None:
+    if value_str is None or value_str == '':
         if required:
             abort(400, f'Missing required parameter: {name}')
         return default
@@ -112,7 +158,7 @@ def validate_year_param(default: Optional[int] = None) -> int:
 
     year_str = request.args.get('year')
 
-    if year_str is None:
+    if year_str is None or year_str == '':
         return default
 
     try:
@@ -143,7 +189,7 @@ def validate_month_param(default: Optional[int] = None) -> int:
 
     month_str = request.args.get('month')
 
-    if month_str is None:
+    if month_str is None or month_str == '':
         return default
 
     try:

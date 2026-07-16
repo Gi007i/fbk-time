@@ -3,12 +3,10 @@
 {% block title %}Kategorie Details - FBK-Time{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb">
-    <ul>
-        <li><a href="{{ url_for('categories.list_categories') }}">Kategorien</a></li>
-        <li>{{ category.name }}</li>
-    </ul>
-</nav>
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': category.name}]) }}
+{% endif %}
 
 <h1>Kategorie: {{ category.name }}</h1>
 
@@ -49,10 +47,10 @@
     <hr>
 
     <div class="grid">
-        <button type="button" data-href="{{ url_for('categories.edit', id=category.id) }}" class="outline">
+        <button type="button" data-href="{{ origin_url('categories.edit', id=category.id) }}" class="outline">
             Bearbeiten
         </button>
-        <button type="button" data-href="{{ url_for('categories.delete', id=category.id) }}" class="outline contrast">
+        <button type="button" data-href="{{ origin_url('categories.delete', id=category.id) }}" class="outline contrast">
             Löschen
         </button>
         <div></div>

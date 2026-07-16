@@ -32,7 +32,7 @@ class Category(db.Model):
     active = db.Column(db.Boolean, default=True, nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=_utc_now)
 
-    # Relationship - RESTRICT delete behavior handled in application
+    # RESTRICT delete behavior handled in application
     absences = db.relationship(
         'Absence',
         backref='category',

@@ -3,6 +3,11 @@
 {% block title %}Kategorie bearbeiten - FBK-Time{% endblock %}
 
 {% block content %}
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': category.name, 'url': origin_url('categories.detail', id=category.id)}, {'label': 'Bearbeiten'}]) }}
+{% endif %}
+
 <hgroup>
     <h1>Kategorie bearbeiten</h1>
     <p>
@@ -11,7 +16,7 @@
 </hgroup>
 
 <article>
-    <form method="POST" action="{{ url_for('categories.edit', id=category.id) }}" data-ajax-form>
+    <form method="POST" action="{{ origin_url('categories.edit', id=category.id) }}" data-ajax-form>
         {{ form.hidden_tag() }}
 
         <label for="name">
@@ -105,7 +110,7 @@
 
         <div class="grid">
             <button type="submit" class="outline">Änderungen speichern</button>
-            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url('categories.detail', id=category.id) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>

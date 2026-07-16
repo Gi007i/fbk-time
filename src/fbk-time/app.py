@@ -17,7 +17,8 @@ from core import (
     jinja_filters,
     session_lifecycle,
 )
-from core.cleanup import schedule_cleanup
+from core.backup import backup_manager, start_auto_discovery
+from core.scheduler import start_scheduler
 from core.extensions import csrf, db, login_manager
 from core.licenses import ensure_licenses_current
 from core.settings_manager import settings_manager
@@ -51,17 +52,13 @@ def create_app(config_class=None, cli_mode=False):
     if not cli_mode:
         _register_blueprints(application)
 
+    backup_manager.init_app(application)
+
     with application.app_context():
         _initialize_database()
         settings_manager.load_all()
-        # seed_defaults is idempotent: it inserts only template keys
-        # that do not yet exist in the database. Running it on every
-        # boot keeps fresh installs and upgraded installs in sync with
-        # settings-template.json without requiring a separate migration.
+        # Idempotent — inserts missing template keys on every boot, no migration needed.
         settings_manager.seed_defaults()
-
-        if not cli_mode and settings_manager.get('lockout_cleanup_enabled'):
-            schedule_cleanup(application)
 
     if not cli_mode:
         ensure_licenses_current()
@@ -77,6 +74,7 @@ def _register_blueprints(application):
     """Import and register all module blueprints."""
     from modules.absence.views import bp as absence_bp
     from modules.auth.views import bp as auth_bp
+    from modules.backup.views import bp as backup_bp
     from modules.category.views import bp as category_bp
     from modules.css.views import bp as css_bp
     from modules.dashboard.views import bp as dashboard_bp
@@ -90,16 +88,17 @@ def _register_blueprints(application):
     for blueprint in (
         auth_bp, user_bp, category_bp, absence_bp, dashboard_bp,
         export_bp, settings_bp, css_bp, licenses_bp, profile_bp, handbook_bp,
+        backup_bp,
     ):
         application.register_blueprint(blueprint)
 
 
 def _initialize_database():
     """Import all models and create the schema."""
-    # Models must be imported before create_all so SQLAlchemy registers
-    # every table on the metadata.
+    # All models must be imported before create_all so SQLAlchemy registers their tables.
     from modules.absence.models import Absence, AbsenceHistory, RecurrenceException  # noqa: F401
     from modules.auth.models import LoginAttempt, User  # noqa: F401
+    from modules.backup.models import BackupRecord  # noqa: F401
     from modules.category.models import Category  # noqa: F401
     from modules.settings.models import Setting  # noqa: F401
 
@@ -110,4 +109,6 @@ app = create_app()
 
 
 if __name__ == '__main__':
+    start_scheduler(app)
+    start_auto_discovery(app)
     app.run(debug=False, host=Config.HOST, port=Config.PORT)

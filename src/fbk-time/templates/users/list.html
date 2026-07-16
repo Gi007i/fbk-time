@@ -5,7 +5,7 @@
 {% block content %}
 <div class="grid page-header">
     <h1>Mitarbeitende</h1>
-    <nav><ul><li><a href="{{ url_for('users.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav><ul><li><a href="{{ origin_url('users.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
 <details id="filter-panel">
@@ -80,7 +80,7 @@
                 {% if current_user.is_admin or current_user.id == user.id %}
                 <tr>
                     <th>Letzter Login</th>
-                    <td>{{ user.last_login|format_date(include_time=True) if user.last_login else '-' }}</td>
+                    <td>{{ user.previous_login_at|format_date(include_time=True) if user.previous_login_at else '-' }}</td>
                 </tr>
                 {% endif %}
                 {% if current_user.is_admin and user.status != UserStatus.MANAGED and failed_attempts.get(user.username, 0) > 0 %}
@@ -93,7 +93,7 @@
                     <td colspan="2">
                         <div class="grid">
                             {% if current_user.is_admin or user.role == UserRole.USER %}
-                            <a href="{{ url_for('users.edit', id=user.id) }}" role="button" class="outline secondary">Bearbeiten</a>
+                            <a href="{{ origin_url('users.edit', id=user.id) }}" role="button" class="outline secondary">Bearbeiten</a>
                             {% else %}
                             <div></div>
                             {% endif %}
@@ -102,32 +102,32 @@
                             <button type="button"
                                     class="outline contrast"
                                     data-action="toggle"
-                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                    data-url="{{ origin_url('users.toggle_status', id=user.id) }}">
                                 Deaktivieren
                             </button>
                             {% elif user.status == UserStatus.DISABLED and (current_user.is_admin or user.role == UserRole.USER) %}
                             <button type="button"
                                     class="outline"
                                     data-action="toggle"
-                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                    data-url="{{ origin_url('users.toggle_status', id=user.id) }}">
                                 Aktivieren
                             </button>
                             {% elif user.status == UserStatus.LOCKED and current_user.is_admin %}
                             <button type="button"
                                     class="outline"
                                     data-action="toggle"
-                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                    data-url="{{ origin_url('users.toggle_status', id=user.id) }}">
                                 Entsperren
                             </button>
                             {% elif user.status == UserStatus.PENDING and current_user.is_admin %}
                             <button type="button"
                                     class="outline"
                                     data-action="toggle"
-                                    data-url="{{ url_for('users.toggle_status', id=user.id) }}">
+                                    data-url="{{ origin_url('users.toggle_status', id=user.id) }}">
                                 Aktivieren
                             </button>
                             {% elif user.status == UserStatus.MANAGED and current_user.is_admin %}
-                            <a href="{{ url_for('users.edit', id=user.id, activate_login=1) }}"
+                            <a href="{{ origin_url('users.edit', id=user.id, activate_login=1) }}"
                                role="button"
                                class="outline">
                                 Login aktivieren
@@ -137,7 +137,7 @@
                             <button type="button"
                                     class="outline contrast"
                                     data-action="delete"
-                                    data-url="{{ url_for('users.delete', id=user.id) }}"
+                                    data-url="{{ origin_url('users.delete', id=user.id) }}"
                                     data-confirm="Benutzer wirklich löschen? Alle Abwesenheiten werden ebenfalls gelöscht!">
                                 Löschen
                             </button>

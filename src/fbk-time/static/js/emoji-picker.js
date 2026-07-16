@@ -107,7 +107,6 @@
         hidePicker(picker);
     }
 
-    // Initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', initEmojiPickers);
     } else {

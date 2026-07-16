@@ -42,8 +42,8 @@
                 <tr>
                     <th scope="row">Letzter Login</th>
                     <td>
-                        {% if profile.last_login %}
-                        {{ profile.last_login|format_date(include_time=True) }}
+                        {% if profile.previous_login_at %}
+                        {{ profile.previous_login_at|format_date(include_time=True) }}
                         {% else %}
                         &mdash;
                         {% endif %}

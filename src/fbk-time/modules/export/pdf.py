@@ -6,7 +6,7 @@ Provides PDF export functionality for absences and reports.
 from datetime import datetime, date
 from io import BytesIO
 from typing import List, Optional
-from zoneinfo import ZoneInfo
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -14,6 +14,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Flowable, PageBreak
 
+from core.timezone import get_app_timezone
 from utils.helpers import format_date_for_user
 
 
@@ -51,7 +52,8 @@ def export_absences_pdf(
     include_notes: bool = False,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
-    date_format: str = 'DD.MM.YYYY'
+    date_format: str = 'DD.MM.YYYY',
+    filter_summary: Optional[str] = None
 ) -> BytesIO:
     """Export pre-expanded occurrences to PDF document.
 
@@ -66,6 +68,7 @@ def export_absences_pdf(
         date_from: Start date (for header display only).
         date_to: End date (for header display only).
         date_format: Date display format ('DD.MM.YYYY' or 'YYYY-MM-DD').
+        filter_summary: Active filter description shown in the footer.
 
     Returns:
         BytesIO buffer containing PDF data.
@@ -96,9 +99,9 @@ def export_absences_pdf(
 
     elements = []
 
-    elements.append(Paragraph(title, title_style))
+    elements.append(Paragraph(escape(title), title_style))
     elements.append(Paragraph(
-        f'Erstellt am {format_date_for_user(datetime.now(ZoneInfo("Europe/Berlin")), include_time=True)}',
+        f'Erstellt am {format_date_for_user(datetime.now(get_app_timezone()), include_time=True)}',
         subtitle_style
     ))
     if date_from and date_to:
@@ -224,6 +227,13 @@ def export_absences_pdf(
             styles['Normal']
         ))
 
+    if filter_summary:
+        elements.append(Spacer(1, 3 * mm))
+        elements.append(Paragraph(
+            f'<b>Gefiltert nach:</b> {escape(filter_summary)}',
+            subtitle_style
+        ))
+
     doc.build(elements)
     buffer.seek(0)
     return buffer
@@ -255,7 +265,7 @@ def export_user_absences_pdf(
     occurrences = build_export_occurrences(
         from_date=date_from,
         to_date=date_to,
-        user_id=user.id
+        user_ids=[user.id]
     )
 
     return export_absences_pdf(

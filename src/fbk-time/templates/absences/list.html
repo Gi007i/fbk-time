@@ -1,59 +1,15 @@
 {% extends "base.html" %}
+{% from "components/filters.html" import render as filter_panel %}
 
 {% block title %}Abwesenheiten - FBK-Time{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Liste</h1>
-    <nav><ul><li><a href="{{ url_for('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
-<details id="filter-panel">
-    <summary><strong>Filter</strong></summary>
-    <form method="GET">
-        <fieldset class="grid">
-            <label>
-                Von
-                <input type="date" name="date_from" value="{{ filters.date_from }}">
-            </label>
-            <label>
-                Bis
-                <input type="date" name="date_to" value="{{ filters.date_to }}">
-            </label>
-            <label>
-                Person
-                <select name="user_id">
-                    <option value="">Alle</option>
-                    {% for u in users %}
-                    <option value="{{ u.id }}" {% if filters.user_id == u.id %}selected{% endif %}>{{ u.name }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Kategorie
-                <select name="category_id">
-                    <option value="">Alle</option>
-                    {% for c in categories %}
-                    <option value="{{ c.id }}" {% if filters.category_id == c.id %}selected{% endif %}>{{ c.name }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>
-                Vertretung
-                <select name="has_substitute">
-                    <option value="">Alle</option>
-                    <option value="yes" {% if filters.has_substitute == 'yes' %}selected{% endif %}>Mit Vertretung</option>
-                    <option value="no" {% if filters.has_substitute == 'no' %}selected{% endif %}>Ohne Vertretung</option>
-                </select>
-            </label>
-        </fieldset>
-        <div class="grid">
-            <button type="submit" class="outline">Filtern</button>
-            <button type="button" data-href="{{ url_for('absences.list_absences') }}" class="outline secondary">Zurücksetzen</button>
-            <div></div>
-        </div>
-    </form>
-</details>
+{{ filter_panel(filters, users, categories, url_for('absences.list_absences'), with_date_range=True) }}
 
 <nav class="bulk-actions-bar hidden">
     <ul>
@@ -65,7 +21,7 @@
 
 {% if occurrences %}
 <figure>
-    <table class="striped">
+    <table class="striped list-cards">
         <thead>
             <tr>
                 <th><input type="checkbox" id="select-all"></th>
@@ -82,13 +38,13 @@
         </thead>
         <tbody>
             {% for occ in occurrences %}
-            <tr data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
+            <tr data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}">
                 <td>
                     <input type="checkbox" data-bulk-item
                            value="{{ occ.absence.id }}{% if occ.is_recurring %}:{{ occ.date.isoformat() }}{% endif %}">
                 </td>
-                <td><strong>{{ occ.user.name }}</strong></td>
-                <td class="list-mobile-col">{{ occ.category.name }} ({{ 'A' if occ.category.is_present else 'X' }})</td>
+                <td class="list-name"><span>{{ occ.user.name }}</span></td>
+                <td class="list-mobile-col" data-label="Kategorie">{{ occ.category.name }} ({{ 'A' if occ.category.is_present else 'X' }})</td>
                 <td class="list-desktop-col">
                     <span class="category-badge category-{{ occ.category.id }}">
                         {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
@@ -101,7 +57,7 @@
                     <span class="text-negative">X</span>
                     {% endif %}
                 </td>
-                <td>{{ occ.date|format_date }}</td>
+                <td data-label="Datum">{{ occ.date|format_date }}</td>
                 <td class="list-desktop-col">
                     {% if occ.is_half_day_morning %}
                     Vormittag
@@ -121,9 +77,9 @@
                 </td>
                 <td class="list-desktop-col">
                     {% if occ.is_recurring %}
-                    <a href="{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}" role="button" class="outline">Details</a>
+                    <a href="{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}" role="button" class="outline">Details</a>
                     {% else %}
-                    <a href="{{ url_for('absences.detail', id=occ.absence.id) }}" role="button" class="outline">Details</a>
+                    <a href="{{ origin_url('absences.detail', id=occ.absence.id) }}" role="button" class="outline">Details</a>
                     {% endif %}
                 </td>
             </tr>
@@ -137,7 +93,7 @@
 {% if pagination.total_pages > 1 %}
 <nav class="pagination" aria-label="Seitennavigation">
     {% if pagination.has_prev %}
-    <a href="{{ url_for('absences.list_absences', page=pagination.page-1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_id, category_id=filters.category_id, has_substitute=filters.has_substitute) }}">&laquo; Zurück</a>
+    <a href="{{ url_for('absences.list_absences', page=pagination.page-1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_ids, category_id=filters.category_ids, has_substitute=filters.has_substitute) }}">&laquo; Zurück</a>
     {% else %}
     <span>&laquo; Zurück</span>
     {% endif %}
@@ -146,14 +102,14 @@
         {% if p == pagination.page %}
         <span class="current">{{ p }}</span>
         {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
-        <a href="{{ url_for('absences.list_absences', page=p, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_id, category_id=filters.category_id, has_substitute=filters.has_substitute) }}">{{ p }}</a>
+        <a href="{{ url_for('absences.list_absences', page=p, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_ids, category_id=filters.category_ids, has_substitute=filters.has_substitute) }}">{{ p }}</a>
         {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
         <span>...</span>
         {% endif %}
     {% endfor %}
 
     {% if pagination.has_next %}
-    <a href="{{ url_for('absences.list_absences', page=pagination.page+1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_id, category_id=filters.category_id, has_substitute=filters.has_substitute) }}">Weiter &raquo;</a>
+    <a href="{{ url_for('absences.list_absences', page=pagination.page+1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_ids, category_id=filters.category_ids, has_substitute=filters.has_substitute) }}">Weiter &raquo;</a>
     {% else %}
     <span>Weiter &raquo;</span>
     {% endif %}
@@ -191,16 +147,16 @@
      data-url-ical="{{ url_for('export.export_user_ical', user_id=current_user.id) }}"
      data-url-matrix="{{ url_for('export.export_user_matrix', user_id=current_user.id) }}"
      {% endif %}
-     {% if filters.user_id %}data-user-id="{{ filters.user_id }}"{% endif %}
-     {% if filters.category_id %}data-category-id="{{ filters.category_id }}"{% endif %}
+     {% if filters.user_ids %}data-user-ids="{{ filters.user_ids|join(',') }}"{% endif %}
+     {% if filters.category_ids %}data-category-ids="{{ filters.category_ids|join(',') }}"{% endif %}
      {% if filters.has_substitute %}data-has-substitute="{{ filters.has_substitute }}"{% endif %}>
 </div>
 {% endif %}
 
 <nav aria-label="Abwesenheits-Ansichten">
     <div role="group">
-        <a href="{{ url_for('dashboard.team_overview') }}" role="button" class="outline">Team</a>
-        <a href="{{ url_for('absences.calendar') }}" role="button" class="outline">Kalender</a>
+        <a href="{{ view_switch_url('dashboard.team_overview', date_from=filters.date_from, date_to=filters.date_to) }}" role="button" class="outline">Team</a>
+        <a href="{{ view_switch_url('absences.calendar', date_from=filters.date_from, date_to=filters.date_to) }}" role="button" class="outline">Kalender</a>
         <a href="{{ url_for('absences.list_absences') }}" role="button" aria-current="page">Liste</a>
     </div>
 </nav>

@@ -6,6 +6,7 @@ Uses smart caching: only regenerates when requirements.txt changes.
 
 import json
 import logging
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -109,8 +110,12 @@ def generate_licenses() -> bool:
 
         licenses_data.sort(key=lambda x: x.get('Name', '').lower())
 
-        with open(licenses_path, 'w', encoding='utf-8') as f:
+        # Write then rename so concurrent Gunicorn workers regenerating at
+        # startup never observe a half-written file.
+        tmp_path = Path(f'{licenses_path}.tmp')
+        with open(tmp_path, 'w', encoding='utf-8') as f:
             json.dump(licenses_data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, licenses_path)
 
         logger.info("Generated licenses.json with %d packages", len(licenses_data))
         return True

@@ -1,0 +1,85 @@
+{% macro render(filters, users, categories, reset_url, with_date_range=False, hidden={}) %}
+<details id="filter-panel">
+    <summary><strong>Filter</strong></summary>
+    <form method="GET">
+        {% for key, value in hidden.items() %}
+        <input type="hidden" name="{{ key }}" value="{{ value }}">
+        {% endfor %}
+        <fieldset class="grid">
+            {% if with_date_range %}
+            <div>
+                <label for="filter-date-from">Von</label>
+                <input type="date" id="filter-date-from" name="date_from" value="{{ filters.date_from or '' }}">
+            </div>
+            <div>
+                <label for="filter-date-to">Bis</label>
+                <input type="date" id="filter-date-to" name="date_to" value="{{ filters.date_to or '' }}">
+            </div>
+            {% endif %}
+            <div>
+                <label>Person</label>
+                <details class="dropdown">
+                    <summary>{% if filters.user_ids %}{{ filters.user_ids|length }} ausgewählt{% else %}Alle{% endif %}</summary>
+                    <ul>
+                        {% for user in users %}
+                        <li>
+                            <label>
+                                <input type="checkbox" name="user_id" value="{{ user.id }}" {% if user.id in filters.user_ids %}checked{% endif %}>
+                                {{ user.name }}
+                            </label>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            </div>
+            <div>
+                <label>Kategorie</label>
+                <details class="dropdown">
+                    <summary>{% if filters.category_ids %}{{ filters.category_ids|length }} ausgewählt{% else %}Alle{% endif %}</summary>
+                    <ul>
+                        {% for category in categories %}
+                        <li>
+                            <label>
+                                <input type="checkbox" name="category_id" value="{{ category.id }}" {% if category.id in filters.category_ids %}checked{% endif %}>
+                                {{ category.name }}
+                            </label>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </details>
+            </div>
+            <div>
+                <label>Vertretung</label>
+                <details class="dropdown">
+                    <summary>{% if filters.has_substitute == 'yes' %}Mit Vertretung{% elif filters.has_substitute == 'no' %}Ohne Vertretung{% else %}Alle{% endif %}</summary>
+                    <ul>
+                        <li>
+                            <label>
+                                <input type="radio" name="has_substitute" value="" {% if filters.has_substitute != 'yes' and filters.has_substitute != 'no' %}checked{% endif %}>
+                                Alle
+                            </label>
+                        </li>
+                        <li>
+                            <label>
+                                <input type="radio" name="has_substitute" value="yes" {% if filters.has_substitute == 'yes' %}checked{% endif %}>
+                                Mit Vertretung
+                            </label>
+                        </li>
+                        <li>
+                            <label>
+                                <input type="radio" name="has_substitute" value="no" {% if filters.has_substitute == 'no' %}checked{% endif %}>
+                                Ohne Vertretung
+                            </label>
+                        </li>
+                    </ul>
+                </details>
+            </div>
+        </fieldset>
+        <div class="grid">
+            <button type="submit" class="outline">Filtern</button>
+            <button type="button" data-href="{{ reset_url }}" class="outline secondary">Zurücksetzen</button>
+            <div></div>
+        </div>
+    </form>
+</details>
+{% endmacro %}

@@ -7,7 +7,7 @@ from calendar import monthrange
 from datetime import datetime, date, timedelta
 from io import BytesIO
 from typing import List, Optional
-from zoneinfo import ZoneInfo
+from xml.sax.saxutils import escape
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4, landscape
@@ -15,10 +15,12 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
 
+from core.timezone import get_app_timezone
 from modules.auth.models import User, UserRole, UserStatus
 from modules.category.models import Category
 from modules.holidays.services import get_holidays_for_month
 from modules.absence.recurrence import recurrence_service
+from modules.absence.services import filter_occurrences
 from utils.helpers import format_date_for_user
 from .pdf import HalfDayCell
 from .services import build_absence_query
@@ -29,6 +31,23 @@ MONTH_NAMES = [
     'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
 ]
 WEEKDAY_NAMES = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
+
+
+def _hex_to_color(hex_str: str) -> colors.Color:
+    """Convert a ``#RRGGBB`` hex string to a ReportLab Color.
+
+    Args:
+        hex_str: Color string with or without a leading ``#``.
+
+    Returns:
+        Equivalent ``colors.Color`` instance.
+    """
+    hex_value = hex_str.lstrip('#')
+    return colors.Color(
+        int(hex_value[0:2], 16) / 255.0,
+        int(hex_value[2:4], 16) / 255.0,
+        int(hex_value[4:6], 16) / 255.0
+    )
 
 
 def _split_into_months(range_start, range_end):
@@ -86,7 +105,7 @@ def _build_matrix_page(
     elements.append(Paragraph(title_text, title_style))
     if is_first_page:
         elements.append(Paragraph(
-            f'Erstellt am {format_date_for_user(datetime.now(ZoneInfo("Europe/Berlin")), include_time=True)}',
+            f'Erstellt am {format_date_for_user(datetime.now(get_app_timezone()), include_time=True)}',
             subtitle_style
         ))
     elements.append(Spacer(1, 5 * mm))
@@ -116,19 +135,9 @@ def _build_matrix_page(
             if occ:
                 category = occ['category']
                 if occ.get('is_combined_half_day'):
-                    hex_m = category.color.lstrip('#')
-                    color_m = colors.Color(
-                        int(hex_m[0:2], 16) / 255.0,
-                        int(hex_m[2:4], 16) / 255.0,
-                        int(hex_m[4:6], 16) / 255.0
-                    )
+                    color_m = _hex_to_color(category.color)
                     cat_a = occ['category_afternoon']
-                    hex_a = cat_a.color.lstrip('#')
-                    color_a = colors.Color(
-                        int(hex_a[0:2], 16) / 255.0,
-                        int(hex_a[2:4], 16) / 255.0,
-                        int(hex_a[4:6], 16) / 255.0
-                    )
+                    color_a = _hex_to_color(cat_a.color)
                     half_day_cell = HalfDayCell(
                         day_width, cell_height, color_m,
                         color_afternoon=color_a
@@ -137,11 +146,7 @@ def _build_matrix_page(
                     row_idx = len(data)
                     half_day_cells.add((row_idx, day_idx + 1))
                 elif occ['is_half_day_morning'] or occ['is_half_day_afternoon']:
-                    hex_color = category.color.lstrip('#')
-                    r = int(hex_color[0:2], 16) / 255.0
-                    g = int(hex_color[2:4], 16) / 255.0
-                    b = int(hex_color[4:6], 16) / 255.0
-                    cell_color = colors.Color(r, g, b)
+                    cell_color = _hex_to_color(category.color)
                     half_day_cell = HalfDayCell(
                         day_width, cell_height, cell_color,
                         is_morning=occ['is_half_day_morning']
@@ -203,19 +208,11 @@ def _build_matrix_page(
                 if (row_idx, col) in half_day_cells:
                     continue
                 category = occ['category']
-                hex_color = category.color.lstrip('#')
-                r = int(hex_color[0:2], 16) / 255.0
-                g = int(hex_color[2:4], 16) / 255.0
-                b = int(hex_color[4:6], 16) / 255.0
                 style_commands.append(
-                    ('BACKGROUND', (col, row_idx), (col, row_idx), colors.Color(r, g, b))
+                    ('BACKGROUND', (col, row_idx), (col, row_idx), _hex_to_color(category.color))
                 )
-                text_hex = category.text_color.lstrip('#')
-                tr = int(text_hex[0:2], 16) / 255.0
-                tg = int(text_hex[2:4], 16) / 255.0
-                tb = int(text_hex[4:6], 16) / 255.0
                 style_commands.append(
-                    ('TEXTCOLOR', (col, row_idx), (col, row_idx), colors.Color(tr, tg, tb))
+                    ('TEXTCOLOR', (col, row_idx), (col, row_idx), _hex_to_color(category.text_color))
                 )
 
     table.setStyle(TableStyle(style_commands))
@@ -251,16 +248,8 @@ def _build_legend(elements, styles):
     ]
 
     for idx, cat in enumerate(categories, start=1):
-        hex_color = cat.color.lstrip('#')
-        r = int(hex_color[0:2], 16) / 255.0
-        g = int(hex_color[2:4], 16) / 255.0
-        b = int(hex_color[4:6], 16) / 255.0
-        legend_styles.append(('BACKGROUND', (idx, 0), (idx, 0), colors.Color(r, g, b)))
-        text_hex = cat.text_color.lstrip('#')
-        tr = int(text_hex[0:2], 16) / 255.0
-        tg = int(text_hex[2:4], 16) / 255.0
-        tb = int(text_hex[4:6], 16) / 255.0
-        legend_styles.append(('TEXTCOLOR', (idx, 0), (idx, 0), colors.Color(tr, tg, tb)))
+        legend_styles.append(('BACKGROUND', (idx, 0), (idx, 0), _hex_to_color(cat.color)))
+        legend_styles.append(('TEXTCOLOR', (idx, 0), (idx, 0), _hex_to_color(cat.text_color)))
 
     holiday_col = len(categories) + 1
     legend_styles.append(('BACKGROUND', (holiday_col, 0), (holiday_col, 0), colors.HexColor('#FEF3C7')))
@@ -281,7 +270,11 @@ def _build_legend(elements, styles):
 def export_team_matrix_pdf(
     week_start: date,
     week_end: date,
-    users: Optional[List[User]] = None
+    users: Optional[List[User]] = None,
+    user_ids: Optional[List[int]] = None,
+    category_ids: Optional[List[int]] = None,
+    has_substitute: Optional[str] = None,
+    filter_summary: Optional[str] = None
 ) -> BytesIO:
     """Export team overview matrix (users × days) as PDF.
 
@@ -292,6 +285,11 @@ def export_team_matrix_pdf(
         week_start: Start date of the range.
         week_end: End date of the range.
         users: Optional list of users. If None, gets all active.
+        user_ids: Optional person filter (any of the given IDs; applied only
+            when ``users`` is None).
+        category_ids: Optional category filter on the occurrence level.
+        has_substitute: Optional 'yes'/'no' substitute filter.
+        filter_summary: Active filter description shown in the footer.
 
     Returns:
         BytesIO buffer containing PDF data.
@@ -324,10 +322,13 @@ def export_team_matrix_pdf(
     elements = []
 
     if users is None:
-        users = User.query.filter(
+        user_query = User.query.filter(
             User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED]),
             User.role == UserRole.USER
-        ).order_by(User.name).all()
+        )
+        if user_ids:
+            user_query = user_query.filter(User.id.in_(user_ids))
+        users = user_query.order_by(User.name).all()
 
     if not users:
         elements.append(Paragraph('Keine Mitarbeitenden gefunden.', styles['Normal']))
@@ -357,6 +358,9 @@ def export_team_matrix_pdf(
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
         absences, week_start, week_end
+    )
+    occurrences = filter_occurrences(
+        occurrences, category_ids=category_ids, has_substitute=has_substitute
     )
 
     matrix = {}
@@ -413,6 +417,13 @@ def export_team_matrix_pdf(
         f'Gesamt: {len(users)} Personen, {len(occurrences)} Termine ({present_count} Anwesenheit(en), {absent_count} Abwesenheit(en))',
         styles['Normal']
     ))
+
+    if filter_summary:
+        elements.append(Spacer(1, 3 * mm))
+        elements.append(Paragraph(
+            f'<b>Gefiltert nach:</b> {escape(filter_summary)}',
+            subtitle_style
+        ))
 
     doc.build(elements)
     buffer.seek(0)

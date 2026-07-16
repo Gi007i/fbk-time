@@ -3,12 +3,10 @@
 {% block title %}Benutzer Details - FBK-Time{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb">
-    <ul>
-        <li><a href="{{ url_for('users.list_users') }}">Mitarbeitende</a></li>
-        <li>{{ user.name }}</li>
-    </ul>
-</nav>
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': user.name}]) }}
+{% endif %}
 
 <h1>Benutzer: {{ user.name }}</h1>
 
@@ -46,7 +44,7 @@
 
         {% if current_user.is_admin or current_user.id == user.id %}
         <dt><strong>Letzter Login</strong></dt>
-        <dd>{{ user.last_login|format_date(include_time=True) if user.last_login else 'Noch nie' }}</dd>
+        <dd>{{ user.previous_login_at|format_date(include_time=True) if user.previous_login_at else 'Noch nie' }}</dd>
         {% endif %}
 
         <dt><strong>Abwesenheiten</strong></dt>
@@ -56,14 +54,14 @@
     <hr>
 
     <div class="grid">
-        <button type="button" data-href="{{ url_for('users.edit', id=user.id) }}" class="outline">
+        <button type="button" data-href="{{ origin_url('users.edit', id=user.id) }}" class="outline">
             Bearbeiten
         </button>
         {% if current_user.is_admin and user.id != current_user.id %}
         <button type="button"
                 class="outline contrast"
                 data-action="delete"
-                data-url="{{ url_for('users.delete', id=user.id) }}"
+                data-url="{{ origin_url('users.delete', id=user.id) }}"
                 data-confirm="Benutzer '{{ user.name }}' wirklich löschen? Alle Abwesenheiten werden ebenfalls gelöscht.">
             Löschen
         </button>

@@ -3,12 +3,10 @@
 {% block title %}Abwesenheit Details - FBK-Time{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb">
-    <ul>
-        <li><a href="{{ origin.url }}">{{ origin.label }}</a></li>
-        <li>Details</li>
-    </ul>
-</nav>
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': 'Details'}]) }}
+{% endif %}
 
 <h1>Abwesenheit Details</h1>
 
@@ -95,7 +93,7 @@
                     {% for occ in occurrences %}
                     <tr>
                         <td>
-                            <a href="{{ url_for('absences.occurrence_detail', id=absence.id, date_str=occ.date.strftime('%Y-%m-%d')) }}">
+                            <a href="{{ origin_url('absences.occurrence_detail', id=absence.id, date_str=occ.date.strftime('%Y-%m-%d')) }}">
                                 {{ occ.date|format_date }}
                             </a>
                         </td>
@@ -134,7 +132,7 @@
                             <button type="button"
                                     class="outline secondary"
                                     data-action="delete"
-                                    data-url="{{ url_for('absences.occurrence_restore', id=absence.id, date_str=occ.date.strftime('%Y-%m-%d')) }}"
+                                    data-url="{{ origin_url('absences.occurrence_restore', id=absence.id, date_str=occ.date.strftime('%Y-%m-%d')) }}"
                                     data-confirm="Termin am {{ occ.date|format_date }} wiederherstellen?"
                                     data-confirm-label="Wiederherstellen">
                                 Wiederherstellen
@@ -151,13 +149,13 @@
     <hr>
 
     <div class="grid">
-        <button type="button" data-href="{{ url_for('absences.edit', id=absence.id) }}" class="outline">
+        <button type="button" data-href="{{ origin_url('absences.edit', id=absence.id) }}" class="outline">
             {% if absence.is_recurring %}Serie bearbeiten{% else %}Bearbeiten{% endif %}
         </button>
         <button type="button"
                 class="outline contrast"
                 data-action="delete"
-                data-url="{{ url_for('absences.delete', id=absence.id) }}"
+                data-url="{{ origin_url('absences.delete', id=absence.id) }}"
                 data-confirm="{% if absence.is_recurring %}Diese Serie und alle Termine wirklich löschen?{% else %}Diese Abwesenheit wirklich löschen?{% endif %}">
             {% if absence.is_recurring %}Serie löschen{% else %}Löschen{% endif %}
         </button>

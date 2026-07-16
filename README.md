@@ -18,6 +18,7 @@ Ein webbasiertes Abwesenheitsmanagement mit rollenbasierter Zugriffskontrolle (R
 - **Team-Kalender** - Monatsbasierte Übersicht mit deutscher Feiertags-Integration (alle 16 Bundesländer)
 - **Team-Matrix** - Übersicht aller Benutzer-Abwesenheiten auf einen Blick
 - **PDF & iCal Export** - Reports mit visuellen Halbtags-Indikatoren
+- **Datensicherung** - Manuelle und geplante Backups (Datenbank, `settings.json`, `.env`) mit Integritätsprüfung und CLI-gestützter Wiederherstellung
 
 ## Anforderungen
 
@@ -127,6 +128,21 @@ python cli/manage_user.py list-users                          # Alle User auflis
 
 # Für weitere Optionen:
 python cli/manage_user.py --help
+```
+
+**Datensicherung über CLI:**
+
+Manuelle Sicherungen, Verifikation und Wiederherstellung der Datenbank inklusive `settings.json` und `.env`. Geplante Sicherungen werden in den Systemeinstellungen aktiviert.
+
+```bash
+python cli/backup.py list                                     # Alle Backups anzeigen
+python cli/backup.py create --description "Vor Update"        # Backup erstellen
+python cli/backup.py verify --all                             # Integrität aller Backups prüfen
+python cli/backup.py cleanup                                  # Alte Backups gemäß Aufbewahrung entfernen
+python cli/backup.py restore <ID>                             # Datenbank wiederherstellen (Dienst muss gestoppt sein)
+
+# Für weitere Optionen:
+python cli/backup.py --help
 ```
 
 ## Konfiguration

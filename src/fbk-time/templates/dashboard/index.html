@@ -11,11 +11,26 @@
         {% if today_holiday %}<mark>{{ today_holiday }}</mark>{% endif %}
     </summary>
 
-    <p><strong class="text-negative">Abwesend ({{ today_absent|length }})</strong></p>
+    {% if today_absent or today_present %}
+    <div class="grid dashboard-filter">
+        <div class="search-wrapper">
+            <input type="search" id="today-search" placeholder="Name suchen…" aria-label="Mitarbeitende suchen">
+            <span class="search-clear" aria-label="Suche löschen">&#x2715;</span>
+        </div>
+        <select id="today-category" aria-label="Nach Kategorie filtern">
+            <option value="">Alle Kategorien</option>
+            {% for category in today_categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    {% endif %}
+
+    <p><strong class="text-negative">Abwesend (<span id="today-absent-count">{{ today_absent|length }}</span>)</strong></p>
     {% if today_absent %}
-    <ul>
+    <ul id="today-absent-list">
         {% for occ in today_absent %}
-        <li data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
+        <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
             <span class="category-badge category-{{ occ.category.id }}">
                 {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
             </span>
@@ -33,15 +48,16 @@
         </li>
         {% endfor %}
     </ul>
+    <p id="today-absent-empty" class="hidden"><small>Keine Treffer</small></p>
     {% else %}
     <p><small>Niemand abwesend</small></p>
     {% endif %}
 
-    <p><strong class="text-positive">Anwesend ({{ today_present|length }})</strong></p>
+    <p><strong class="text-positive">Anwesend (<span id="today-present-count">{{ today_present|length }}</span>)</strong></p>
     {% if today_present %}
-    <ul>
+    <ul id="today-present-list">
         {% for occ in today_present %}
-        <li data-href="{% if occ.is_recurring %}{{ url_for('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=occ.absence.id) }}{% endif %}">
+        <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
             <span class="category-badge category-{{ occ.category.id }}">
                 {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
             </span>
@@ -56,67 +72,89 @@
         </li>
         {% endfor %}
     </ul>
+    <p id="today-present-empty" class="hidden"><small>Keine Treffer</small></p>
     {% else %}
     <p><small>Niemand anwesend</small></p>
     {% endif %}
 </details>
 
-<details open>
+<details>
     <summary>
         <strong>Diese Woche</strong> <small>{{ week_start|format_date(short=True) }} - {{ week_end|format_date(short=True) }}</small>
     </summary>
-    {% if week_occurrences %}
-    <figure>
-        <table>
-            <thead>
-                <tr>
-                    <th>Datum</th>
-                    <th>Name</th>
-                    <th>Kategorie</th>
-                    <th>Typ</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for occ in week_occurrences %}
-                <tr>
-                    <td>{{ occ.date|format_date(short=True) }}</td>
-                    <td><strong>{{ occ.user.name }}</strong></td>
-                    <td>{{ occ.category.name }}</td>
-                    <td>{{ 'A' if occ.category.is_present else 'X' }}</td>
-                </tr>
+    {% if week_days %}
+    <div class="grid dashboard-filter">
+        <div class="search-wrapper">
+            <input type="search" id="week-search" placeholder="Name suchen…" aria-label="Mitarbeitende suchen">
+            <span class="search-clear" aria-label="Suche löschen">&#x2715;</span>
+        </div>
+        <select id="week-day" aria-label="Nach Wochentag filtern">
+            <option value="">Alle Tage</option>
+            {% for day in week_days %}
+            <option value="{{ day.date.isoformat() }}">{{ weekday_names[day.weekday] }}, {{ day.date|format_date(short=True) }}</option>
+            {% endfor %}
+        </select>
+        <select id="week-category" aria-label="Nach Kategorie filtern">
+            <option value="">Alle Kategorien</option>
+            {% for category in week_categories %}
+            <option value="{{ category.id }}">{{ category.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    {% for day in week_days %}
+    <article class="week-day-group" data-date="{{ day.date.isoformat() }}">
+        <strong>{{ weekday_names[day.weekday] }}, {{ day.date|format_date(short=True) }}</strong> <small>(<span class="week-group-count">{{ day.entries|length }}</span>)</small>
+        {% if day.absent %}
+        <div class="week-status-group">
+            <p><strong class="text-negative">Abwesend (<span class="status-count">{{ day.absent|length }}</span>)</strong></p>
+            <ul>
+                {% for occ in day.absent %}
+                <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
+                    <span class="category-badge category-{{ occ.category.id }}">
+                        {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
+                    </span>
+                    <strong>{{ occ.user.name }}</strong>
+                    {% if occ.is_half_day_morning %}
+                    <small>(Vormittag)</small>
+                    {% elif occ.is_half_day_afternoon %}
+                    <small>(Nachmittag)</small>
+                    {% elif occ.start_time and occ.end_time %}
+                    <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
+                    {% endif %}
+                    {% if occ.substitute %}
+                    <small>Vertretung: {{ occ.substitute.name }}</small>
+                    {% endif %}
+                </li>
                 {% endfor %}
-            </tbody>
-        </table>
-    </figure>
-    <small><strong>A</strong> = Anwesend | <strong>X</strong> = Abwesend</small>
-
-    {% if pagination.total_pages > 1 %}
-    <nav class="pagination" aria-label="Seitennavigation">
-        {% if pagination.has_prev %}
-        <a href="{{ url_for('dashboard.index', page=pagination.page-1) }}">&laquo; Zurück</a>
-        {% else %}
-        <span>&laquo; Zurück</span>
+            </ul>
+        </div>
         {% endif %}
-
-        {% for p in range(1, pagination.total_pages + 1) %}
-            {% if p == pagination.page %}
-            <span class="current">{{ p }}</span>
-            {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
-            <a href="{{ url_for('dashboard.index', page=p) }}">{{ p }}</a>
-            {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
-            <span>...</span>
-            {% endif %}
-        {% endfor %}
-
-        {% if pagination.has_next %}
-        <a href="{{ url_for('dashboard.index', page=pagination.page+1) }}">Weiter &raquo;</a>
-        {% else %}
-        <span>Weiter &raquo;</span>
+        {% if day.present %}
+        <div class="week-status-group">
+            <p><strong class="text-positive">Anwesend (<span class="status-count">{{ day.present|length }}</span>)</strong></p>
+            <ul>
+                {% for occ in day.present %}
+                <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
+                    <span class="category-badge category-{{ occ.category.id }}">
+                        {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
+                    </span>
+                    <strong>{{ occ.user.name }}</strong>
+                    {% if occ.is_half_day_morning %}
+                    <small>(Vormittag)</small>
+                    {% elif occ.is_half_day_afternoon %}
+                    <small>(Nachmittag)</small>
+                    {% elif occ.start_time and occ.end_time %}
+                    <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
+                    {% endif %}
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
         {% endif %}
-    </nav>
-
-    <p class="center"><small>Seite {{ pagination.page }} von {{ pagination.total_pages }} ({{ pagination.total }} Einträge gesamt)</small></p>
-    {% endif %}
+    </article>
+    {% endfor %}
+    <p id="week-no-results" class="hidden"><small>Keine Treffer</small></p>
     {% else %}
     <p><small>Keine Einträge diese Woche</small></p>
     {% endif %}
@@ -147,7 +185,7 @@
                             {% endif %}
                         </small>
                     </td>
-                    <td><a href="{{ url_for('absences.edit', id=warning.absence_id) }}">Bearbeiten</a></td>
+                    <td><a href="{{ origin_url('absences.edit', id=warning.absence_id) }}">Bearbeiten</a></td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -157,4 +195,8 @@
     <p><small class="text-positive">Keine Konflikte gefunden</small></p>
     {% endif %}
 </details>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard-filters.js') }}"></script>
 {% endblock %}

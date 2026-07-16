@@ -2,7 +2,17 @@
 
 from typing import Any, Optional
 
-from flask import jsonify
+from flask import jsonify, request
+
+
+def is_ajax_request() -> bool:
+    """Check if the current request is an AJAX request.
+
+    Returns:
+        True if the request carries the ``X-Requested-With: XMLHttpRequest``
+        header.
+    """
+    return request.headers.get('X-Requested-With') == 'XMLHttpRequest'
 
 
 def ajax_response(

@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.6.0] - 2026-07-16
+
+### Added
+- Automatische Abmeldung bei Inaktivität mit Countdown in der Kopfzeile, Vorwarnung vor Ablauf und Verlängern-Möglichkeit
+- Datensicherung per Web-GUI (Admin) und `cli/backup.py`: sichern, prüfen, wiederherstellen
+- Geplante tägliche Datensicherung mit Aufbewahrung, Verzeichnis-Sync und Sicherheits-Snapshot vor der Wiederherstellung
+- Wählbare Anwendungs-Zeitzone (Admin)
+- Dashboard „Heute" und „Diese Woche": Filter nach Name und Kategorie
+- Team-Übersicht: Filter nach Person, Kategorie und Vertretung
+- Mehrfachauswahl bei den Filtern für Person und Kategorie in Kalender, Team-Übersicht und Liste (auch in den Exporten wirksam)
+- PDF-Export weist die angewendeten Filter im Fußbereich aus
+- Upgrade-Skript für v1.5.x → v1.6.0
+
+### Changed
+- „Letzter Login" zeigt die vorherige statt der aktuellen Sitzung
+- Wartungsaufgaben über einen gemeinsamen Scheduler; Einstellungen wirken ohne Neustart
+- Fehlende Pflichtfelder in `settings.json` (z. B. `runtime_path`) brechen den Start jetzt mit klarer Fehlermeldung ab
+- Login-Felder in der Datenbank umbenannt und ergänzt (Upgrade-Skript übernimmt die Anpassung)
+- Dashboard „Diese Woche": nach Wochentag gruppiert und eingeklappt
+- Filter (Person, Kategorie, Vertretung) bleiben beim Blättern erhalten und werden samt Zeitausschnitt beim Wechsel zwischen Kalender, Team-Übersicht und Liste übernommen
+- Exporte (PDF, iCal, Matrix) übernehmen in allen Ansichten die aktiven Filter
+- Einheitliche Breadcrumbs mit Rücksprung zur Herkunft auf Detail-, Bearbeiten- und Erstellen-Seiten
+- Lange Namen in Team-Übersicht und Liste einzeilig gekürzt, vollständiger Name als Tooltip
+- Listenansicht auf schmalen Bildschirmen als Karten statt Tabelle
+
+### Fixed
+- „Datenbank gesperrt" unter Last: Absturz beim Start und Fehler bei gleichzeitigen Schreibzugriffen im Betrieb behoben
+- Tooltips wurden am Bildschirmrand abgeschnitten; sie bleiben jetzt vollständig im Bild und brechen sauber um
+- Vertretungsprüfung berücksichtigt jetzt Halbtage: Vor- und Nachmittag werden getrennt bewertet, sodass eine halbtägige Abwesenheit keine falschen Vertretungskonflikte für die andere Tageshälfte mehr meldet oder blockiert
+- Beim Bearbeiten oder Zurücksetzen einzelner Serientermine wird nun ebenfalls gewarnt, wenn die Vertretung am selben Tag bereits eine andere Person vertritt
+- „Abmelden" konnte je nach Umständen mit „Method Not Allowed" (Fehler 405) fehlschlagen; die Abmeldung erfolgt jetzt zuverlässig über ein CSRF-geschütztes Formular ohne JavaScript-Abhängigkeit
+
+### Removed
+- Seitenweise Blätterung der Dashboard-Wochenansicht
+
+### Security
+- Passwortänderung und Passwort-Reset invalidieren alle bestehenden Sitzungen und „Angemeldet bleiben"-Cookies des betroffenen Kontos
+- Reaktivierung eines gesperrten oder verwalteten Kontos invalidiert dessen bestehende Sitzungen und „Angemeldet bleiben"-Cookies
+- Sitzungen werden zusätzlich an IP und Browser des Geräts gebunden, sodass ein entwendetes Sitzungs-Cookie auf einem anderen Gerät abgewiesen wird
+- Anzeigenamen dürfen keine Steuer- oder Textrichtungs-Zeichen mehr enthalten (Schutz vor Anzeige-Manipulation in Listen, Kalender und Exporten)
+
 ## [1.5.0] - 2026-05-04
 
 ### Added

@@ -13,7 +13,10 @@ upgrades/
 │   │   └── sqlite3        ← Statisch kompiliert, SQLite 3.49.1
 │   └── linux-aarch64/
 │       └── sqlite3        ← Statisch kompiliert, SQLite 3.49.1
-└── v1.4.0/
+├── v1.4.0/
+│   ├── upgrade.py
+│   └── README.md
+└── v1.6.0/
     ├── upgrade.py
     └── README.md
 ```
@@ -26,7 +29,7 @@ Für ein Upgrade werden nur drei Teile benötigt:
 
 - `sqlite_runner.py` (gemeinsames Modul)
 - `bin/` (gebündelte SQLite-Binaries)
-- Der **Versionsordner** des Ziel-Releases (z. B. `v1.4.0/`)
+- Der **Versionsordner** des Ziel-Releases (z. B. `v1.x.x/`)
 
 Ältere oder andere Versionsordner werden nicht benötigt und müssen
 nicht mit kopiert werden.
@@ -35,7 +38,7 @@ nicht mit kopiert werden.
 # Nur die benötigten Dateien kopieren
 scp upgrades/sqlite_runner.py user@server:/var/www/fbk-time/upgrades/
 scp -r upgrades/bin/ user@server:/var/www/fbk-time/upgrades/bin/
-scp -r upgrades/v1.4.0/ user@server:/var/www/fbk-time/upgrades/v1.4.0/
+scp -r upgrades/v1.x.x/ user@server:/var/www/fbk-time/upgrades/v1.x.x/
 ```
 
 Die resultierende Struktur auf dem Server:
@@ -85,7 +88,7 @@ chmod +x /var/www/fbk-time/upgrades/bin/linux-aarch64/sqlite3
 systemctl stop fbk-time
 
 # Upgrade starten
-cd /var/www/fbk-time/upgrades/v1.4.0
+cd /var/www/fbk-time/upgrades/v1.x.x
 python3 upgrade.py upgrade --app-path /var/www/fbk-time
 
 # Anwendung starten

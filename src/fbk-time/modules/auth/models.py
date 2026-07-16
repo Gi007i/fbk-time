@@ -7,6 +7,7 @@ import enum
 from datetime import datetime, timezone
 
 from flask_login import UserMixin
+from sqlalchemy.orm import validates
 
 from core.extensions import db
 
@@ -45,35 +46,30 @@ class User(UserMixin, db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
 
-    # Authentication
     username = db.Column(db.String(80), unique=True, nullable=False, index=True)
     password_hash = db.Column(db.String(255), nullable=False)
 
-    # Profile fields
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=True, index=True)
 
-    # RBAC
     role = db.Column(db.Enum(UserRole), default=UserRole.USER, nullable=False)
     status = db.Column(db.Enum(UserStatus), default=UserStatus.ACTIVE, nullable=False)
 
-    # Security
-    last_login = db.Column(db.DateTime, nullable=True)
+    last_login_at = db.Column(db.DateTime, nullable=True)
+    previous_login_at = db.Column(db.DateTime, nullable=True)
     force_password_change = db.Column(db.Boolean, default=False, nullable=False)
     has_real_password = db.Column(db.Boolean, default=True, nullable=False)
+    credential_version = db.Column(db.Integer, default=0, nullable=False)
 
-    # Timestamps
     created_at = db.Column(db.DateTime, default=_utc_now, nullable=False)
     updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now, nullable=False)
 
-    # User Settings (values set from settings_manager on user creation)
     theme = db.Column(db.String(20), nullable=False)
     date_format = db.Column(db.String(20), nullable=False)
     items_per_page = db.Column(db.Integer, nullable=False)
     holiday_region = db.Column(db.String(50), nullable=False)
     default_text_color = db.Column(db.String(7), nullable=False)
 
-    # Relationships
     absences = db.relationship(
         'Absence',
         foreign_keys='Absence.user_id',
@@ -85,6 +81,30 @@ class User(UserMixin, db.Model):
 
     def __repr__(self):
         return f'<User {self.username} ({self.role.value})>'
+
+    def get_id(self):
+        """Return the session identity, versioned by credential_version.
+
+        Sessions and remember-me cookies persist this value; bumping
+        credential_version on a password change or account reactivation
+        invalidates all of them.
+        """
+        return f'{self.id}:{self.credential_version}'
+
+    @validates('status')
+    def _bump_credential_version_on_reactivation(self, key, new_status):
+        """Bump credential_version on any non-ACTIVE -> ACTIVE transition.
+
+        Without it, a session/remember-me cookie issued before deactivation
+        would revive on reactivation. Central hook so every path (service,
+        view, CLI) is covered.
+        """
+        previous = self.status
+        if (previous is not None
+                and previous != UserStatus.ACTIVE
+                and new_status == UserStatus.ACTIVE):
+            self.credential_version = (self.credential_version or 0) + 1
+        return new_status
 
     @property
     def is_admin(self):

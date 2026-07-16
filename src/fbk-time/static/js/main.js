@@ -6,11 +6,54 @@
 (function() {
     'use strict';
 
+    // Desktop breakpoint for responsive view switching (mobile-first).
+    var MOBILE_BREAKPOINT = 768;
+
+    /**
+     * Check if the viewport is mobile width.
+     * @returns {boolean} True if the viewport is narrower than the breakpoint.
+     */
+    function isMobile() {
+        return window.innerWidth < MOBILE_BREAKPOINT;
+    }
+
+    /**
+     * Normalise a multi-value id source into an array of non-empty strings.
+     * @param {(string|Array|undefined)} value - Array or comma-separated ids.
+     * @returns {Array} Trimmed, non-empty id strings.
+     */
+    function toIdList(value) {
+        if (!value) return [];
+        var raw = Array.isArray(value) ? value : String(value).split(',');
+        return raw
+            .map(function(v) { return String(v).trim(); })
+            .filter(function(v) { return v !== ''; });
+    }
+
+    /**
+     * Build the subject filter query fragment for exports.
+     * @param {Object} source - Object or element dataset exposing userIds and
+     *   categoryIds (array or comma-separated) and hasSubstitute.
+     * @returns {string} Fragment ('&user_id=...'), empty when unfiltered.
+     */
+    function buildFilterQuery(source) {
+        var src = source || {};
+        var params = [];
+        toIdList(src.userIds).forEach(function(id) {
+            params.push('user_id=' + encodeURIComponent(id));
+        });
+        toIdList(src.categoryIds).forEach(function(id) {
+            params.push('category_id=' + encodeURIComponent(id));
+        });
+        if (src.hasSubstitute) params.push('has_substitute=' + encodeURIComponent(src.hasSubstitute));
+        return params.length ? '&' + params.join('&') : '';
+    }
+
     /**
      * Escape HTML special characters to prevent XSS.
      * Uses textContent trick recommended by OWASP.
      * @param {string} text - String to escape.
-     * @returns {string} Escaped string safe for innerHTML.
+     * @returns {string} Escaped for HTML text context; use escapeAttr for attribute values.
      */
     function escapeHtml(text) {
         if (typeof text !== 'string') return '';
@@ -70,7 +113,6 @@
         });
     }
 
-    // Confirmation dialog state
     var confirmDialog = null;
     var confirmMessageEl = null;
     var confirmCallback = null;
@@ -179,9 +221,18 @@
             });
         })
         .then(function(result) {
+            if (result.status === 401 && result.data && result.data.redirect) {
+                window.location.href = result.data.redirect;
+                return;
+            }
             if (result.ok && result.data.success) {
                 if (result.data.message) {
                     Toast.store(result.data.message, 'success');
+                }
+                if (result.data.warnings && result.data.warnings.length > 0) {
+                    result.data.warnings.forEach(function(warning) {
+                        Toast.store(warning, 'warning');
+                    });
                 }
                 if (result.data.redirect) {
                     location.href = result.data.redirect;
@@ -353,6 +404,54 @@
     }
 
     /**
+     * Reflect each filter dropdown's current selection in its summary text:
+     * "Alle", the single chosen label, or a count.
+     */
+    function initFilterSummaries() {
+        var panel = document.getElementById('filter-panel');
+        if (!panel) return;
+
+        function labelTextOf(input) {
+            var label = input.closest('label');
+            return label ? label.textContent.trim() : '';
+        }
+
+        function refresh(dropdown) {
+            var summary = dropdown.querySelector('summary');
+            if (!summary) return;
+
+            var radios = dropdown.querySelectorAll('input[type="radio"]');
+            if (radios.length) {
+                var selected = null;
+                Array.prototype.forEach.call(radios, function(r) {
+                    if (r.checked) selected = r;
+                });
+                summary.textContent = (selected && selected.value) ? labelTextOf(selected) : 'Alle';
+                return;
+            }
+
+            var checked = [];
+            Array.prototype.forEach.call(dropdown.querySelectorAll('input[type="checkbox"]'), function(c) {
+                if (c.checked) checked.push(c);
+            });
+            if (checked.length === 0) {
+                summary.textContent = 'Alle';
+            } else if (checked.length === 1) {
+                summary.textContent = labelTextOf(checked[0]);
+            } else {
+                summary.textContent = checked.length + ' ausgewählt';
+            }
+        }
+
+        Array.prototype.forEach.call(panel.querySelectorAll('details.dropdown'), function(dropdown) {
+            refresh(dropdown);
+            dropdown.addEventListener('change', function() {
+                refresh(dropdown);
+            });
+        });
+    }
+
+    /**
      * Initialize AJAX form submission for forms with data-ajax-form attribute.
      */
     function initAjaxForms() {
@@ -383,6 +482,11 @@
                 });
             })
             .then(function(result) {
+                if (result.status === 401 && result.data && result.data.redirect) {
+                    window.location.href = result.data.redirect;
+                    return;
+                }
+
                 if (submitBtn) {
                     setButtonBusy(submitBtn, false);
                 }
@@ -396,7 +500,6 @@
                         }
                     }
 
-                    // Display warnings from backend (non-blocking)
                     if (result.data.warnings && result.data.warnings.length > 0) {
                         result.data.warnings.forEach(function(warning) {
                             if (result.data.redirect) {
@@ -447,37 +550,17 @@
         initFormConfirmations();
         initTableSorting();
         initFilterPanelState();
+        initFilterSummaries();
     }
 
     /**
-     * Handle logout link via POST request with CSRF token.
-     */
-    document.addEventListener('click', function(event) {
-        var logoutLink = event.target.closest('[data-logout]');
-        if (!logoutLink) return;
-        event.preventDefault();
-
-        var form = document.createElement('form');
-        form.method = 'POST';
-        form.action = logoutLink.href;
-
-        var csrfInput = document.createElement('input');
-        csrfInput.type = 'hidden';
-        csrfInput.name = 'csrf_token';
-        csrfInput.value = getCSRFToken();
-        form.appendChild(csrfInput);
-
-        document.body.appendChild(form);
-        form.submit();
-    });
-
-    /**
      * Handle navigation buttons via event delegation.
-     * Supports data-back (history.back) and data-href (internal navigation).
-     * Also supports clickable table rows with data-href.
+     * Supports data-href (internal navigation) and half-day cell navigation
+     * via data-href-morning/data-href-afternoon. Also supports clickable
+     * table rows with data-href.
      */
     document.addEventListener('click', function(event) {
-        var target = event.target.closest('[data-back], [data-href], [data-href-morning]');
+        var target = event.target.closest('[data-href], [data-href-morning]');
         if (!target) return;
 
         var clickedInteractive = event.target.closest('a, button, [type="checkbox"]');
@@ -489,9 +572,7 @@
             event.preventDefault();
         }
 
-        if (target.hasAttribute('data-back')) {
-            history.back();
-        } else if (target.hasAttribute('data-href-morning')) {
+        if (target.hasAttribute('data-href-morning')) {
             var rect = target.getBoundingClientRect();
             var isAfternoon = (event.clientX - rect.left) > (rect.width / 2);
             var href = isAfternoon ? target.dataset.hrefAfternoon : target.dataset.hrefMorning;
@@ -615,8 +696,10 @@
         return year >= currentYear - 50 && year <= currentYear + 50;
     }
 
-    // Export utility functions to global scope
     window.FBKTime = window.FBKTime || {};
+    window.FBKTime.MOBILE_BREAKPOINT = MOBILE_BREAKPOINT;
+    window.FBKTime.isMobile = isMobile;
+    window.FBKTime.buildFilterQuery = buildFilterQuery;
     window.FBKTime.escapeHtml = escapeHtml;
     window.FBKTime.escapeAttr = escapeAttr;
     window.FBKTime.getCSRFToken = getCSRFToken;

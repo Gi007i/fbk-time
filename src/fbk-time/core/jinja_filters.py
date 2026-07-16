@@ -8,6 +8,8 @@ imports of model/extension code at app-creation time.
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from core.timezone import get_app_timezone
+
 
 def register(application) -> None:
     """Register all template filters on the application."""
@@ -38,10 +40,9 @@ def register(application) -> None:
             return ''
 
         if isinstance(value, datetime):
-            local_tz = ZoneInfo('Europe/Berlin')
             if value.tzinfo is None:
                 value = value.replace(tzinfo=ZoneInfo('UTC'))
-            value = value.astimezone(local_tz)
+            value = value.astimezone(get_app_timezone())
 
         if current_user.is_authenticated:
             date_format = current_user.date_format

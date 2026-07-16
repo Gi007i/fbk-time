@@ -7,8 +7,7 @@ from flask import Blueprint, render_template, redirect, url_for, request
 from flask_login import login_required, current_user
 
 from utils.decorators import login_required_api, admin_required
-from utils.session_navigation import is_ajax_request
-from utils.response_helpers import ajax_response, api_success, api_error
+from utils.response_helpers import ajax_response, api_success, api_error, is_ajax_request
 from .forms import SettingsForm, AdminSettingsForm
 from .services import (
     get_date_format_choices,
@@ -86,14 +85,15 @@ def system_settings():
 
     if form.validate_on_submit():
         update_system_settings(
+            app_timezone=form.app_timezone.data,
             lockout_threshold=form.lockout_threshold.data,
             lockout_duration_minutes=form.lockout_duration_minutes.data,
             lockout_delay_enabled=form.lockout_delay_enabled.data,
-            lockout_delay_base_seconds=form.lockout_delay_base_seconds.data or 0,
-            lockout_delay_max_seconds=form.lockout_delay_max_seconds.data or 0,
+            lockout_delay_base_seconds=form.lockout_delay_base_seconds.data,
+            lockout_delay_max_seconds=form.lockout_delay_max_seconds.data,
             lockout_attempt_retention_hours=form.lockout_attempt_retention_hours.data,
             lockout_cleanup_enabled=form.lockout_cleanup_enabled.data,
-            lockout_cleanup_interval_hours=form.lockout_cleanup_interval_hours.data or 1,
+            lockout_cleanup_interval_hours=form.lockout_cleanup_interval_hours.data,
             password_min_length=form.password_min_length.data,
             password_max_length=form.password_max_length.data,
             password_require_uppercase=form.password_require_uppercase.data,
@@ -102,7 +102,7 @@ def system_settings():
             password_require_symbols=form.password_require_symbols.data,
             password_force_change_on_first_login=form.password_force_change_on_first_login.data,
             inactive_account_auto_disable=form.inactive_account_auto_disable.data,
-            inactive_account_days=form.inactive_account_days.data or 90,
+            inactive_account_days=form.inactive_account_days.data,
             self_registration_enabled=form.self_registration_enabled.data,
             operation_mode=form.operation_mode.data,
             user_default_theme=form.user_default_theme.data,
@@ -111,7 +111,10 @@ def system_settings():
             user_default_holiday_region=form.user_default_holiday_region.data,
             user_default_text_color=form.user_default_text_color.data,
             limits_max_future_months=form.limits_max_future_months.data,
-            limits_bulk_delete_items=form.limits_bulk_delete_items.data
+            limits_bulk_delete_items=form.limits_bulk_delete_items.data,
+            backup_scheduled_enabled=form.backup_scheduled_enabled.data,
+            backup_time=form.backup_time.data,
+            backup_retention_count=form.backup_retention_count.data,
         )
 
         if is_ajax_request():
@@ -123,6 +126,8 @@ def system_settings():
         return redirect(url_for('settings.system_settings'))
 
     if request.method == 'GET':
+        form.app_timezone.data = settings_manager.get('app_timezone')
+
         form.lockout_threshold.data = settings_manager.get('lockout_threshold')
         form.lockout_duration_minutes.data = settings_manager.get('lockout_duration_minutes')
         form.lockout_delay_enabled.data = settings_manager.get('lockout_delay_enabled')
@@ -156,6 +161,10 @@ def system_settings():
         form.limits_max_future_months.data = settings_manager.get('limits_max_future_months')
         form.limits_bulk_delete_items.data = settings_manager.get('limits_bulk_delete_items')
 
+        form.backup_scheduled_enabled.data = settings_manager.get('backup_scheduled_enabled')
+        form.backup_time.data = settings_manager.get('backup_time')
+        form.backup_retention_count.data = settings_manager.get('backup_retention_count')
+
     if request.method == 'POST' and is_ajax_request():
         errors = {field.name: field.errors[0] for field in form if field.errors}
         first_error = next(iter(errors.values()), 'Validierungsfehler')
@@ -168,8 +177,8 @@ def system_settings():
 @login_required_api
 def api_set_theme():
     """API endpoint to set theme (for JavaScript theme switcher)."""
-    data = request.get_json()
-    if not data:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
         return api_error('No data provided')
 
     theme = data.get('theme', 'light')

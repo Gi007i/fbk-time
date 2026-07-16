@@ -1,0 +1,15 @@
+{% macro render(items) %}
+<nav aria-label="breadcrumb">
+    <ul>
+        {% for item in items %}
+        {% if loop.last %}
+        <li aria-current="page">{{ item.label }}</li>
+        {% elif item.url %}
+        <li><a href="{{ item.url }}">{{ item.label }}</a></li>
+        {% else %}
+        <li>{{ item.label }}</li>
+        {% endif %}
+        {% endfor %}
+    </ul>
+</nav>
+{% endmacro %}

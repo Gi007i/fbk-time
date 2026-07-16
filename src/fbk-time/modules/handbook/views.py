@@ -7,7 +7,6 @@ under ``templates/handbook/content/`` and are included at render time.
 from flask import Blueprint, abort, redirect, render_template, url_for
 from flask_login import login_required
 
-from utils.session_navigation import save_return_url
 from .services import (
     find_chapter,
     get_adjacent_chapters,
@@ -47,7 +46,6 @@ def chapter(slug):
 
     previous_chapter, next_chapter = get_adjacent_chapters(slug)
 
-    save_return_url('Handbuch')
     return render_template(
         'handbook/chapter.html',
         sections=get_chapters_by_section(),

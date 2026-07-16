@@ -3,13 +3,10 @@
 {% block title %}Termin Details - FBK-Time{% endblock %}
 
 {% block content %}
-<nav aria-label="breadcrumb">
-    <ul>
-        <li><a href="{{ origin.url }}">{{ origin.label }}</a></li>
-        <li><a href="{{ url_for('absences.detail', id=absence.id) }}">Serie</a></li>
-        <li>Termin</li>
-    </ul>
-</nav>
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': 'Serie', 'url': origin_url('absences.detail', id=absence.id)}, {'label': 'Termin'}]) }}
+{% endif %}
 
 <hgroup>
     <h1>Termin Details</h1>
@@ -58,34 +55,34 @@
 
         <dt><strong>Serie</strong></dt>
         <dd>
-            🔁 <a href="{{ url_for('absences.detail', id=absence.id) }}">Zur Serien-Übersicht</a>
+            🔁 <a href="{{ origin_url('absences.detail', id=absence.id) }}">Zur Serien-Übersicht</a>
         </dd>
     </dl>
 
     <hr>
 
     <div class="grid">
-        <button type="button" data-href="{{ url_for('absences.occurrence_edit', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" class="outline">
+        <button type="button" data-href="{{ origin_url('absences.occurrence_edit', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" class="outline">
             Termin bearbeiten
         </button>
         {% if occurrence.is_exception %}
         <button type="button"
                 class="outline secondary"
                 data-action="delete"
-                data-url="{{ url_for('absences.occurrence_restore', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
+                data-url="{{ origin_url('absences.occurrence_restore', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
                 data-confirm="Serienelement wiederherstellen?"
                 data-confirm-label="Zurücksetzen">
             Zurücksetzen
         </button>
         {% else %}
-        <button type="button" data-href="{{ url_for('absences.edit', id=absence.id) }}" class="outline secondary">
+        <button type="button" data-href="{{ origin_url('absences.edit', id=absence.id) }}" class="outline secondary">
             Serie bearbeiten
         </button>
         {% endif %}
         <button type="button"
                 class="outline contrast"
                 data-action="delete"
-                data-url="{{ url_for('absences.occurrence_delete', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
+                data-url="{{ origin_url('absences.occurrence_delete', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
                 data-confirm="Diesen Termin aus der Serie entfernen?">
             Termin löschen
         </button>

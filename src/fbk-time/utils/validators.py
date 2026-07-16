@@ -119,6 +119,46 @@ class EmailFormat:
             raise ValidationError(self.message)
 
 
+# Codepoint ranges rejected in display text: C0/C1 control characters
+# (0x00-0x1f, 0x7f-0x9f, includes newlines) and Unicode bidirectional
+# overrides (U+202A-202E, U+2066-2069) that enable display spoofing.
+_UNSAFE_CODEPOINT_RANGES = (
+    (0x00, 0x1f),
+    (0x7f, 0x9f),
+    (0x202a, 0x202e),
+    (0x2066, 0x2069),
+)
+
+
+def _has_unsafe_char(text: str) -> bool:
+    """Return True if text holds a control or bidi-override character."""
+    return any(
+        lo <= ord(ch) <= hi
+        for ch in text
+        for lo, hi in _UNSAFE_CODEPOINT_RANGES
+    )
+
+
+class SafeText:
+    """WTForms validator rejecting control and bidi-override characters.
+
+    Keeps a value safe across every output channel it reaches (iCal, PDF,
+    HTML, filename) without restricting legitimate letters, marks, spaces
+    or punctuation.
+
+    Args:
+        message: Error message on validation failure.
+    """
+
+    def __init__(self, message: str = 'Der Eintrag enthält ungültige Zeichen.'):
+        self.message = message
+
+    def __call__(self, form, field):
+        """Validate field is free of control and bidi-override characters."""
+        if field.data and _has_unsafe_char(field.data):
+            raise ValidationError(self.message)
+
+
 def validate_password_strength(password: str) -> tuple[bool, Optional[str]]:
     """Convenience function for password validation.
 

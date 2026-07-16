@@ -3,15 +3,15 @@
 Provides login, logout, and registration routes with security protections.
 """
 
-from urllib.parse import urlparse, urljoin
-
 from argon2.exceptions import VerifyMismatchError, InvalidHashError
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, jsonify
 from flask_login import login_required, current_user, login_user
 
 from core.extensions import db
 from core.settings_manager import settings_manager
-from utils.session_navigation import is_ajax_request, get_return_url
+from utils.decorators import login_required_api
+from utils.navigation import is_safe_redirect_url
+from utils.response_helpers import is_ajax_request
 from .forms import LoginForm, RegistrationForm, ChangePasswordForm
 from .models import UserRole
 from .services import (
@@ -21,6 +21,7 @@ from .services import (
     is_login_throttled,
     record_failed_attempt,
     clear_failed_attempts,
+    clear_failed_ip_attempts,
     is_ip_throttled,
     record_failed_ip_attempt,
     hash_password,
@@ -53,9 +54,14 @@ def check_force_password_change():
         current_version = settings_manager.get('user_session_version')
         if session_version is None or session_version != current_version:
             logout_user_session()
-            if request.endpoint not in ('auth.login', 'auth.logout', 'auth.register'):
-                return redirect(url_for('auth.login'))
-            return None
+            if request.endpoint in ('auth.login', 'auth.logout', 'auth.register'):
+                return None
+            if '/api/' in request.path or is_ajax_request():
+                return jsonify({
+                    'error': 'Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.',
+                    'redirect': url_for('auth.login'),
+                }), 401
+            return redirect(url_for('auth.login'))
 
     if not current_user.force_password_change:
         return None
@@ -64,33 +70,11 @@ def check_force_password_change():
     if request.endpoint in allowed_endpoints:
         return None
 
-    # Return JSON for API and AJAX requests
     if '/api/' in request.path or is_ajax_request():
         from utils.response_helpers import api_error
         return api_error('Passwortänderung erforderlich.', status_code=403)
 
     return redirect(url_for('auth.change_password'))
-
-
-def is_safe_redirect_url(target):
-    """Validate redirect URL to prevent open redirect attacks.
-
-    Args:
-        target: URL to validate.
-
-    Returns:
-        True if URL is safe (same host), False otherwise.
-    """
-    if not target:
-        return False
-
-    ref_url = urlparse(request.host_url)
-    test_url = urlparse(urljoin(request.host_url, target))
-
-    return (
-        test_url.scheme in ('http', 'https') and
-        ref_url.netloc == test_url.netloc
-    )
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -127,6 +111,7 @@ def login():
 
         if user:
             clear_failed_attempts(username)
+            clear_failed_ip_attempts(client_ip)
             login_user_session(user, remember=form.remember.data)
 
             if user.force_password_change:
@@ -149,6 +134,21 @@ def login():
         form=form,
         self_registration_enabled=self_registration_enabled
     )
+
+
+@bp.route('/keepalive', methods=['POST'])
+@login_required_api
+def keepalive():
+    """Refresh the idle timer and report the remaining session time.
+
+    The idle marker is refreshed by the session-lifecycle before-request
+    hook that runs ahead of this view; the response only reports how many
+    seconds remain (bounded by both the idle and absolute limits) so the
+    client can reschedule its warning countdown. Returns 401 via the hook
+    when the session has already expired.
+    """
+    from core.session_lifecycle import remaining_session_seconds
+    return jsonify({'remaining_seconds': remaining_session_seconds()})
 
 
 @bp.route('/logout', methods=['POST'])
@@ -216,17 +216,18 @@ def change_password():
             flash('Das neue Passwort darf nicht mit dem aktuellen übereinstimmen.', 'danger')
             return render_template('auth/change_password.html', form=form)
 
-        # Update password
         current_user.password_hash = hash_password(form.new_password.data)
         current_user.force_password_change = False
         current_user.has_real_password = True
+        current_user.credential_version += 1
         db.session.commit()
 
         # Cache user reference and return URL before clearing session
         user = current_user._get_current_object()
-        return_url = get_return_url('dashboard.index')
+        return_url = url_for('dashboard.index')
 
-        # Regenerate session to invalidate any concurrently active session
+        # Regenerate session; the version bump above invalidates the old
+        # session and remember-me cookies on every other device (see get_id).
         session.clear()
         login_user(user)
         initialize_session(user)

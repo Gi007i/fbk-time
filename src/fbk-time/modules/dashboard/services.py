@@ -11,6 +11,8 @@ from sqlalchemy import or_
 
 from modules.absence.models import Absence
 from modules.absence.recurrence import recurrence_service
+from modules.absence.services import filter_occurrences
+from modules.absence.timeslots import occurrence_slot, slots_overlap
 from modules.auth.models import User, UserRole, UserStatus
 from modules.category.models import Category
 from modules.holidays.services import is_holiday
@@ -64,14 +66,38 @@ def get_today_absences() -> tuple[list[dict], list[dict]]:
     return today_absent, today_present
 
 
-def get_week_absences() -> list[dict]:
-    """Get expanded daily occurrences for current week.
+def get_occurrence_categories(occurrences: list[dict]) -> list[dict]:
+    """Extract unique categories from occurrences for filter dropdowns.
 
-    Expands multi-day and recurring absences into individual
-    daily entries using recurrence_service.
+    Args:
+        occurrences: List of expanded occurrence dicts.
 
     Returns:
-        List of occurrence dicts sorted by date, then user name.
+        List of {'id', 'name'} dicts, deduplicated and sorted by name.
+    """
+    seen = {}
+    for occ in occurrences:
+        category = occ.get('category')
+        if category is None or category.id in seen:
+            continue
+        seen[category.id] = category.name
+
+    return [
+        {'id': category_id, 'name': name}
+        for category_id, name in sorted(seen.items(), key=lambda item: item[1].lower())
+    ]
+
+
+def get_week_overview() -> dict:
+    """Get current week's occurrences grouped by day for the dashboard.
+
+    Expands multi-day and recurring absences into individual daily entries
+    and groups them per calendar day so the dashboard can render a compact,
+    filterable view instead of a flat, paginated list.
+
+    Returns:
+        Dict with grouped days, available filter categories, total count
+        and the week's date range.
     """
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
@@ -96,7 +122,146 @@ def get_week_absences() -> list[dict]:
     )
     occurrences.sort(key=lambda o: (o['date'], o['user'].name))
 
-    return occurrences
+    days = []
+    current_day = None
+    for occ in occurrences:
+        if current_day is None or current_day['date'] != occ['date']:
+            current_day = {
+                'date': occ['date'],
+                'weekday': occ['date'].weekday(),
+                'entries': [],
+                'absent': [],
+                'present': []
+            }
+            days.append(current_day)
+        current_day['entries'].append(occ)
+        category = occ.get('category')
+        if category is not None and category.is_present:
+            current_day['present'].append(occ)
+        else:
+            current_day['absent'].append(occ)
+
+    return {
+        'days': days,
+        'categories': get_occurrence_categories(occurrences),
+        'total': len(occurrences),
+        'week_start': week_start,
+        'week_end': week_end
+    }
+
+
+def _warn_missing_substitute(
+    occ, absence, category, sub_id, reported_missing, warnings
+):
+    """Emit a warning when an occurrence lacks a required substitute."""
+    if category.requires_substitute and not sub_id:
+        key = (absence.id, occ['date']) if occ.get('is_exception') else absence.id
+        if key not in reported_missing:
+            reported_missing.add(key)
+            warnings.append({
+                'type': 'missing_substitute',
+                'user': occ['user'].name,
+                'category': category.name,
+                'absence_id': absence.id
+            })
+
+
+def _warn_substitute_conflict(
+    occ, absence, sub_id, substitute_name,
+    user_absence_slots, conflict_warnings, warnings
+):
+    """Emit or aggregate a warning when the substitute is absent in an
+    overlapping slot on the same date.
+
+    A morning-only coverage need does not conflict with an afternoon-only
+    absence of the substitute. Extra conflict dates for the same (absence,
+    substitute) pair fold into the existing warning so the template can show
+    "+X weitere" instead of always reporting a single date.
+    """
+    sub_slots = user_absence_slots.get(sub_id, {}).get(occ['date'], ())
+    if any(slots_overlap(occ['slot'], sub_slot) for sub_slot in sub_slots):
+        key = (absence.id, sub_id)
+        warning = conflict_warnings.get(key)
+        if warning is None:
+            warning = {
+                'type': 'substitute_conflict',
+                'user': occ['user'].name,
+                'substitute': substitute_name,
+                'conflict_dates': [occ['date']],
+                'conflict_count': 1,
+                'absence_id': absence.id
+            }
+            conflict_warnings[key] = warning
+            warnings.append(warning)
+        elif occ['date'] not in warning['conflict_dates']:
+            if len(warning['conflict_dates']) < 3:
+                warning['conflict_dates'].append(occ['date'])
+            warning['conflict_count'] += 1
+
+
+def _warn_double_assignment(
+    occ, absence, sub_id, substitute_name,
+    substitute_assignments, reported_doubles, warnings
+):
+    """Emit a warning when the same substitute covers another person in an
+    overlapping slot that date."""
+    for assignment in substitute_assignments.get(sub_id, []):
+        if assignment['absence_id'] == absence.id:
+            continue
+        if assignment['date'] != occ['date']:
+            continue
+        if not slots_overlap(occ['slot'], assignment['slot']):
+            continue
+        pair_key = tuple(sorted([absence.id, assignment['absence_id']]))
+        if pair_key in reported_doubles:
+            continue
+        reported_doubles.add(pair_key)
+        warnings.append({
+            'type': 'substitute_double_assignment',
+            'user': occ['user'].name,
+            'substitute': substitute_name,
+            'other_user': assignment['user_name'],
+            'conflict_date': occ['date'],
+            'absence_id': absence.id
+        })
+        break
+
+
+def _warn_cross_substitution(
+    occ, absence, sub_id, substitute_name,
+    substitute_assignments, cross_warnings, warnings
+):
+    """Emit or aggregate a warning when two people substitute each other that date.
+
+    Overlap dates per absence pair are aggregated so a weekly cross-substitution
+    series reports all of its collision days.
+    """
+    reverse_assignments = substitute_assignments.get(occ['user_id'], [])
+    for reverse in reverse_assignments:
+        if reverse['user_id'] != sub_id:
+            continue
+        if reverse['date'] != occ['date']:
+            continue
+        if not slots_overlap(occ['slot'], reverse['slot']):
+            continue
+        pair_key = tuple(sorted([absence.id, reverse['absence_id']]))
+        warning = cross_warnings.get(pair_key)
+        if warning is None:
+            warning = {
+                'type': 'cross_substitution',
+                'user': occ['user'].name,
+                'substitute': substitute_name,
+                'overlap_dates': [occ['date']],
+                'overlap_count': 1,
+                'absence_id': absence.id
+            }
+            cross_warnings[pair_key] = warning
+            warnings.append(warning)
+        elif occ['date'] not in warning['overlap_dates']:
+            if len(warning['overlap_dates']) < 3:
+                warning['overlap_dates'].append(occ['date'])
+            warning['overlap_count'] += 1
+        break
 
 
 def get_dashboard_warnings() -> list[dict]:
@@ -116,7 +281,7 @@ def get_dashboard_warnings() -> list[dict]:
         List of warning dicts with type and details.
     """
     today = date.today()
-    max_range_end = today + timedelta(days=365)
+    max_range_end = recurrence_service.max_future_date
     warnings = []
 
     future_filter = or_(
@@ -139,15 +304,18 @@ def get_dashboard_warnings() -> list[dict]:
         all_absences, today, max_range_end
     )
 
-    # Lookup: user_id -> set of dates where genuinely absent (effective state)
-    user_absence_dates = {}
+    for occ in all_occurrences:
+        occ['slot'] = occurrence_slot(occ)
+
+    user_absence_slots = {}
     for occ in all_occurrences:
         category = occ.get('category')
         if category is None or category.is_present:
             continue
-        user_absence_dates.setdefault(occ['user_id'], set()).add(occ['date'])
+        user_absence_slots.setdefault(occ['user_id'], {}).setdefault(
+            occ['date'], []
+        ).append(occ['slot'])
 
-    # Lookup: substitute_id -> list of assignments
     substitute_assignments = {}
     for occ in all_occurrences:
         sub_id = occ.get('substitute_id')
@@ -155,6 +323,7 @@ def get_dashboard_warnings() -> list[dict]:
             continue
         substitute_assignments.setdefault(sub_id, []).append({
             'date': occ['date'],
+            'slot': occ['slot'],
             'absence_id': occ['absence'].id,
             'user_id': occ['user_id'],
             'user_name': occ['user'].name
@@ -172,17 +341,9 @@ def get_dashboard_warnings() -> list[dict]:
             continue
         sub_id = occ.get('substitute_id')
 
-        # Missing substitute for a category that requires one
-        if category.requires_substitute and not sub_id:
-            key = (absence.id, occ['date']) if occ.get('is_exception') else absence.id
-            if key not in reported_missing:
-                reported_missing.add(key)
-                warnings.append({
-                    'type': 'missing_substitute',
-                    'user': occ['user'].name,
-                    'category': category.name,
-                    'absence_id': absence.id
-                })
+        _warn_missing_substitute(
+            occ, absence, category, sub_id, reported_missing, warnings
+        )
 
         if not sub_id or category.is_present:
             continue
@@ -192,76 +353,18 @@ def get_dashboard_warnings() -> list[dict]:
             continue
         substitute_name = substitute.name
 
-        # Substitute conflict: substitute is absent on the same date.
-        # Aggregate additional conflict dates for the same (absence, sub)
-        # pair into the existing warning so the template can show
-        # "+X weitere" instead of always reporting one date.
-        if occ['date'] in user_absence_dates.get(sub_id, set()):
-            key = (absence.id, sub_id)
-            warning = conflict_warnings.get(key)
-            if warning is None:
-                warning = {
-                    'type': 'substitute_conflict',
-                    'user': occ['user'].name,
-                    'substitute': substitute_name,
-                    'conflict_dates': [occ['date']],
-                    'conflict_count': 1,
-                    'absence_id': absence.id
-                }
-                conflict_warnings[key] = warning
-                warnings.append(warning)
-            elif occ['date'] not in warning['conflict_dates']:
-                if len(warning['conflict_dates']) < 3:
-                    warning['conflict_dates'].append(occ['date'])
-                warning['conflict_count'] += 1
-
-        # Double assignment: same substitute assigned to another person same date
-        for assignment in substitute_assignments.get(sub_id, []):
-            if assignment['absence_id'] == absence.id:
-                continue
-            if assignment['date'] != occ['date']:
-                continue
-            pair_key = tuple(sorted([absence.id, assignment['absence_id']]))
-            if pair_key in reported_doubles:
-                continue
-            reported_doubles.add(pair_key)
-            warnings.append({
-                'type': 'substitute_double_assignment',
-                'user': occ['user'].name,
-                'substitute': substitute_name,
-                'other_user': assignment['user_name'],
-                'conflict_date': occ['date'],
-                'absence_id': absence.id
-            })
-            break
-
-        # Cross-substitution: sub_id covers user, and user covers sub_id
-        # same date. Aggregate overlap dates per absence pair so that a
-        # weekly cross-sub series reports all its collision days.
-        reverse_assignments = substitute_assignments.get(occ['user_id'], [])
-        for reverse in reverse_assignments:
-            if reverse['user_id'] != sub_id:
-                continue
-            if reverse['date'] != occ['date']:
-                continue
-            pair_key = tuple(sorted([absence.id, reverse['absence_id']]))
-            warning = cross_warnings.get(pair_key)
-            if warning is None:
-                warning = {
-                    'type': 'cross_substitution',
-                    'user': occ['user'].name,
-                    'substitute': substitute_name,
-                    'overlap_dates': [occ['date']],
-                    'overlap_count': 1,
-                    'absence_id': absence.id
-                }
-                cross_warnings[pair_key] = warning
-                warnings.append(warning)
-            elif occ['date'] not in warning['overlap_dates']:
-                if len(warning['overlap_dates']) < 3:
-                    warning['overlap_dates'].append(occ['date'])
-                warning['overlap_count'] += 1
-            break
+        _warn_substitute_conflict(
+            occ, absence, sub_id, substitute_name,
+            user_absence_slots, conflict_warnings, warnings
+        )
+        _warn_double_assignment(
+            occ, absence, sub_id, substitute_name,
+            substitute_assignments, reported_doubles, warnings
+        )
+        _warn_cross_substitution(
+            occ, absence, sub_id, substitute_name,
+            substitute_assignments, cross_warnings, warnings
+        )
 
     return warnings
 
@@ -281,7 +384,9 @@ def build_team_matrix(
     users: list,
     absences: list,
     range_start: date,
-    range_end: date
+    range_end: date,
+    category_ids: Optional[list[int]] = None,
+    has_substitute: Optional[str] = None
 ) -> dict:
     """Build absence matrix for team overview.
 
@@ -290,12 +395,18 @@ def build_team_matrix(
         absences: List of absences in range.
         range_start: Start date of range.
         range_end: End date of range.
+        category_ids: Optional category filter (any of the given IDs) applied
+            on the occurrence level.
+        has_substitute: Optional 'yes'/'no' substitute filter.
 
     Returns:
         Dict mapping (user_id, date) to absence info.
     """
     expanded_occurrences = recurrence_service.get_all_occurrences_for_range(
         absences, range_start, range_end
+    )
+    expanded_occurrences = filter_occurrences(
+        expanded_occurrences, category_ids=category_ids, has_substitute=has_substitute
     )
 
     matrix = {}
@@ -344,7 +455,8 @@ def get_team_overview_data(
     year: int,
     month: int,
     week_start: date,
-    week_end: date
+    week_end: date,
+    filters: Optional[dict] = None
 ) -> dict:
     """Get all data for team overview page.
 
@@ -353,27 +465,42 @@ def get_team_overview_data(
         month: Month for month view.
         week_start: Start of week for week view.
         week_end: End of week for week view.
+        filters: Optional subject filters (user_id, category_id,
+            has_substitute) shared with the calendar and list views.
 
     Returns:
         Dict with users, categories, absences, matrix.
     """
+    filters = filters or {}
+    user_ids = filters.get('user_ids')
+    category_ids = filters.get('category_ids')
+    has_substitute = filters.get('has_substitute')
+
     month_start = date(year, month, 1)
     if month == 12:
         month_end = date(year + 1, 1, 1) - timedelta(days=1)
     else:
         month_end = date(year, month + 1, 1) - timedelta(days=1)
 
-    users = User.query.filter(
+    # Full active user list for the filter dropdown (independent of the person
+    # filter), plus the possibly narrowed list that drives the matrix rows.
+    all_users = User.query.filter(
         _ACTIVE_USER_STATUS_FILTER,
         User.role == UserRole.USER
     ).order_by(User.name).all()
+    if user_ids:
+        users = [user for user in all_users if user.id in user_ids]
+    else:
+        users = all_users
 
-    categories = Category.query.order_by(Category.sort_order).all()
+    categories = Category.query.filter(
+        Category.active == True
+    ).order_by(Category.sort_order).all()
 
     range_start = min(week_start, month_start)
     range_end = max(week_end, month_end)
 
-    absences = Absence.query.join(
+    absence_query = Absence.query.join(
         User, Absence.user_id == User.id
     ).join(Category).filter(
         _ACTIVE_USER_STATUS_FILTER,
@@ -385,12 +512,19 @@ def get_team_overview_data(
                 (Absence.recurrence_end_date >= range_start) | (Absence.recurrence_end_date.is_(None))
             )
         )
-    ).all()
+    )
+    if user_ids:
+        absence_query = absence_query.filter(Absence.user_id.in_(user_ids))
+    absences = absence_query.all()
 
-    matrix = build_team_matrix(users, absences, range_start, range_end)
+    matrix = build_team_matrix(
+        users, absences, range_start, range_end,
+        category_ids=category_ids, has_substitute=has_substitute
+    )
 
     return {
         'users': users,
+        'all_users': all_users,
         'categories': categories,
         'matrix': matrix,
         'month_start': month_start,

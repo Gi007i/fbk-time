@@ -8,20 +8,25 @@ from datetime import date, timedelta
 from flask import Blueprint, render_template
 from flask_login import login_required
 
-from utils.session_navigation import save_return_url
 from utils.helpers import format_date_for_user
-from utils.pagination import paginate_list
 from utils.request_validators import validate_year_param, validate_month_param, validate_date_param
+from utils.filters import parse_absence_filters
 from modules.holidays.services import get_holidays_for_month
 from .services import (
     get_today_absences,
-    get_week_absences,
+    get_week_overview,
+    get_occurrence_categories,
     get_dashboard_warnings,
     get_today_holiday,
     get_team_overview_data
 )
 
 bp = Blueprint('dashboard', __name__)
+
+WEEKDAY_NAMES = [
+    'Montag', 'Dienstag', 'Mittwoch', 'Donnerstag',
+    'Freitag', 'Samstag', 'Sonntag'
+]
 
 
 @bp.before_request
@@ -35,39 +40,33 @@ def require_login():
 def index():
     """Display main dashboard with widgets."""
     today = date.today()
-    week_start = today - timedelta(days=today.weekday())
-    week_end = week_start + timedelta(days=6)
 
     today_absent, today_present = get_today_absences()
-    week_occurrences = get_week_absences()
+    today_categories = get_occurrence_categories(today_absent + today_present)
+    week = get_week_overview()
     warnings = get_dashboard_warnings()
     today_holiday = get_today_holiday()
-
-    paginated_occurrences, pagination, redirect_response = paginate_list(
-        week_occurrences, 'dashboard.index'
-    )
-
-    if redirect_response:
-        return redirect_response
 
     return render_template(
         'dashboard/index.html',
         today=today,
         today_absent=today_absent,
         today_present=today_present,
-        week_occurrences=paginated_occurrences,
-        pagination=pagination.to_dict(),
+        today_categories=today_categories,
+        week_days=week['days'],
+        week_categories=week['categories'],
+        week_total=week['total'],
+        week_start=week['week_start'],
+        week_end=week['week_end'],
+        weekday_names=WEEKDAY_NAMES,
         warnings=warnings,
-        today_holiday=today_holiday,
-        week_start=week_start,
-        week_end=week_end
+        today_holiday=today_holiday
     )
 
 
 @bp.route('/team-overview')
 def team_overview():
     """Display team overview matrix (users × days) - responsive week/month view."""
-    save_return_url('Team-Übersicht')
     today = date.today()
 
     month_names = [
@@ -88,8 +87,11 @@ def team_overview():
 
     week_end = week_start + timedelta(days=4)
 
-    data = get_team_overview_data(year, month, week_start, week_end)
+    filters = parse_absence_filters()
+
+    data = get_team_overview_data(year, month, week_start, week_end, filters)
     users = data['users']
+    all_users = data['all_users']
     categories = data['categories']
     matrix = data['matrix']
     month_start = data['month_start']
@@ -160,10 +162,12 @@ def team_overview():
     return render_template(
         'dashboard/team-overview.html',
         users=users,
+        all_users=all_users,
         week_days=week_days,
         month_days=month_days,
         matrix=matrix,
         categories=categories,
+        filters=filters,
         holidays=holidays,
         today=today,
         year=year,

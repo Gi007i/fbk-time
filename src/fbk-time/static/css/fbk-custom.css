@@ -17,11 +17,39 @@
 .text-positive { color: var(--pico-ins-color); }
 .nowrap { white-space: nowrap; }
 
-[data-tooltip]::before {
+/* =============================================
+   TOOLTIP
+   Suppress the framework's edge-clipping pseudo-element bubble; a shared
+   fixed-position element is placed by js/tooltip.js so it stays in view.
+   ============================================= */
+[data-tooltip]::before,
+[data-tooltip]::after {
+    display: none;
+}
+
+.tooltip {
+    position: fixed;
+    z-index: 999;
+    left: var(--tt-x, 0);
+    top: var(--tt-y, 0);
+    visibility: hidden;
+    max-width: min(20rem, calc(100vw - 1rem));
+    max-height: calc(100vh - 1rem);
+    overflow: hidden;
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-tooltip-background-color);
+    color: var(--pico-tooltip-color);
+    font-size: 0.875rem;
+    line-height: 1.3;
     white-space: pre-line;
-    text-overflow: clip;
-    max-width: 20rem;
-    width: max-content;
+    overflow-wrap: anywhere;
+    box-shadow: var(--pico-card-box-shadow);
+    pointer-events: none;
+}
+
+.tooltip-visible {
+    visibility: visible;
 }
 
 /* =============================================
@@ -73,11 +101,77 @@ body > footer {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.main-nav details.dropdown > summary + ul li .logout-form {
+    margin: 0;
+}
+
+.main-nav details.dropdown > summary + ul li > a,
+.main-nav details.dropdown > summary + ul li .logout-form button {
+    display: block;
+    width: 100%;
+    margin: calc(var(--pico-form-element-spacing-vertical) * -0.5) calc(var(--pico-form-element-spacing-horizontal) * -1);
+    padding: calc(var(--pico-form-element-spacing-vertical) * 0.5) var(--pico-form-element-spacing-horizontal);
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    color: var(--pico-dropdown-color);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.main-nav details.dropdown > summary + ul li > a:hover,
+.main-nav details.dropdown > summary + ul li > a:focus,
+.main-nav details.dropdown > summary + ul li > a[aria-current]:not([aria-current="false"]),
+.main-nav details.dropdown > summary + ul li .logout-form button:hover,
+.main-nav details.dropdown > summary + ul li .logout-form button:focus {
+    background: var(--pico-dropdown-hover-background-color);
+    box-shadow: none;
+}
+
 /* =============================================
    BULK ACTIONS BAR
    ============================================= */
 .bulk-actions-bar button {
     white-space: nowrap;
+}
+
+/* =============================================
+   SEARCH INPUT CLEAR BUTTON
+   ============================================= */
+.search-wrapper {
+    position: relative;
+}
+
+.search-wrapper > input {
+    padding-right: 2rem;
+    margin-bottom: 0;
+}
+
+/* Align all controls in a filter bar to equal height so the absolutely
+   positioned clear button stays vertically centered inside the input. */
+.dashboard-filter > * {
+    margin-bottom: 0;
+}
+
+.search-wrapper > input::-webkit-search-cancel-button {
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.search-clear {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.search-clear.visible {
+    opacity: 1;
 }
 
 /* =============================================
@@ -183,6 +277,14 @@ body > footer {
     display: none;
 }
 
+.list-name span {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 @media (min-width: 768px) {
     .list-desktop-col {
         display: table-cell;
@@ -191,6 +293,68 @@ body > footer {
     .list-mobile-col {
         display: none;
     }
+
+    .list-name span {
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .list-cards thead {
+        display: none;
+    }
+
+    .list-cards tbody,
+    .list-cards tr,
+    .list-cards td:not(.list-desktop-col) {
+        display: block;
+    }
+
+    .list-cards tr {
+        position: relative;
+        border: 1px solid var(--pico-muted-border-color);
+        border-radius: var(--pico-border-radius);
+        padding: 0.6rem 0.75rem 0.6rem 3rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .list-cards td {
+        border-bottom: none;
+        padding: 0.1rem 0;
+        background: transparent;
+    }
+
+    .list-cards td:first-child {
+        position: absolute;
+        top: 0.6rem;
+        left: 0.75rem;
+        padding: 0;
+    }
+
+    .list-cards .list-name {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+    }
+
+    .list-cards td[data-label] {
+        display: flex;
+        align-items: baseline;
+        gap: 0.35rem;
+    }
+
+    .list-cards td[data-label]::before {
+        content: attr(data-label) ":";
+        font-weight: 600;
+    }
+}
+
+.bulk-actions-bar ul {
+    flex-wrap: wrap;
+}
+
+.bulk-actions-bar li:first-child {
+    white-space: nowrap;
 }
 
 tr[data-href],
@@ -262,6 +426,14 @@ td[data-href-morning] {
     padding-left: 0.5rem;
     font-weight: 500;
     z-index: 1;
+}
+
+.team-matrix .user-name small {
+    display: block;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Desktop optimization: Fit 31 days without horizontal scrolling */

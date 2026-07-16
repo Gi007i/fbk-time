@@ -1,0 +1,36 @@
+<h1>Datensicherung</h1>
+
+<p>Dieses Kapitel richtet sich an Admins. Für Manager und Mitarbeitende ohne Admin-Rechte ist der Menüpunkt <strong>Datensicherung</strong> nicht erreichbar. Eine Sicherung umfasst die vollständige Datenbank sowie die zugehörige Konfiguration und ist als komprimiertes Archiv im Format <code>.tar.gz</code> abgelegt.</p>
+
+<h2>Manuelle Sicherung</h2>
+
+<p>Im Bereich <strong>Manuelle Sicherung</strong> starten Sie jederzeit eine Sicherung. Optional hinterlegen Sie eine kurze Beschreibung, etwa den Anlass, um die Sicherung später leichter zuzuordnen. Jede neu erstellte Sicherung wird unmittelbar geprüft, sodass Sie sofort erkennen, ob sie fehlerfrei ist.</p>
+
+<h2>Übersicht</h2>
+
+<p>Der Bereich <strong>Übersicht</strong> zeigt Kennzahlen zu allen vorhandenen Sicherungen: die Gesamtzahl, wie viele davon verifiziert und wie viele beschädigt sind, den belegten Gesamtspeicher, den Speicherort auf dem Server sowie das verwendete Archivformat.</p>
+
+<h2>Vorhandene Sicherungen</h2>
+
+<p>Unter <strong>Vorhandene Sicherungen</strong> sind alle Sicherungen aufgelistet. Zu jeder sehen Sie Zeitpunkt, Typ, Status, Größe, eine etwaige Beschreibung und ob die Archivdatei vorhanden ist. Der Status ist <strong>Erstellt</strong> (angelegt, aber noch nicht geprüft – etwa nach einem Verzeichnis-Abgleich), <strong>Verifiziert</strong> (fehlerfrei geprüft) oder <strong>Beschädigt</strong>.</p>
+
+<p>Für jede Sicherung stehen folgende Aktionen bereit:</p>
+
+<ul>
+<li><strong>Verifizieren.</strong> Prüft die Archivdatei erneut auf Unversehrtheit und aktualisiert den Status.</li>
+<li><strong>Löschen.</strong> Entfernt die Sicherung samt Archivdatei nach einer Rückfrage. Dieser Schritt lässt sich nicht rückgängig machen.</li>
+</ul>
+
+<h2>Verzeichnis abgleichen</h2>
+
+<p>Die Schaltfläche <strong>Sync</strong> gleicht das Sicherungs-Verzeichnis auf dem Server mit der Übersicht ab. Archive, die direkt in das Verzeichnis kopiert wurden, werden dabei erkannt und aufgenommen; Einträge ohne zugehörige Datei werden entfernt. Der Abgleich prüft dabei keine Inhalte – die Unversehrtheit stellen Sie anschließend über <strong>Verifizieren</strong> fest.</p>
+
+<h2>Geplante tägliche Sicherung</h2>
+
+<p>Neben der manuellen Sicherung kann die Anwendung einmal täglich automatisch sichern. Uhrzeit und die Anzahl der aufzubewahrenden Sicherungen legen Sie in den <strong>Systemeinstellungen</strong> im Bereich <strong>Datensicherung</strong> fest. Nach jedem erfolgreichen Lauf werden ältere Sicherungen bis zur eingestellten Anzahl automatisch entfernt. Die Uhrzeit richtet sich nach der in den Systemeinstellungen gewählten Zeitzone.</p>
+
+<h2>Wiederherstellung</h2>
+
+<p>Vor jeder Wiederherstellung erstellt die Anwendung automatisch einen Sicherheits-Snapshot des aktuellen Standes, sodass sich der Ausgangszustand im Notfall zurückholen lässt.</p>
+
+<p>Die Wiederherstellung selbst erfolgt bewusst nicht über die Weboberfläche, sondern über ein Kommandozeilen-Werkzeug auf dem Server, da der Anwendungsdienst dafür angehalten werden muss. Sie ist damit dem Server-Betrieb vorbehalten; wenden Sie sich bei Bedarf an die Administration des Servers.</p>

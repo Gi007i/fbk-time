@@ -3,10 +3,15 @@
 {% block title %}Abwesenheit bearbeiten - FBK-Time{% endblock %}
 
 {% block content %}
+{% from "components/breadcrumb.html" import render as breadcrumb %}
+{% if origin %}
+{{ breadcrumb([origin, {'label': 'Details', 'url': origin_url('absences.detail', id=absence.id)}, {'label': 'Bearbeiten'}]) }}
+{% endif %}
+
 <h1>Abwesenheit bearbeiten</h1>
 
 <article>
-    <form id="absence-form" method="POST" action="{{ url_for('absences.edit', id=absence.id) }}" data-ajax-form>
+    <form id="absence-form" method="POST" action="{{ origin_url('absences.edit', id=absence.id) }}" data-ajax-form>
         {{ form.hidden_tag() }}
         <input type="hidden" name="exclude_id" value="{{ absence.id }}">
 
@@ -147,7 +152,7 @@
 
         <div class="grid">
             <button type="submit" class="outline">Änderungen speichern</button>
-            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url('absences.detail', id=absence.id) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>

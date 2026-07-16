@@ -17,7 +17,6 @@ import getpass
 import sys
 from datetime import timezone
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -25,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import create_app
 from core.extensions import db
 from core.settings_manager import settings_manager
+from core.timezone import get_app_timezone
 from modules.auth.models import User, UserRole, UserStatus, LoginAttempt
 from modules.auth.services import ph
 from utils.validators import validate_password_strength
@@ -83,7 +83,6 @@ def create_user(username, role='user', no_login=False):
         print(f'Fehler: Ungültige Rolle. Erlaubt: {", ".join(VALID_ROLES)}')
         sys.exit(1)
 
-    # Admin/Manager cannot be created with --no-login
     if no_login and role_lower in ['admin', 'manager']:
         print('Fehler: Admin und Manager können nicht mit --no-login erstellt werden.')
         sys.exit(1)
@@ -95,7 +94,6 @@ def create_user(username, role='user', no_login=False):
             print(f'Fehler: Benutzer "{username}" existiert bereits.')
             sys.exit(1)
 
-        # Auto-enable no_login in single_user mode for user role
         operation_mode = settings_manager.get('operation_mode')
         if operation_mode == 'single_user' and role_lower == 'user' and not no_login:
             no_login = True
@@ -176,6 +174,7 @@ def reset_password(username):
         user.password_hash = ph.hash(password)
         user.force_password_change = True
         user.has_real_password = True
+        user.credential_version += 1
         db.session.commit()
 
         print(f'Passwort für "{username}" wurde zurückgesetzt.')
@@ -205,14 +204,12 @@ def set_role(username, role):
 
         new_role = UserRole[role_lower.upper()]
 
-        # Last admin protection
         if user.role == UserRole.ADMIN and new_role != UserRole.ADMIN:
             admin_count = User.query.filter_by(role=UserRole.ADMIN, status=UserStatus.ACTIVE).count()
             if admin_count <= 1:
                 print('Fehler: Der letzte aktive Admin kann seine Rolle nicht ändern.')
                 sys.exit(1)
 
-        # MANAGED users cannot become Admin/Manager without password
         if user.status == UserStatus.MANAGED and new_role in [UserRole.ADMIN, UserRole.MANAGER]:
             print('Fehler: MANAGED User muss zuerst aktiviert werden, bevor Rolle geändert werden kann.')
             sys.exit(1)
@@ -245,7 +242,6 @@ def set_status(username, status):
             print(f'Fehler: Benutzer "{username}" nicht gefunden.')
             sys.exit(1)
 
-        # Admin/Manager cannot be set to MANAGED
         if status_lower == 'managed' and user.role in [UserRole.ADMIN, UserRole.MANAGER]:
             print('Fehler: Admin und Manager können nicht auf MANAGED gesetzt werden.')
             sys.exit(1)
@@ -311,7 +307,6 @@ def delete_user(username):
 def list_users():
     """List all users with roles and status."""
     app = get_cli_app()
-    berlin_tz = ZoneInfo('Europe/Berlin')
 
     with app.app_context():
         users = User.query.order_by(User.role, User.name).all()
@@ -328,7 +323,7 @@ def list_users():
         for user in users:
             if user.created_at:
                 utc_time = user.created_at.replace(tzinfo=timezone.utc)
-                local_time = utc_time.astimezone(berlin_tz)
+                local_time = utc_time.astimezone(get_app_timezone())
                 created = local_time.strftime('%d.%m.%Y')
             else:
                 created = '-'
@@ -370,7 +365,6 @@ Beispiele:
 
     subparsers = parser.add_subparsers(dest='command', help='Verfügbare Befehle')
 
-    # create-user
     parser_create = subparsers.add_parser(
         'create-user',
         help='Neuen Benutzer erstellen'
@@ -391,7 +385,6 @@ Beispiele:
         help='Benutzer ohne Login erstellen (Status: MANAGED)'
     )
 
-    # reset-password
     parser_reset = subparsers.add_parser(
         'reset-password',
         help='Passwort zurücksetzen'
@@ -401,7 +394,6 @@ Beispiele:
         help='Benutzername'
     )
 
-    # set-role
     parser_role = subparsers.add_parser(
         'set-role',
         help='Benutzerrolle ändern'
@@ -416,7 +408,6 @@ Beispiele:
         help='Neue Rolle'
     )
 
-    # set-status
     parser_status = subparsers.add_parser(
         'set-status',
         help='Benutzerstatus ändern'
@@ -431,7 +422,6 @@ Beispiele:
         help='Neuer Status'
     )
 
-    # delete-user
     parser_delete = subparsers.add_parser(
         'delete-user',
         help='Benutzer löschen'
@@ -441,7 +431,6 @@ Beispiele:
         help='Benutzername'
     )
 
-    # list-users
     subparsers.add_parser(
         'list-users',
         help='Alle Benutzer auflisten'

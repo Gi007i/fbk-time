@@ -54,7 +54,7 @@ class RecurrenceService:
         Args:
             frequency: 'daily', 'weekly', or 'biweekly'.
             weekdays: List of weekday codes ['MO', 'TU', ...] for weekly/biweekly.
-            end_date: End date for the series (max 1 year from start).
+            end_date: End date for the series.
             count: Number of occurrences (alternative to end_date).
 
         Returns:
@@ -628,6 +628,10 @@ class RecurrenceService:
                         'is_half_day_afternoon': absence.is_half_day_afternoon,
                         'start_time': absence.start_time,
                         'end_time': absence.end_time,
+                        # Span lets slot classification apply half-day flags to
+                        # boundary days only on multi-day absences.
+                        'start_date': absence.start_date,
+                        'end_date': absence.end_date,
                         'substitute_id': absence.substitute_id,
                         'substitute': absence.substitute,
                         'notes': absence.notes,

@@ -16,10 +16,15 @@
       "port": 6000,
       "runtime_path": "data/run"
     },
+    "backup": {
+      "directory": "/tmp/fbk-time-backups"
+    },
     "settings_template_path": "data/settings-template.json",
     "security": {
       "session": {
-        "lifetime_hours": 1,
+        "lifetime_hours": 10,
+        "idle_timeout_minutes": 30,
+        "idle_warning_seconds": 60,
         "remember_cookie_days": 7
       },
       "argon2": {

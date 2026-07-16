@@ -100,9 +100,10 @@ def get_pagination(
         if page < 1:
             abort(400, 'Invalid page number')
 
-    # Redirect to last valid page if current page exceeds total
     if page > total_pages:
-        args = request.args.to_dict()
+        # flat=False keeps repeated params (multi-valued person/category
+        # filters) so the redirect does not drop them.
+        args = request.args.to_dict(flat=False)
         args['page'] = str(total_pages)
         args.update(endpoint_kwargs)
         return None, redirect(url_for(endpoint, **args))

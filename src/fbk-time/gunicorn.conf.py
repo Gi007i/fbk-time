@@ -13,21 +13,32 @@ _settings_path = _base_dir / 'settings.json'
 with open(_settings_path, 'r', encoding='utf-8') as f:
     _settings = json.load(f)
 
-_server = _settings['system']['server']
-_logs = _settings['system']['logs']
+try:
+    _server = _settings['system']['server']
+    _logs = _settings['system']['logs']
+    _host = _server['host']
+    _port = _server['port']
+    _runtime_path_value = _server['runtime_path']
+    _access_log = _logs['access_log']
+    _error_log = _logs['error_log']
+except KeyError as exc:
+    raise SystemExit(
+        f"settings.json: Pflichtfeld {exc} fehlt — die "
+        f"Server-Konfiguration ist unvollständig."
+    )
 
-_runtime_path = Path(_server.get('runtime_path', 'data'))
+_runtime_path = Path(_runtime_path_value)
 if not _runtime_path.is_absolute():
     _runtime_path = _base_dir / _runtime_path
-_runtime_path.mkdir(mode=0o755, parents=True, exist_ok=True)
+_runtime_path.mkdir(mode=0o750, parents=True, exist_ok=True)
 
-_access_log_path = _base_dir / _logs['access_log']
-_error_log_path = _base_dir / _logs['error_log']
+_access_log_path = _base_dir / _access_log
+_error_log_path = _base_dir / _error_log
 
 for log_path in (_access_log_path, _error_log_path):
     log_path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
 
-bind = f"{_server['host']}:{_server['port']}"
+bind = f"{_host}:{_port}"
 backlog = 2048
 
 # Multi-device concurrent access with same account
@@ -79,3 +90,24 @@ def pre_fork(server, worker):
 
 def post_fork(server, worker):
     server.log.info(f"Worker {worker.pid} started")
+    from app import app as application
+    from core.extensions import db
+    from core.backup import start_auto_discovery
+    from core.scheduler import start_scheduler
+
+    # Discard connections inherited from the preloaded master. Sharing a
+    # SQLite connection across forked workers corrupts its lock state and
+    # raises "database is locked". close=False abandons the inherited
+    # connections without closing the underlying handles still used by the
+    # master, so each worker opens its own connections on first use.
+    with application.app_context():
+        db.engine.dispose(close=False)
+
+    # Start the scheduler inside the worker, not the preloaded master.
+    # The process-bound lock lets exactly one worker run the tasks.
+    start_scheduler(application)
+
+    # Trigger backup auto-discovery inside the worker, not the preloaded
+    # master, so its daemon thread touches the database and logging only
+    # after the fork.
+    start_auto_discovery(application)

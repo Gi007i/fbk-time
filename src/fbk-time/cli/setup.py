@@ -133,7 +133,7 @@ class FBKSetup:
             os.chdir(self.app_dir)
 
             if 'SECRET_KEY' not in os.environ:
-                os.environ['SECRET_KEY'] = 'test-key-for-verification'
+                os.environ['SECRET_KEY'] = secrets.token_hex(32)
                 temp_key_set = True
 
             from config import Config

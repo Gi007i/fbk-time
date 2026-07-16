@@ -8,7 +8,7 @@ from flask_login import current_user
 from wtforms import StringField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
-from utils.validators import EmailFormat
+from utils.validators import EmailFormat, SafeText
 from modules.user.services import email_exists
 
 
@@ -17,7 +17,8 @@ class ProfileEditForm(FlaskForm):
 
     name = StringField('Anzeigename', validators=[
         DataRequired(message='Anzeigename ist erforderlich'),
-        Length(min=2, max=100, message='Anzeigename muss zwischen 2 und 100 Zeichen lang sein')
+        Length(min=2, max=100, message='Anzeigename muss zwischen 2 und 100 Zeichen lang sein'),
+        SafeText(message='Anzeigename enthält ungültige Zeichen')
     ])
 
     email = StringField('E-Mail-Adresse', validators=[

@@ -203,14 +203,12 @@ var Toast = (function() {
         initExisting();
     }
 
-    // Auto-initialize on DOM ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
         init();
     }
 
-    // Public API
     return {
         show: show,
         success: success,

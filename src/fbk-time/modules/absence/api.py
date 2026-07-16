@@ -26,6 +26,8 @@ from .services import (
     delete_occurrence
 )
 
+_MAX_EXPAND_RANGE_DAYS = 1830  # ~5 years
+
 
 @bp.route('/api/bulk-delete', methods=['POST'])
 @login_required_api
@@ -145,6 +147,9 @@ def api_expand_occurrences():
 
     if end_date < start_date:
         return api_error('Invalid date range: end before start')
+
+    if (end_date - start_date).days > _MAX_EXPAND_RANGE_DAYS:
+        return api_error('Date range too large')
 
     if absence_id is not None:
         absence = get_absence_by_id(absence_id)

@@ -8,12 +8,12 @@ operate on effective occurrence state.
 from datetime import date, datetime, time, timedelta, timezone
 from io import BytesIO
 from typing import List, Tuple, Union
-from zoneinfo import ZoneInfo
 
 from icalendar import Calendar, Event
 
+from core.timezone import get_app_timezone
 
-_LOCAL_TZ = ZoneInfo('Europe/Berlin')
+
 _MORNING_START = time(8, 0)
 _MORNING_END = time(12, 0)
 _AFTERNOON_START = time(12, 0)
@@ -153,22 +153,22 @@ def _compute_event_bounds(occ: dict) -> Tuple[_EventBound, _EventBound]:
 
     if occ.get('is_half_day_morning'):
         return (
-            datetime.combine(occ_date, _MORNING_START, tzinfo=_LOCAL_TZ),
-            datetime.combine(occ_date, _MORNING_END, tzinfo=_LOCAL_TZ)
+            datetime.combine(occ_date, _MORNING_START, tzinfo=get_app_timezone()),
+            datetime.combine(occ_date, _MORNING_END, tzinfo=get_app_timezone())
         )
 
     if occ.get('is_half_day_afternoon'):
         return (
-            datetime.combine(occ_date, _AFTERNOON_START, tzinfo=_LOCAL_TZ),
-            datetime.combine(occ_date, _AFTERNOON_END, tzinfo=_LOCAL_TZ)
+            datetime.combine(occ_date, _AFTERNOON_START, tzinfo=get_app_timezone()),
+            datetime.combine(occ_date, _AFTERNOON_END, tzinfo=get_app_timezone())
         )
 
     start_t = occ.get('start_time')
     end_t = occ.get('end_time')
     if start_t and end_t:
         return (
-            datetime.combine(occ_date, start_t, tzinfo=_LOCAL_TZ),
-            datetime.combine(occ_date, end_t, tzinfo=_LOCAL_TZ)
+            datetime.combine(occ_date, start_t, tzinfo=get_app_timezone()),
+            datetime.combine(occ_date, end_t, tzinfo=get_app_timezone())
         )
 
     return (occ_date, occ_date + timedelta(days=1))

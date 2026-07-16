@@ -5,7 +5,7 @@ from wtforms import StringField, PasswordField, SelectField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
 from modules.auth.models import UserRole, UserStatus
-from utils.validators import validate_password_strength, EmailFormat
+from utils.validators import validate_password_strength, EmailFormat, SafeText
 from .services import username_exists, email_exists
 
 
@@ -23,7 +23,8 @@ class UserCreateForm(FlaskForm):
 
     name = StringField('Anzeigename', validators=[
         DataRequired(message='Anzeigename ist erforderlich'),
-        Length(min=2, max=100, message='Anzeigename muss zwischen 2 und 100 Zeichen lang sein')
+        Length(min=2, max=100, message='Anzeigename muss zwischen 2 und 100 Zeichen lang sein'),
+        SafeText(message='Anzeigename enthält ungültige Zeichen')
     ])
 
     email = StringField('E-Mail', validators=[
@@ -32,7 +33,6 @@ class UserCreateForm(FlaskForm):
         Length(max=120)
     ])
 
-    # Role field - only visible for admin, hidden for manager
     role = SelectField('Rolle', choices=[
         (UserRole.USER.value, 'Benutzer'),
         (UserRole.MANAGER.value, 'Manager'),
@@ -63,7 +63,8 @@ class UserEditForm(FlaskForm):
 
     name = StringField('Anzeigename', validators=[
         DataRequired(message='Anzeigename ist erforderlich'),
-        Length(min=2, max=100, message='Anzeigename muss zwischen 2 und 100 Zeichen lang sein')
+        Length(min=2, max=100, message='Anzeigename muss zwischen 2 und 100 Zeichen lang sein'),
+        SafeText(message='Anzeigename enthält ungültige Zeichen')
     ])
 
     email = StringField('E-Mail', validators=[
@@ -76,14 +77,12 @@ class UserEditForm(FlaskForm):
         Optional()
     ])
 
-    # Role field - only visible and editable for admin
     role = SelectField('Rolle', choices=[
         (UserRole.USER.value, 'Benutzer'),
         (UserRole.MANAGER.value, 'Manager'),
         (UserRole.ADMIN.value, 'Admin')
     ], coerce=lambda x: UserRole(x) if x and not isinstance(x, UserRole) else x)
 
-    # Status field - only visible for admin
     status = SelectField('Status', choices=[
         (UserStatus.ACTIVE.value, 'Aktiv'),
         (UserStatus.DISABLED.value, 'Deaktiviert'),

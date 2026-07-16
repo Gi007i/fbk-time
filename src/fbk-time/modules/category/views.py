@@ -3,13 +3,13 @@
 Provides CRUD routes for category management with two-step deletion.
 """
 
-from flask import Blueprint, render_template, redirect, url_for, request, abort
+from flask import Blueprint, render_template, redirect, request, abort
 from flask_login import login_required, current_user
 
 from core.extensions import db
 from utils.decorators import manager_required
-from utils.session_navigation import is_ajax_request, save_return_url, get_return_url
-from utils.response_helpers import ajax_response, api_success
+from utils.response_helpers import ajax_response, api_success, is_ajax_request
+from utils.navigation import back_url
 from utils.pagination import get_pagination
 from .forms import CategoryForm, CategoryDeleteForm
 from .services import (
@@ -38,7 +38,6 @@ def require_login():
 @bp.route('/')
 def list_categories():
     """Display list of all categories."""
-    save_return_url('Kategorien')
     show_inactive_str = request.args.get('show_inactive', 'false')
     if show_inactive_str not in ('true', 'false'):
         abort(400, 'Invalid show_inactive')
@@ -92,13 +91,10 @@ def create():
         db.session.commit()
 
         message = f'Kategorie "{category.name}" wurde erstellt.'
+        return_to = back_url('categories.list_categories')
         if is_ajax_request():
-            return ajax_response(
-                success=True,
-                message=message,
-                redirect=url_for('categories.list_categories')
-            )
-        return redirect(url_for('categories.list_categories'))
+            return ajax_response(success=True, message=message, redirect=return_to)
+        return redirect(return_to)
 
     if request.method == 'GET':
         form.text_color.data = current_user.default_text_color
@@ -152,13 +148,10 @@ def edit(id):
         db.session.commit()
 
         message = f'Kategorie "{category.name}" wurde aktualisiert.'
+        return_to = back_url('categories.detail', id=category.id)
         if is_ajax_request():
-            return ajax_response(
-                success=True,
-                message=message,
-                redirect=url_for('categories.list_categories')
-            )
-        return redirect(url_for('categories.list_categories'))
+            return ajax_response(success=True, message=message, redirect=return_to)
+        return redirect(return_to)
 
     if request.method == 'POST' and is_ajax_request():
         errors = {field.name: field.errors[0] for field in form if field.errors}
@@ -189,7 +182,7 @@ def delete(id):
     if request.method == 'POST' and is_ajax_request() and absences_count == 0:
         message = delete_category_with_absences(category)
         db.session.commit()
-        return_to = get_return_url('categories.list_categories')
+        return_to = back_url('categories.list_categories')
         return ajax_response(success=True, message=message, redirect=return_to)
 
     other_categories = get_categories_excluding(id)
@@ -206,7 +199,7 @@ def delete(id):
             message = delete_category_with_absences(category)
             db.session.commit()
 
-            return_to = get_return_url('categories.list_categories')
+            return_to = back_url('categories.list_categories')
 
             if is_ajax_request():
                 return ajax_response(success=True, message=message, redirect=return_to)
@@ -247,7 +240,7 @@ def delete(id):
 
             db.session.commit()
 
-            return_to = get_return_url('categories.list_categories')
+            return_to = back_url('categories.list_categories')
 
             if is_ajax_request():
                 return ajax_response(success=True, message=message, redirect=return_to)
@@ -277,7 +270,7 @@ def toggle_active(id):
     message = toggle_category_active(category)
     db.session.commit()
 
-    return_to = get_return_url('categories.list_categories')
+    return_to = back_url('categories.list_categories')
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)

@@ -3,9 +3,24 @@
 Provides forms for user preferences and admin system settings.
 """
 
+import re
+
 from flask_wtf import FlaskForm
 from wtforms import StringField, SelectField, RadioField, IntegerField, BooleanField
-from wtforms.validators import DataRequired, InputRequired, Length, NumberRange, Regexp
+from wtforms.validators import (
+    AnyOf,
+    DataRequired,
+    InputRequired,
+    Length,
+    NumberRange,
+    Regexp,
+    ValidationError,
+)
+
+from core.timezone import SUPPORTED_TIMEZONES
+
+
+_HHMM_PATTERN = re.compile(r'^(?:[01]\d|2[0-3]):[0-5]\d$')
 
 
 class SettingsForm(FlaskForm):
@@ -72,7 +87,15 @@ class SettingsForm(FlaskForm):
 class AdminSettingsForm(FlaskForm):
     """Admin system settings form."""
 
-    # Lockout settings
+    app_timezone = SelectField(
+        'Anwendungs-Zeitzone',
+        choices=[(tz, tz) for tz in SUPPORTED_TIMEZONES],
+        validators=[
+            DataRequired(message='Wert erforderlich.'),
+            AnyOf(SUPPORTED_TIMEZONES, message='Ungültige Zeitzone.')
+        ]
+    )
+
     lockout_threshold = IntegerField(
         'Fehlversuche bis Sperrung',
         validators=[
@@ -91,12 +114,14 @@ class AdminSettingsForm(FlaskForm):
     lockout_delay_base_seconds = IntegerField(
         'Basis-Verzögerung (Sekunden)',
         validators=[
+            InputRequired(message='Wert erforderlich.'),
             NumberRange(min=0, max=60, message='Wert muss zwischen 0 und 60 liegen.')
         ]
     )
     lockout_delay_max_seconds = IntegerField(
         'Maximale Verzögerung (Sekunden)',
         validators=[
+            InputRequired(message='Wert erforderlich.'),
             NumberRange(min=0, max=300, message='Wert muss zwischen 0 und 300 liegen.')
         ]
     )
@@ -111,11 +136,11 @@ class AdminSettingsForm(FlaskForm):
     lockout_cleanup_interval_hours = IntegerField(
         'Bereinigungsintervall (Stunden)',
         validators=[
+            InputRequired(message='Wert erforderlich.'),
             NumberRange(min=1, max=168, message='Wert muss zwischen 1 und 168 liegen.')
         ]
     )
 
-    # Password policy settings
     password_min_length = IntegerField(
         'Minimale Passwortlänge',
         validators=[
@@ -136,19 +161,17 @@ class AdminSettingsForm(FlaskForm):
     password_require_symbols = BooleanField('Sonderzeichen erforderlich')
     password_force_change_on_first_login = BooleanField('Passwortänderung beim ersten Login erzwingen')
 
-    # Inactive account settings
     inactive_account_auto_disable = BooleanField('Inaktive Konten automatisch deaktivieren')
     inactive_account_days = IntegerField(
         'Inaktivitätstage bis Deaktivierung',
         validators=[
+            InputRequired(message='Wert erforderlich.'),
             NumberRange(min=7, max=365, message='Wert muss zwischen 7 und 365 liegen.')
         ]
     )
 
-    # Registration settings
     self_registration_enabled = BooleanField('Selbstregistrierung erlauben')
 
-    # Operation mode
     operation_mode = SelectField(
         'Betriebsmodus',
         choices=[
@@ -157,7 +180,6 @@ class AdminSettingsForm(FlaskForm):
         ]
     )
 
-    # User default settings
     user_default_theme = SelectField(
         'Standard-Design für neue Benutzer',
         choices=[
@@ -215,7 +237,6 @@ class AdminSettingsForm(FlaskForm):
         ]
     )
 
-    # Limits
     limits_max_future_months = IntegerField(
         'Maximaler Planungshorizont (Monate)',
         validators=[
@@ -230,3 +251,26 @@ class AdminSettingsForm(FlaskForm):
             NumberRange(min=10, max=1000, message='Wert muss zwischen 10 und 1000 liegen.')
         ]
     )
+
+    backup_scheduled_enabled = BooleanField(
+        'Automatische Datensicherung'
+    )
+    backup_time = StringField(
+        'Sicherungszeitpunkt',
+        validators=[
+            InputRequired(message='Wert erforderlich.'),
+            Length(min=5, max=5, message='Format HH:MM erwartet.')
+        ]
+    )
+    backup_retention_count = IntegerField(
+        'Aufzubewahrende Sicherungen',
+        validators=[
+            InputRequired(message='Wert erforderlich.'),
+            NumberRange(min=1, max=365, message='Wert muss zwischen 1 und 365 liegen.')
+        ]
+    )
+
+    def validate_backup_time(self, field):
+        """Reject anything that is not a strict HH:MM 24-hour value."""
+        if not _HHMM_PATTERN.fullmatch(field.data or ''):
+            raise ValidationError('Ungültiges Format, erwartet HH:MM (00:00–23:59).')

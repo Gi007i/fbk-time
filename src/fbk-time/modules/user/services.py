@@ -233,6 +233,7 @@ def set_user_password(user: User, password: str, by_admin: bool = False) -> None
     """
     user.password_hash = hash_password(password)
     user.has_real_password = True
+    user.credential_version += 1
 
     if by_admin:
         user.force_password_change = True

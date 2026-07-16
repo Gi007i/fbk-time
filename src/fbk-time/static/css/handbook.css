@@ -10,35 +10,6 @@
  */
 
 /* =============================================
-   BREADCRUMB
-   ============================================= */
-.handbook-breadcrumb {
-    font-size: 0.85rem;
-    margin-bottom: 0.75rem;
-}
-
-.handbook-breadcrumb ol {
-    padding: 0;
-    margin: 0;
-    gap: 0.5rem;
-    list-style: none;
-}
-
-.handbook-breadcrumb li {
-    color: var(--pico-muted-color);
-}
-
-.handbook-breadcrumb li[aria-current="page"] {
-    color: var(--pico-color);
-}
-
-.handbook-breadcrumb li + li::before {
-    content: '›';
-    margin-right: 0.5rem;
-    color: var(--pico-muted-color);
-}
-
-/* =============================================
    CHAPTER MENU
    ============================================= */
 .handbook-menu {

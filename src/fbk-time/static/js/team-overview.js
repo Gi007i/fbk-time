@@ -5,8 +5,6 @@
 (function() {
     'use strict';
 
-    var MOBILE_BREAKPOINT = 768;
-
     /**
      * Initialize team overview functionality.
      * @returns {void}
@@ -31,11 +29,22 @@
         var urlIcal = dataEl.dataset.urlIcal;
 
         /**
-         * Check if viewport is mobile width.
-         * @returns {boolean} True if mobile viewport.
+         * Attach a tooltip with the full name to any name cell whose label is
+         * truncated, and remove it where the label fits. Runs on the visible
+         * matrix only; hidden cells report zero width and get no tooltip.
+         * @returns {void}
          */
-        function isMobile() {
-            return window.innerWidth < MOBILE_BREAKPOINT;
+        function refreshNameTooltips() {
+            var cells = document.querySelectorAll('.team-matrix tbody td.user-name');
+            cells.forEach(function(cell) {
+                var label = cell.querySelector('small');
+                if (!label) return;
+                if (label.scrollWidth > label.clientWidth) {
+                    cell.setAttribute('data-tooltip', label.textContent);
+                } else {
+                    cell.removeAttribute('data-tooltip');
+                }
+            });
         }
 
         /**
@@ -43,7 +52,7 @@
          * @returns {void}
          */
         function updateViewVisibility() {
-            if (isMobile()) {
+            if (window.FBKTime.isMobile()) {
                 weekNav.classList.remove('hidden');
                 monthNav.classList.add('hidden');
                 weekMatrix.classList.remove('hidden');
@@ -54,6 +63,7 @@
                 weekMatrix.classList.add('hidden');
                 monthMatrix.classList.remove('hidden');
             }
+            refreshNameTooltips();
         }
 
         updateViewVisibility();
@@ -67,17 +77,18 @@
         if (exportBtn) {
             exportBtn.addEventListener('click', function() {
                 var type = exportType.value;
+                var extra = window.FBKTime.buildFilterQuery(dataEl.dataset);
 
-                if (isMobile()) {
+                if (window.FBKTime.isMobile()) {
                     switch (type) {
                         case 'pdf-matrix':
-                            window.location.href = urlMatrix + '?week_start=' + weekStart + '&week_end=' + weekEnd;
+                            window.location.href = urlMatrix + '?week_start=' + weekStart + '&week_end=' + weekEnd + extra;
                             break;
                         case 'pdf-list':
-                            window.location.href = urlPdf + '?date_from=' + weekStart + '&date_to=' + weekEnd;
+                            window.location.href = urlPdf + '?date_from=' + weekStart + '&date_to=' + weekEnd + extra;
                             break;
                         case 'ical':
-                            window.location.href = urlIcal + '?date_from=' + weekStart + '&date_to=' + weekEnd;
+                            window.location.href = urlIcal + '?date_from=' + weekStart + '&date_to=' + weekEnd + extra;
                             break;
                     }
                 } else {
@@ -87,13 +98,13 @@
 
                     switch (type) {
                         case 'pdf-matrix':
-                            window.location.href = urlMatrix + '?week_start=' + firstDay + '&week_end=' + lastDay;
+                            window.location.href = urlMatrix + '?week_start=' + firstDay + '&week_end=' + lastDay + extra;
                             break;
                         case 'pdf-list':
-                            window.location.href = urlPdf + '?date_from=' + firstDay + '&date_to=' + lastDay;
+                            window.location.href = urlPdf + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
                             break;
                         case 'ical':
-                            window.location.href = urlIcal + '?date_from=' + firstDay + '&date_to=' + lastDay;
+                            window.location.href = urlIcal + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
                             break;
                     }
                 }

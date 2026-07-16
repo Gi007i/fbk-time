@@ -10,15 +10,15 @@ from flask import Blueprint, render_template, redirect, url_for, request, abort
 from flask_login import login_required, current_user
 
 from core.extensions import db
-from utils.session_navigation import is_ajax_request, save_return_url, get_return_url, get_return_info
-from utils.response_helpers import ajax_response
+from utils.navigation import back_url
+from utils.response_helpers import ajax_response, is_ajax_request
 from utils.request_validators import (
-    validate_int_param, validate_date_param,
+    validate_date_param,
     validate_year_param, validate_month_param, validate_date_string
 )
 from utils.pagination import paginate_list
+from utils.filters import parse_absence_filters
 from .forms import AbsenceForm, OccurrenceEditForm
-from .models import RecurrenceException
 from .recurrence import recurrence_service
 from .services import (
     can_modify_absence,
@@ -37,10 +37,10 @@ from .services import (
     get_absence_history,
     get_absence_or_404,
     get_absence_exception_counts,
-    get_exception_for_date
+    get_exception_for_date,
+    get_deleted_occurrence_dates
 )
 from modules.auth.models import UserRole
-from modules.category.services import get_all_categories_ordered
 from modules.holidays.services import get_holidays_for_month, count_working_days
 
 bp = Blueprint('absences', __name__, url_prefix='/absences')
@@ -56,13 +56,7 @@ def require_login():
 @bp.route('/')
 def list_absences():
     """Display expanded absence occurrences with filtering."""
-    save_return_url('Liste')
-
-    user_id = validate_int_param('user_id', min_value=1)
-    category_id = validate_int_param('category_id', min_value=1)
-    has_substitute = request.args.get('has_substitute')
-    if has_substitute and has_substitute not in ('yes', 'no'):
-        abort(400, 'Invalid has_substitute')
+    filters = parse_absence_filters()
 
     today = date.today()
     date_from = validate_date_param('date_from', default=today.replace(day=1))
@@ -75,7 +69,7 @@ def list_absences():
     if date_to < date_from:
         abort(400, 'Invalid date range: end before start')
 
-    absences = get_absences_list(date_from, date_to, user_id)
+    absences = get_absences_list(date_from, date_to, filters['user_ids'])
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
         absences, date_from, date_to
@@ -83,8 +77,8 @@ def list_absences():
 
     occurrences = filter_occurrences(
         occurrences,
-        category_id=category_id,
-        has_substitute=has_substitute
+        category_ids=filters['category_ids'],
+        has_substitute=filters['has_substitute']
     )
 
     occurrences.sort(key=lambda o: o['date'])
@@ -105,11 +99,9 @@ def list_absences():
         users=users,
         categories=categories,
         filters={
-            'user_id': user_id,
-            'category_id': category_id,
+            **filters,
             'date_from': date_from.isoformat(),
             'date_to': date_to.isoformat(),
-            'has_substitute': has_substitute
         },
         pagination=pagination.to_dict()
     )
@@ -118,7 +110,6 @@ def list_absences():
 @bp.route('/calendar')
 def calendar():
     """Display calendar view of absences."""
-    save_return_url('Kalender')
     today = date.today()
 
     year = validate_year_param()
@@ -141,20 +132,16 @@ def calendar():
     range_start = min(week_start, first_day)
     range_end = max(week_end, last_day)
 
-    user_id = validate_int_param('user_id', min_value=1)
-    category_id = validate_int_param('category_id', min_value=1)
-    has_substitute = request.args.get('has_substitute')
-    if has_substitute and has_substitute not in ('yes', 'no'):
-        abort(400, 'Invalid has_substitute')
+    filters = parse_absence_filters()
 
-    absences = get_absences_list(range_start, range_end, user_id)
+    absences = get_absences_list(range_start, range_end, filters['user_ids'])
     expanded_occurrences = recurrence_service.get_all_occurrences_for_range(
         absences, range_start, range_end
     )
     expanded_occurrences = filter_occurrences(
         expanded_occurrences,
-        category_id=category_id,
-        has_substitute=has_substitute
+        category_ids=filters['category_ids'],
+        has_substitute=filters['has_substitute']
     )
 
     holidays = get_holidays_for_month(year, month)
@@ -164,10 +151,7 @@ def calendar():
         holidays.update(get_holidays_for_month(week_end.year, week_end.month))
 
     users = get_active_users_for_form()
-    # Calendar intentionally exposes all categories (including inactive
-    # ones) so that the filter dropdown and legend cover historical
-    # absences whose category has since been disabled.
-    categories = get_all_categories_ordered()
+    categories = get_active_categories()
 
     return render_template(
         'absences/calendar.html',
@@ -178,6 +162,7 @@ def calendar():
         holidays=holidays,
         users=users,
         categories=categories,
+        filters=filters,
         today=today,
         prev_week=prev_week,
         next_week=next_week
@@ -247,7 +232,7 @@ def create():
 
         db.session.commit()
 
-        return_to = get_return_url('absences.calendar')
+        return_to = back_url('absences.list_absences')
         if is_ajax_request():
             warnings = conflicts.messages if conflicts and conflicts.messages else None
             return ajax_response(success=True, message=message, redirect=return_to, warnings=warnings)
@@ -265,7 +250,6 @@ def create():
 def detail(id):
     """Display absence details with history."""
     absence = get_absence_or_404(id)
-    origin = get_return_info('absences.list_absences', 'Liste')
 
     history = get_absence_history(id)
 
@@ -299,16 +283,11 @@ def detail(id):
                     'is_half_day_afternoon': occ_data['is_half_day_afternoon']
                 })
 
-        deleted_occurrences = [
-            {'date': exc.exception_date}
-            for exc in absence.exceptions.filter_by(exception_type='deleted')
-            .order_by(RecurrenceException.exception_date).all()
-        ]
+        deleted_occurrences = get_deleted_occurrence_dates(absence)
 
     return render_template(
         'absences/detail.html',
         absence=absence,
-        origin=origin,
         history=history,
         working_days=working_days,
         recurrence_info=recurrence_info,
@@ -405,7 +384,7 @@ def edit(id):
 
         db.session.commit()
 
-        return_to = url_for('absences.detail', id=id)
+        return_to = back_url('absences.detail', id=id)
         if is_ajax_request():
             warnings = conflicts.messages if conflicts and conflicts.messages else None
             return ajax_response(success=True, message=message, redirect=return_to, warnings=warnings)
@@ -430,7 +409,7 @@ def delete(id):
     message = delete_absence(absence)
     db.session.commit()
 
-    return_to = get_return_url('absences.list_absences')
+    return_to = back_url('absences.list_absences')
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)
@@ -442,7 +421,6 @@ def delete(id):
 def occurrence_detail(id, date_str):
     """Display details for a specific occurrence of a recurring absence."""
     absence = get_absence_or_404(id)
-    origin = get_return_info('absences.list_absences', 'Liste')
 
     if not absence.is_recurring:
         return redirect(url_for('absences.detail', id=id))
@@ -457,7 +435,6 @@ def occurrence_detail(id, date_str):
     return render_template(
         'absences/occurrence_detail.html',
         absence=absence,
-        origin=origin,
         occurrence=occurrence_data,
         occurrence_date=occurrence_date
     )
@@ -519,7 +496,7 @@ def occurrence_edit(id, date_str):
     if form.validate_on_submit():
         effective_state = form.get_effective_state()
         try:
-            message = modify_occurrence(absence, occurrence_date, effective_state)
+            message, warnings = modify_occurrence(absence, occurrence_date, effective_state)
         except ValueError as e:
             if is_ajax_request():
                 return ajax_response(success=False, message=str(e))
@@ -532,9 +509,12 @@ def occurrence_edit(id, date_str):
             )
         db.session.commit()
 
-        return_to = url_for('absences.occurrence_detail', id=id, date_str=date_str)
+        return_to = back_url('absences.occurrence_detail', id=id, date_str=date_str)
         if is_ajax_request():
-            return ajax_response(success=True, message=message, redirect=return_to)
+            return ajax_response(
+                success=True, message=message, redirect=return_to,
+                warnings=warnings or None
+            )
         return redirect(return_to)
 
     if request.method == 'POST' and is_ajax_request():
@@ -575,7 +555,7 @@ def occurrence_delete(id, date_str):
 
     db.session.commit()
 
-    return_to = get_return_url('absences.list_absences')
+    return_to = back_url('absences.detail', id=id)
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)
@@ -600,7 +580,7 @@ def occurrence_restore(id, date_str):
     occurrence_date = validate_date_string(date_str)
 
     try:
-        message = restore_occurrence(absence, occurrence_date)
+        message, warnings = restore_occurrence(absence, occurrence_date)
     except ValueError as e:
         if is_ajax_request():
             return ajax_response(success=False, message=str(e))
@@ -608,10 +588,13 @@ def occurrence_restore(id, date_str):
 
     db.session.commit()
 
-    return_to = url_for('absences.detail', id=id)
+    return_to = back_url('absences.occurrence_detail', id=id, date_str=date_str)
 
     if is_ajax_request():
-        return ajax_response(success=True, message=message, redirect=return_to)
+        return ajax_response(
+            success=True, message=message, redirect=return_to,
+            warnings=warnings or None
+        )
 
     return redirect(return_to)
 

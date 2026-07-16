@@ -23,10 +23,15 @@
             <li><strong><a href="{{ url_for('dashboard.index') }}">FBK-Time</a></strong></li>
         </ul>
         <ul>
+            {% if session_timeout_enabled %}
+            <li>
+                <button type="button" id="session-timer" class="outline secondary" data-tooltip="Sitzung verlängern">--:--</button>
+            </li>
+            {% endif %}
             <li>
                 <details class="dropdown">
                     <summary role="button" class="outline">{{ current_user.name or current_user.username }}</summary>
-                    <ul dir="rtl">
+                    <ul>
                         <li><a href="{{ url_for('profile.index') }}"{% if request.endpoint and request.endpoint.startswith('profile.') %} aria-current="page"{% endif %}>Mein Profil</a></li>
                         <li><a href="{{ url_for('settings.index') }}"{% if request.endpoint == 'settings.index' %} aria-current="page"{% endif %}>Meine Einstellungen</a></li>
                         <li><a href="{{ url_for('dashboard.team_overview') }}"{% if request.endpoint in ['absences.calendar', 'absences.list_absences', 'dashboard.team_overview'] %} aria-current="page"{% endif %}>Abwesenheiten</a></li>
@@ -36,9 +41,15 @@
                         {% endif %}
                         {% if current_user.is_admin %}
                         <li><a href="{{ url_for('settings.system_settings') }}"{% if request.endpoint == 'settings.system_settings' %} aria-current="page"{% endif %}>Systemeinstellungen</a></li>
+                        <li><a href="{{ url_for('backup.index') }}"{% if request.endpoint and request.endpoint.startswith('backup.') %} aria-current="page"{% endif %}>Datensicherung</a></li>
                         {% endif %}
                         <li><a href="{{ url_for('handbook.index') }}"{% if request.endpoint and request.endpoint.startswith('handbook.') %} aria-current="page"{% endif %}>Handbuch</a></li>
-                        <li><a href="{{ url_for('auth.logout') }}" data-logout>Abmelden</a></li>
+                        <li>
+                            <form action="{{ url_for('auth.logout') }}" method="post" class="logout-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit">Abmelden</button>
+                            </form>
+                        </li>
                     </ul>
                 </details>
             </li>
@@ -57,6 +68,25 @@
         {% endwith %}
     </div>
 
+    {% if session_timeout_enabled %}
+    <dialog id="session-timeout"
+            data-remaining="{{ session_remaining_seconds }}"
+            data-idle="{{ session_idle_seconds }}"
+            data-absolute="{{ session_absolute_seconds }}"
+            data-warning="{{ session_warning_seconds }}"
+            data-keepalive-url="{{ url_for('auth.keepalive') }}"
+            data-logout-url="{{ url_for('auth.logout') }}">
+        <article>
+            <header><strong>Sitzung läuft ab</strong></header>
+            <p>Ihre Sitzung wird aus Sicherheitsgründen in <strong data-countdown>--</strong> automatisch beendet.</p>
+            <footer>
+                <button type="button" class="outline secondary" data-logout>Jetzt abmelden</button>
+                <button type="button" class="outline contrast" data-extend autofocus>Angemeldet bleiben</button>
+            </footer>
+        </article>
+    </dialog>
+    {% endif %}
+
     <main class="container">
         {% block content %}{% endblock %}
     </main>
@@ -67,6 +97,10 @@
 
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/tooltip.js') }}"></script>
+    {% if session_timeout_enabled %}
+    <script src="{{ url_for('static', filename='js/session-timeout.js') }}"></script>
+    {% endif %}
 
     {% block scripts %}{% endblock %}
 </body>

@@ -1,30 +1,33 @@
 {% extends "base.html" %}
+{% from "components/filters.html" import render as filter_panel %}
 
 {% block title %}Team-Übersicht - FBK-Time{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Team</h1>
-    <nav><ul><li><a href="{{ url_for('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
 <nav class="page-nav page-nav-week">
     <h2>{{ week_title }}</h2>
     <ul>
-        <li><a href="{{ url_for('dashboard.team_overview', week_start=prev_week.isoformat(), year=year, month=month) }}" role="button" class="outline">← Vorwoche</a></li>
-        <li><a href="{{ url_for('dashboard.team_overview') }}" role="button" class="secondary">Heute</a></li>
-        <li><a href="{{ url_for('dashboard.team_overview', week_start=next_week.isoformat(), year=year, month=month) }}" role="button" class="outline">Nächste →</a></li>
+        <li><a href="{{ filter_url('dashboard.team_overview', week_start=prev_week.isoformat(), year=year, month=month) }}" role="button" class="outline">← Vorwoche</a></li>
+        <li><a href="{{ filter_url('dashboard.team_overview') }}" role="button" class="secondary">Heute</a></li>
+        <li><a href="{{ filter_url('dashboard.team_overview', week_start=next_week.isoformat(), year=year, month=month) }}" role="button" class="outline">Nächste →</a></li>
     </ul>
 </nav>
 
 <nav class="page-nav page-nav-month hidden">
     <h2>{{ month_title }}</h2>
     <ul>
-        <li><a href="{{ url_for('dashboard.team_overview', year=prev_month.year, month=prev_month.month) }}" role="button" class="outline">← Vormonat</a></li>
-        <li><a href="{{ url_for('dashboard.team_overview') }}" role="button" class="secondary">Heute</a></li>
-        <li><a href="{{ url_for('dashboard.team_overview', year=next_month.year, month=next_month.month) }}" role="button" class="outline">Nächster →</a></li>
+        <li><a href="{{ filter_url('dashboard.team_overview', year=prev_month.year, month=prev_month.month) }}" role="button" class="outline">← Vormonat</a></li>
+        <li><a href="{{ filter_url('dashboard.team_overview') }}" role="button" class="secondary">Heute</a></li>
+        <li><a href="{{ filter_url('dashboard.team_overview', year=next_month.year, month=next_month.month) }}" role="button" class="outline">Nächster →</a></li>
     </ul>
 </nav>
+
+{{ filter_panel(filters, all_users, categories, url_for('dashboard.team_overview', year=year, month=month, week_start=week_start.isoformat()), hidden={'year': year, 'month': month, 'week_start': week_start.isoformat()}) }}
 
 <article class="team-matrix-week">
     <div class="team-matrix">
@@ -51,8 +54,8 @@
                     {% if absence and absence.is_combined_half_day %}
                     <td class="absence-cell combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
                         data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
-                        data-href-morning="{% if absence.is_recurring %}{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence.id) }}{% endif %}"
-                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ url_for('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
+                        data-href-morning="{% if absence.is_recurring %}{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence.id) }}{% endif %}"
+                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ origin_url('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
                         {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% endif %}{% if absence.category_afternoon.icon %}<span class="category-icon">{{ absence.category_afternoon.icon }}</span>{% endif %}
                     </td>
                     {% else %}
@@ -60,9 +63,9 @@
                         {% if absence %}
                         data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
                         {% if absence.is_recurring %}
-                        data-href="{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
+                        data-href="{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
                         {% else %}
-                        data-href="{{ url_for('absences.detail', id=absence.absence.id) }}"
+                        data-href="{{ origin_url('absences.detail', id=absence.absence.id) }}"
                         {% endif %}
                         {% elif day.holiday_name %}
                         data-tooltip="{{ day.holiday_name }}"
@@ -111,17 +114,17 @@
                     {% if absence and absence.is_combined_half_day %}
                     <td class="absence-cell combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
                         data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
-                        data-href-morning="{% if absence.is_recurring %}{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence.id) }}{% endif %}"
-                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ url_for('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ url_for('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
+                        data-href-morning="{% if absence.is_recurring %}{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence.id) }}{% endif %}"
+                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ origin_url('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
                     </td>
                     {% else %}
                     <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% elif day.is_weekend %}day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
                         {% if absence %}
                         data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
                         {% if absence.is_recurring %}
-                        data-href="{{ url_for('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
+                        data-href="{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
                         {% else %}
-                        data-href="{{ url_for('absences.detail', id=absence.absence.id) }}"
+                        data-href="{{ origin_url('absences.detail', id=absence.absence.id) }}"
                         {% endif %}
                         {% elif day.holiday_name %}
                         data-tooltip="{{ day.holiday_name }}"
@@ -173,8 +176,8 @@
 <nav aria-label="Abwesenheits-Ansichten">
     <div role="group">
         <a href="{{ url_for('dashboard.team_overview') }}" role="button" aria-current="page">Team</a>
-        <a href="{{ url_for('absences.calendar') }}" role="button" class="outline">Kalender</a>
-        <a href="{{ url_for('absences.list_absences') }}" role="button" class="outline">Liste</a>
+        <a href="{{ view_switch_url('absences.calendar', year=year, month=month, week_start=week_start.isoformat()) }}" role="button" class="outline">Kalender</a>
+        <a href="{{ view_switch_url('absences.list_absences', year=year, month=month) }}" role="button" class="outline">Liste</a>
     </div>
 </nav>
 
@@ -191,7 +194,10 @@
      data-url-matrix="{{ url_for('export.export_user_matrix', user_id=current_user.id) }}"
      data-url-pdf="{{ url_for('export.export_user_pdf', user_id=current_user.id) }}"
      data-url-ical="{{ url_for('export.export_user_ical', user_id=current_user.id) }}"
-     {% endif %}>
+     {% endif %}
+     {% if filters.user_ids %}data-user-ids="{{ filters.user_ids|join(',') }}"{% endif %}
+     {% if filters.category_ids %}data-category-ids="{{ filters.category_ids|join(',') }}"{% endif %}
+     {% if filters.has_substitute %}data-has-substitute="{{ filters.has_substitute }}"{% endif %}>
 </div>
 {% endblock %}
 

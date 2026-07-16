@@ -10,6 +10,19 @@
         {{ form.hidden_tag() }}
 
         <details>
+            <summary>Allgemein</summary>
+
+            <label for="app_timezone">
+                {{ form.app_timezone.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Zeitzone gilt für alle Datums- und Zeitangaben in der Anwendung sowie für den Zeitplan der täglichen Sicherung?">&#x24D8;</span>
+                {{ form.app_timezone(id="app_timezone",
+                   **{'aria-invalid': 'true' if form.app_timezone.errors else none}) }}
+                {% if form.app_timezone.errors %}
+                <small>{{ form.app_timezone.errors[0] }}</small>
+                {% endif %}
+            </label>
+        </details>
+
+        <details>
             <summary>Kontosperrung</summary>
 
             <div class="grid">
@@ -188,6 +201,36 @@
             </div>
         </details>
 
+        <details id="backup">
+            <summary>Datensicherung</summary>
+
+            <label>
+                {{ form.backup_scheduled_enabled(id="backup_scheduled_enabled") }}
+                {{ form.backup_scheduled_enabled.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: einmal täglich zur eingestellten Uhrzeit wird automatisch eine Sicherung erstellt und ältere Sicherungen werden bis zur Anzahl-Grenze entfernt.">&#x24D8;</span>
+            </label>
+
+            <div class="grid">
+                <label for="backup_time">
+                    {{ form.backup_time.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Zu welcher Tageszeit soll die tägliche Sicherung laufen?">&#x24D8;</span>
+                    {{ form.backup_time(id="backup_time",
+                       placeholder='02:00',
+                       **{'aria-invalid': 'true' if form.backup_time.errors else none}) }}
+                    {% if form.backup_time.errors %}
+                    <small>{{ form.backup_time.errors[0] }}</small>
+                    {% endif %}
+                </label>
+
+                <label for="backup_retention_count">
+                    {{ form.backup_retention_count.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie viele der neuesten Sicherungen werden behalten? Ältere Sicherungen werden nach jedem erfolgreichen Sicherungslauf entfernt. Wert {{ form.backup_retention_count | field_range }}.">&#x24D8;</span>
+                    {{ form.backup_retention_count(id="backup_retention_count",
+                       **{'aria-invalid': 'true' if form.backup_retention_count.errors else none}) }}
+                    {% if form.backup_retention_count.errors %}
+                    <small>{{ form.backup_retention_count.errors[0] }}</small>
+                    {% endif %}
+                </label>
+            </div>
+        </details>
+
         <details>
             <summary>Standardwerte für neue Benutzer</summary>
 
@@ -247,7 +290,7 @@
 
         <div class="grid">
             <button type="submit" class="outline">Speichern</button>
-            <button type="button" data-back class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ url_for('settings.system_settings') }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>
