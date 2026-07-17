@@ -101,6 +101,16 @@ body > footer {
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
+.main-nav details.dropdown {
+    display: inline-block;
+}
+
+.main-nav details.dropdown > summary + ul {
+    left: auto;
+    right: 0;
+    min-width: 16rem;
+}
+
 .main-nav details.dropdown > summary + ul li .logout-form {
     margin: 0;
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1] - 2026-07-16
+
+### Fixed
+- Upgrade auf v1.6.0: Das Upgrade-Skript ergänzt in der `settings.json` jetzt auch `system.backup.directory` sowie alle weiteren von der Anwendung vorausgesetzten `system`-Pflichtfelder, sodass der Start nach dem Upgrade nicht mehr mit „KeyError: 'backup'" abbricht
+- Eine unvollständige `settings.json` meldet beim Start jetzt alle fehlenden Pflichtfelder in einer klaren Fehlermeldung statt eines technischen Fehlerabbruchs
+- Das Konto-Menü in der Kopfzeile wurde in Chromium-basierten Browsern (Chrome, Edge) abgeschnitten und über den rechten Bildschirmrand hinaus dargestellt; es klappt jetzt browserübergreifend einheitlich rechtsbündig auf
+
 ## [1.6.0] - 2026-07-16
 
 ### Added

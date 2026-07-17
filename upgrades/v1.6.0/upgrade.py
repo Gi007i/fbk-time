@@ -13,11 +13,11 @@ Existing rows receive NULL for previous_login_at, which is the correct
 initial state: no prior session has been recorded yet. credential_version
 starts at 0 for every existing user.
 
-It also ensures the installation's settings.json defines the session
-settings this release requires (idle_timeout_minutes and
-idle_warning_seconds), adding any that are absent with the shipped
-defaults. This step is idempotent and creates its own timestamped
-settings.json backup before writing.
+It also ensures the installation's settings.json defines the settings
+this release requires (idle_timeout_minutes, idle_warning_seconds and
+backup.directory), adding any that are absent with the shipped defaults.
+This step is idempotent and creates its own timestamped settings.json
+backup before writing.
 
 Runs the schema change in a single transaction. Creates a timestamped
 backup of the database file before touching it. Rolls back on any
@@ -58,17 +58,21 @@ SUPPORTED_FROM_VERSIONS = '1.5.x'
 # ALTER TABLE RENAME COLUMN requires SQLite >= 3.25.0 (2018-09-15).
 REQUIRED_SQLITE_VERSION = (3, 25, 0)
 
-# Defaults applied when the installation's settings.json predates these
-# session settings. Match the values shipped in the source tree.
+# Defaults applied when an installation's settings.json predates settings
+# this release introduced. Match the values shipped in the source tree.
 IDLE_TIMEOUT_DEFAULT_MINUTES = 30
 IDLE_WARNING_DEFAULT_SECONDS = 60
+# /tmp is volatile across reboots and world-writable; production must point
+# this at a persistent path outside the install directory (see settings.json).
+BACKUP_DIR_DEFAULT = '/tmp/fbk-time-backups'
 
-# Session keys under system.security.session that this release introduces
-# or requires, with the default to insert when a key is absent.
-SESSION_SETTING_DEFAULTS = {
-    'idle_timeout_minutes': IDLE_TIMEOUT_DEFAULT_MINUTES,
-    'idle_warning_seconds': IDLE_WARNING_DEFAULT_SECONDS,
-}
+# Settings under "system" this release requires, as (key path, default).
+# Absent keys are inserted with the default; existing values are kept.
+REQUIRED_SYSTEM_SETTINGS = (
+    (('security', 'session', 'idle_timeout_minutes'), IDLE_TIMEOUT_DEFAULT_MINUTES),
+    (('security', 'session', 'idle_warning_seconds'), IDLE_WARNING_DEFAULT_SECONDS),
+    (('backup', 'directory'), BACKUP_DIR_DEFAULT),
+)
 
 
 class Logger:
@@ -270,49 +274,54 @@ def _secure_file_permissions(path: Path, logger: Logger) -> None:
         )
 
 
-def _settings_missing_session_keys(settings_path: Path) -> list[str]:
-    """Return the required session keys absent from settings.json."""
+def _missing_system_settings(settings_path: Path) -> list[str]:
+    """Return the dotted names of required system settings absent from the file."""
     with open(settings_path, 'r', encoding='utf-8') as fh:
         data = json.load(fh)
-    session = (
-        data.get('system', {}).get('security', {}).get('session', {})
-    )
-    return [key for key in SESSION_SETTING_DEFAULTS if key not in session]
+    system = data.get('system', {})
+    missing = []
+    for path, _default in REQUIRED_SYSTEM_SETTINGS:
+        node = system
+        for key in path[:-1]:
+            node = node.get(key, {}) if isinstance(node, dict) else {}
+        if not isinstance(node, dict) or path[-1] not in node:
+            missing.append('.'.join(path))
+    return missing
 
 
-def _settings_has_session_defaults(settings_path: Path) -> bool:
-    """Return True if settings.json defines all required session keys."""
-    return not _settings_missing_session_keys(settings_path)
+def _settings_complete(settings_path: Path) -> bool:
+    """Return True if settings.json defines every required system setting."""
+    return not _missing_system_settings(settings_path)
 
 
-def _ensure_session_settings(
+def _ensure_system_settings(
     settings_path: Path,
     backup_dir: Path,
     logger: Logger
 ) -> bool:
-    """Add any missing session settings to settings.json.
+    """Add any missing required settings under "system" to settings.json.
 
-    Ensures the keys in SESSION_SETTING_DEFAULTS (idle timeout and idle
-    warning lead time) exist. Idempotent: leaves existing values
-    untouched. Creates a timestamped settings.json backup before editing
-    and writes the file atomically, preserving the original file mode.
-    Returns True if any key was inserted.
+    Inserts the keys in REQUIRED_SYSTEM_SETTINGS (idle timeout, idle warning
+    lead time, backup directory) when absent. Idempotent: existing values are
+    left untouched. Creates a timestamped settings.json backup before editing
+    and writes the file atomically, preserving the original file mode. Returns
+    True if any key was inserted.
     """
     with open(settings_path, 'r', encoding='utf-8') as fh:
         data = json.load(fh)
 
-    session = (
-        data.setdefault('system', {})
-            .setdefault('security', {})
-            .setdefault('session', {})
-    )
-    missing = {
-        key: default
-        for key, default in SESSION_SETTING_DEFAULTS.items()
-        if key not in session
-    }
-    if not missing:
-        logger.success('settings.json already defines all session settings')
+    system = data.setdefault('system', {})
+    inserted = {}
+    for path, default in REQUIRED_SYSTEM_SETTINGS:
+        node = system
+        for key in path[:-1]:
+            node = node.setdefault(key, {})
+        if path[-1] not in node:
+            node[path[-1]] = default
+            inserted['.'.join(path)] = default
+
+    if not inserted:
+        logger.success('settings.json already defines all required settings')
         return False
 
     timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
@@ -321,8 +330,6 @@ def _ensure_session_settings(
     _secure_file_permissions(backup_path, logger)
     logger.success(f'settings.json backup created: {backup_path}')
 
-    session.update(missing)
-
     original_mode = settings_path.stat().st_mode & 0o777
     tmp_path = settings_path.with_name(settings_path.name + '.tmp')
     with open(tmp_path, 'w', encoding='utf-8') as fh:
@@ -330,8 +337,15 @@ def _ensure_session_settings(
         fh.write('\n')
     os.chmod(tmp_path, original_mode)
     os.replace(tmp_path, settings_path)
-    for key, default in missing.items():
-        logger.success(f'Added {key} = {default} to settings.json')
+
+    for name, default in inserted.items():
+        logger.success(f'Added {name} = {default} to settings.json')
+    if 'backup.directory' in inserted:
+        logger.warning(
+            'system.backup.directory was set to the volatile /tmp default. '
+            'Point it at a persistent path outside the install directory '
+            'before relying on backups.'
+        )
     return True
 
 
@@ -370,12 +384,12 @@ def cmd_verify(
 
     if settings_path is None:
         logger.warning('settings.json not checked (no --app-path given)')
-    elif _settings_has_session_defaults(settings_path):
-        logger.success('settings.json defines all session settings')
+    elif _settings_complete(settings_path):
+        logger.success('settings.json defines all required settings')
     else:
         ok = False
-        missing = ', '.join(_settings_missing_session_keys(settings_path))
-        logger.warning(f'settings.json is missing session settings: {missing}')
+        missing = ', '.join(_missing_system_settings(settings_path))
+        logger.warning(f'settings.json is missing required settings: {missing}')
 
     logger.section(
         f'v{TARGET_VERSION} Verification {"Passed" if ok else "Failed"}'
@@ -622,7 +636,7 @@ def cmd_upgrade(
 
     schema_done = _is_schema_on_target(db_path, binary)
     settings_done = (
-        settings_path is None or _settings_has_session_defaults(settings_path)
+        settings_path is None or _settings_complete(settings_path)
     )
     if schema_done and settings_done:
         logger.success('Database and settings already on the v1.6.0 layout')
@@ -642,11 +656,11 @@ def cmd_upgrade(
     if settings_path is None:
         logger.warning(
             'No --app-path given: settings.json was not located. '
-            'Ensure the session settings (idle_timeout_minutes, '
-            'idle_warning_seconds) are set manually.'
+            'Ensure the required settings (idle_timeout_minutes, '
+            'idle_warning_seconds, backup.directory) are set manually.'
         )
     else:
-        _ensure_session_settings(settings_path, backup_dir, logger)
+        _ensure_system_settings(settings_path, backup_dir, logger)
 
     logger.section(f'v{TARGET_VERSION} Upgrade Successful')
     logger.success(f'Installation upgraded to v{TARGET_VERSION}.')
@@ -664,8 +678,8 @@ def main() -> None:
         f'\n'
         f'Renames last_login → last_login_at and adds previous_login_at\n'
         f'and credential_version to the users table, and ensures\n'
-        f'settings.json defines the session settings\n'
-        f'(idle_timeout_minutes, idle_warning_seconds).\n'
+        f'settings.json defines the required settings (idle_timeout_minutes,\n'
+        f'idle_warning_seconds, backup.directory).\n'
         f'Runs the schema change in a single transaction and creates\n'
         f'timestamped backups before touching the database or\n'
         f'settings.json. Rolls back on any failure.'

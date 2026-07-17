@@ -59,12 +59,50 @@ def _resolve_secret_key():
         )
     return key
 
+_REQUIRED_SYSTEM_SETTINGS = (
+    ('database', 'path'),
+    ('logs', 'access_log'),
+    ('logs', 'error_log'),
+    ('licenses', 'path'),
+    ('licenses', 'manual_path'),
+    ('server', 'host'),
+    ('server', 'port'),
+    ('server', 'runtime_path'),
+    ('backup', 'directory'),
+    ('security', 'session', 'lifetime_hours'),
+    ('security', 'session', 'idle_timeout_minutes'),
+    ('security', 'session', 'idle_warning_seconds'),
+    ('security', 'session', 'remember_cookie_days'),
+    ('security', 'argon2', 'time_cost'),
+    ('security', 'argon2', 'memory_cost'),
+    ('security', 'argon2', 'parallelism'),
+)
+
+
+def _validate_system_settings(system):
+    """Fail with a clear message when settings.json omits a required field."""
+    missing = []
+    for path in _REQUIRED_SYSTEM_SETTINGS:
+        node = system
+        for key in path:
+            if not isinstance(node, dict) or key not in node:
+                missing.append('.'.join(path))
+                break
+            node = node[key]
+    if missing:
+        raise ValueError(
+            'settings.json: fehlende Pflichtfelder unter "system": '
+            + ', '.join(missing)
+            + ' - Setup oder Upgrade erforderlich.'
+        )
+
 
 class Config:
     """Production configuration loaded from settings.json."""
 
     _SETTINGS = _load_settings()
-    SYSTEM_SETTINGS = _SETTINGS['system']
+    SYSTEM_SETTINGS = _SETTINGS.get('system', {})
+    _validate_system_settings(SYSTEM_SETTINGS)
 
     BASE_DIR = Path(__file__).resolve().parent
 

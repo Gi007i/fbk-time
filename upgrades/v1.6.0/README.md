@@ -18,11 +18,11 @@ Bestehende Zeilen erhalten `NULL` für `previous_login_at` — korrekte
 Ausgangslage, da bisher kein vorheriger Login erfasst wurde.
 `credential_version` startet für alle bestehenden Nutzer bei `0`.
 
-Ergänzt die `settings.json` der Installation unter
-`system.security.session`, falls Schlüssel fehlen:
+Ergänzt fehlende Pflichtfelder in der `settings.json` der Installation:
 
-- `idle_timeout_minutes` (Standard `30`)
-- `idle_warning_seconds` (Standard `60`) — Vorwarnzeit vor dem Leerlauf-Ablauf
+- `system.security.session.idle_timeout_minutes` (Standard `30`)
+- `system.security.session.idle_warning_seconds` (Standard `60`) — Vorwarnzeit vor dem Leerlauf-Ablauf
+- `system.backup.directory` (Standard `/tmp/fbk-time-backups`) — **flüchtig**; produktiv auf einen persistenten Pfad außerhalb des Installationsverzeichnisses setzen
 
 Der Schritt ist idempotent (vorhandene Werte bleiben unangetastet),
 schreibt die Datei atomar und erstellt vorher ein eigenes Backup.
@@ -47,7 +47,7 @@ Pre-Checks (vor dem Backup):
 
 - SQLite-Version ≥ 3.25 (bei älterer Version wird das gebündelte Binary vorgeschlagen und nach Bestätigung verwendet)
 - `PRAGMA integrity_check` auf der Live-DB (bricht bei Korruption ab)
-- Kurzcheck: Schema **und** alle Session-Einstellungen bereits vorhanden → Exit ohne Änderungen
+- Kurzcheck: Schema **und** alle erforderlichen Settings bereits vorhanden → Exit ohne Änderungen
 
 Backups (im DB-Verzeichnis bzw. in `--backup-dir`):
 
@@ -58,7 +58,7 @@ Backups (im DB-Verzeichnis bzw. in `--backup-dir`):
 
 | Kommando | Zweck |
 |---|---|
-| `verify` | Prüft ohne Änderung, ob Schema und Session-Einstellungen bereits auf v1.6.0 sind |
+| `verify` | Prüft ohne Änderung, ob Schema und erforderliche Settings bereits auf v1.6.0 sind |
 | `upgrade` | Führt das Upgrade durch (Backup + Transaktion + Verifikation + Settings) |
 | `restore` | Spielt eine Backup-Datei über die Live-DB |
 
