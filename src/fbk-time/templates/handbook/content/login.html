@@ -2,40 +2,52 @@
 
 <h2>Anmelden</h2>
 
-<p>Auf der Startseite geben Sie Benutzername und Passwort ein. Der Benutzername gilt unabhängig von Groß- und Kleinschreibung. Beim Passwort zählt jedes Zeichen.</p>
+<p>Auf der Startseite geben Sie Benutzername und Passwort ein. Beim Benutzernamen spielt Groß- und Kleinschreibung keine Rolle. Beim Passwort zählt jedes Zeichen.</p>
 
-<p>Schlägt die Anmeldung fehl, erscheint eine allgemeine Meldung. Aus Sicherheitsgründen sagt die Anwendung Ihnen nicht, ob Benutzername oder Passwort falsch waren.</p>
+<p>Haben Sie beim Anmelden das Kontrollkästchen <strong>Angemeldet bleiben</strong> gewählt und rufen die Anwendung nach dem Beenden des Browsers erneut auf, meldet sie Sie ohne Passwort wieder an. Das gilt bis zum Ende einer festen Frist ab Ihrer letzten Anmeldung mit Passwort; die Frist legt die Serverbetreuung fest. Melden Sie sich ab, endet es sofort. An gemeinsam genutzten Geräten verzichten Sie besser darauf.</p>
 
-<p>Nach mehreren fehlgeschlagenen Anmeldeversuchen wird Ihr Konto vorübergehend gesperrt. Nach Ablauf der Sperrdauer können Sie sich wieder anmelden; vorher kann ein Manager Sie manuell entsperren. Die genauen Schwellenwerte und Sperrfristen legt die Administration fest.</p>
+<p>Läuft Ihre Sitzung ab, bevor Sie den Browser beendet haben, endet mit ihr auch <strong>Angemeldet bleiben</strong>, und Sie melden sich neu an. Das betrifft den Ablauf nach einer Phase ohne Aktivität ebenso wie das Ende der maximalen Sitzungsdauer. Wechselt Ihr Gerät in ein anderes Netzwerk oder ändert sich die Browserversion, beendet die Anwendung die Anmeldung ebenfalls samt <strong>Angemeldet bleiben</strong>. Stellt Ihr Browser beim Start die letzte Sitzung selbst wieder her, wie es viele Browser und Mobilgeräte tun, greift <strong>Angemeldet bleiben</strong> deshalb selten.</p>
 
-<p>Nach jedem Fehlversuch wartet die Anwendung etwas länger, bis sie den nächsten Versuch annimmt.</p>
+<p>Liegt Ihre letzte Passworteingabe länger als 15 Minuten zurück oder hat <strong>Angemeldet bleiben</strong> Sie angemeldet, fragt die Anwendung vor folgenreichen Aktionen Ihr Passwort erneut ab. Dazu gehören das Ändern Ihrer E-Mail-Adresse und für Manager und Admins jede Änderung an Konten in der Übersicht „Mitarbeitende“, das Löschen von Kategorien sowie die Systemeinstellungen und die Aktionen unter <strong>Datensicherung</strong>. Nach einem Klick auf <strong>Bestätigen</strong> geht es dort weiter, wo Sie waren; eine bereits ausgelöste Aktion wie das Löschen lösen Sie dort erneut aus. Falsche Eingaben zählen wie Fehlversuche bei der Anmeldung.</p>
 
-<p>Konten ohne Aktivität werden nach einer eingestellten Frist automatisch deaktiviert. Reaktivieren kann sie ein Manager oder Admin.</p>
+{% if cfg.self_registration_available %}
+<p>Unter dem Anmeldeformular finden Sie den Link <strong>Registrieren</strong>. Ein selbst angelegtes Konto erhält zunächst den Status <strong>Ausstehend</strong>. Anmelden können Sie sich damit erst, nachdem ein Admin es freigeschaltet hat.</p>
+{% endif %}
 
-<h2>Erstes Passwort</h2>
+<p>Schlägt die Anmeldung fehl, erscheint eine allgemeine Meldung. Aus Sicherheitsgründen verrät die Anwendung nicht, ob Benutzername oder Passwort falsch waren.</p>
 
-<p>Beim Einrichten eines neuen Kontos vergibt der Manager ein Startpasswort.{% if cfg.password_force_change_on_first_login %} Beim ersten Login müssen Sie es ändern – erst danach stehen Ihnen die übrigen Funktionen zur Verfügung.{% else %} Sie müssen es beim ersten Login nicht ändern, können das aber jederzeit auf Ihrer Profilseite nachholen.{% endif %}</p>
+<p>Nach jedem Fehlversuch mit Ihrem Benutzernamen wartet die Anwendung etwas länger, bis sie den nächsten Versuch annimmt. Nach mehreren Fehlversuchen sperrt sie die Anmeldung an Ihrem Konto für eine festgelegte Dauer. Ihr Konto behält dabei den Status <strong>Aktiv</strong>. Die Sperre endet von selbst, vorzeitig aufheben kann sie ein Admin. Die genauen Schwellenwerte und Sperrfristen legt ein Admin fest.</p>
+
+<p>Wartezeit und Sperre gelten nur für Browser, in denen die Anmeldung mit diesem Benutzernamen noch nie gelungen ist. Einen Browser, in dem Ihnen das schon gelungen ist, merkt sich die Anwendung über mehrere Monate, auch über das Abmelden hinaus. Dort melden Sie sich auch dann an, wenn andere Ihr Konto gerade durch Fehlversuche gesperrt haben. Geben Sie in diesem Browser selbst wiederholt ein falsches Passwort ein, verliert er diese Ausnahme für die Dauer der Sperre.</p>
+
+<p>Bleibt ein Konto über eine eingestellte Frist ohne Aktivität, deaktiviert die Anwendung es automatisch. Die Frist legt ein Admin fest. Wieder aktivieren kann es ein Admin, bei Konten mit der Rolle <strong>Benutzer</strong> auch ein Manager.</p>
+
+<h2>Woher Ihr erstes Passwort kommt</h2>
+
+<p>Beim Einrichten eines neuen Kontos vergibt ein Manager ein Startpasswort.{% if cfg.password_force_change_on_first_login %} Bei der ersten Anmeldung müssen Sie es ändern; erst danach können Sie die übrigen Funktionen nutzen.{% else %} Ändern müssen Sie es bei der ersten Anmeldung nicht – nachholen können Sie das jederzeit unter <strong>Mein Profil</strong>.{% endif %}</p>
 
 <h2>Passwort ändern</h2>
 
-<p>Ihr Passwort ändern Sie auf der Profilseite (Benutzermenü → <strong>Mein Profil</strong>) im Abschnitt <strong>Sicherheit</strong>. Zur Bestätigung geben Sie das aktuelle Passwort ein; das neue Passwort tippen Sie zweimal.</p>
+<p>Ihr Passwort ändern Sie unter <strong>Mein Profil</strong> im Benutzermenü. Dort führt im Abschnitt <strong>Sicherheit</strong> die Schaltfläche <strong>Passwort ändern</strong> auf ein eigenes Formular. Zur Bestätigung geben Sie das aktuelle Passwort ein, das neue tippen Sie zweimal.</p>
 
-<p>Nach einer Passwortänderung werden alle anderen aktiven Sitzungen – auch per „Angemeldet bleiben" gespeicherte – beendet. Auf anderen Geräten müssen Sie sich neu anmelden.</p>
+<p>Ändern Sie Ihr Passwort, beendet die Anwendung alle anderen aktiven Sitzungen – auch die, die Sie mit <strong>Angemeldet bleiben</strong> gespeichert haben. Auf anderen Geräten müssen Sie sich neu anmelden, und auch auf diesem Gerät gilt ein gewähltes <strong>Angemeldet bleiben</strong> danach nicht mehr.</p>
 
-<p>Die geltenden Anforderungen (Mindestlänge, erforderliche Zeichenarten) sehen Sie unter dem Eingabefeld. Die genauen Werte legt der Admin fest.</p>
+<p>Welche Anforderungen gelten – die Mindestlänge und, falls ein Admin sie vorgibt, bestimmte Zeichenarten –, sehen Sie unter dem Eingabefeld. Die genauen Werte legt ein Admin fest.</p>
 
 <h2>Passwort vergessen</h2>
 
-<p>Eine automatische Zurücksetzung per E-Mail gibt es nicht. Wenn Sie Ihr Passwort vergessen haben, vergibt ein Manager oder Admin ein neues Startpasswort. Der Ablauf ist dann wie bei der Erstanmeldung: Beim nächsten Login legen Sie ein eigenes Passwort fest.</p>
+<p>Per E-Mail lässt sich ein Passwort nicht zurücksetzen. Haben Sie Ihres vergessen, vergibt ein Admin ein neues Startpasswort – bei Konten mit der Rolle <strong>Benutzer</strong> auch ein Manager. Danach läuft es wie beim ersten Mal: Bei der nächsten Anmeldung legen Sie ein eigenes Passwort fest.</p>
 
 <h2>Abmelden</h2>
 
-<p>Sie melden sich über das Benutzermenü oben rechts ab (siehe Kapitel <strong>Einleitung</strong>). Die Sitzung endet damit sofort.</p>
+<p>Sie melden sich über das Benutzermenü oben rechts ab; die Sitzung endet damit sofort. Wie das Menü aufgebaut ist, beschreibt das Kapitel <strong>Einleitung</strong>.</p>
 
-<p>Aus Sicherheitsgründen meldet die Anwendung Sie zusätzlich automatisch ab: nach einer Phase ohne Aktivität sowie nach Ablauf der maximalen Sitzungsdauer – Letztere greift unabhängig davon, ob Sie zwischenzeitlich aktiv waren.</p>
+<p>Aus Sicherheitsgründen meldet die Anwendung Sie zusätzlich in zwei Fällen automatisch ab: nach einer Phase ohne Aktivität und nach Ablauf der maximalen Sitzungsdauer. Die maximale Sitzungsdauer greift dabei unabhängig davon, ob Sie zwischenzeitlich aktiv waren.</p>
 
-<p>Oben rechts sehen Sie einen Zähler mit der verbleibenden Sitzungszeit. Kurz vor dem Ablauf erscheint ein Hinweisfenster mit <strong>„Angemeldet bleiben"</strong> und <strong>„Jetzt abmelden"</strong>. Mit <em>Angemeldet bleiben</em> – oder einem Klick auf den Zähler – verlängern Sie die Sitzung; jede normale Aktion wie ein Seitenwechsel verlängert sie ebenfalls. Reagieren Sie nicht, werden Sie beim Ablauf automatisch abgemeldet. Die maximale Sitzungsdauer lässt sich damit allerdings nicht überschreiten.</p>
+<p>Oben rechts sehen Sie einen Zähler mit der verbleibenden Sitzungszeit. Ein Klick darauf verlängert die Sitzung, und jede normale Aktion wie ein Seitenwechsel verlängert sie ebenfalls. Kurz vor dem Ablauf erscheint ein Hinweisfenster mit den Schaltflächen <strong>Angemeldet bleiben</strong> und <strong>Jetzt abmelden</strong>. Reagieren Sie nicht, lädt die Anwendung die Seite beim Ablauf neu.</p>
 
-<p>Nach einer automatischen Abmeldung erscheint der Hinweis <em>„Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an."</em>, und Sie gelangen zur Anmeldeseite. Die genauen Fristen legt die Administration fest.</p>
+<p>Die maximale Sitzungsdauer lässt sich auf diesem Weg nicht überschreiten. Ist sie erreicht, zählt der Zähler die verbleibende Zeit weiter herunter. Anklicken lässt er sich dann nicht mehr, und seine Beschriftung nennt das feste Sitzungsende. Statt der Verlängerung bietet das Hinweisfenster nur noch <strong>Fenster schließen</strong> an, damit Sie Ihre Eingaben sichern können.</p>
 
-<p>Das Schließen des Browserfensters allein reicht nicht aus, um die Sitzung sofort zu beenden. An gemeinsam genutzten Arbeitsplätzen sollten Sie sich daher immer explizit abmelden.</p>
+<p>Ist die Sitzung abgelaufen, zeigt die Anwendung beim Neuladen oder beim nächsten Seitenaufruf die Anmeldeseite mit dem Hinweis <em>„Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.“</em> Das gilt auch mit <strong>Angemeldet bleiben</strong>, solange Sie den Browser zwischendurch nicht beendet haben oder Ihr Browser beim Start die vorige Sitzung wiederherstellt. Mit <strong>Jetzt abmelden</strong> melden Sie sich dagegen sofort ab, und die Anwendung zeigt <em>„Sie wurden abgemeldet.“</em> Die genauen Fristen legt die Serverbetreuung fest.</p>
+
+<p>Beenden Sie den Browser, endet die Sitzung mit ihm. Schließen Sie nur ein Fenster oder stellt Ihr Browser beim nächsten Start die letzte Sitzung wieder her, bleibt sie bis zum nächsten automatischen Ablauf bestehen. Melden Sie sich an gemeinsam genutzten Arbeitsplätzen deshalb immer ausdrücklich ab.</p>

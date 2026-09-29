@@ -1,11 +1,10 @@
-"""Category forms.
-
-Provides forms for category CRUD operations.
-"""
+"""Category forms."""
 
 from flask_wtf import FlaskForm
-from wtforms import StringField, BooleanField, IntegerField, SelectField, HiddenField
-from wtforms.validators import DataRequired, Length, Optional, NumberRange, Regexp
+from wtforms import StringField, BooleanField, IntegerField, SelectField
+from wtforms.validators import DataRequired, Length, Optional, NumberRange, Regexp, AnyOf
+
+from .helpers import CATEGORY_ICONS
 
 
 class CategoryForm(FlaskForm):
@@ -27,7 +26,7 @@ class CategoryForm(FlaskForm):
                 message='Farbe muss im Format #RRGGBB sein.'
             )
         ],
-        default='#3B82F6'
+        default='#2563EB'
     )
     text_color = StringField(
         'Schriftfarbe',
@@ -44,7 +43,7 @@ class CategoryForm(FlaskForm):
         'Icon',
         validators=[
             Optional(),
-            Length(max=50, message='Icon-Name darf maximal 50 Zeichen lang sein.')
+            AnyOf(CATEGORY_ICONS, message='Icon muss aus der Auswahlliste stammen.')
         ]
     )
     requires_substitute = BooleanField('Vertretung erforderlich', default=False)
@@ -63,11 +62,19 @@ class CategoryForm(FlaskForm):
 class CategoryDeleteForm(FlaskForm):
     """Category deletion form with transfer option."""
 
-    action = HiddenField(
-        validators=[DataRequired()]
+    # Rendered as radio buttons in the template, not a hidden input, so
+    # form.hidden_tag() must not emit a second empty "action" field.
+    action = StringField(
+        validators=[
+            DataRequired(message='Bitte wählen Sie eine Option.'),
+            AnyOf(['transfer', 'delete_all', 'delete_empty'], message='Ungültige Aktion. Bitte wählen Sie eine Option.')
+        ]
     )
     new_category_id = SelectField(
         'Abwesenheiten übertragen nach',
         coerce=lambda x: int(x) if x and x != '' else None,
+        # A target deleted meanwhile must reach the service and its German
+        # message instead of the generic choice error.
+        validate_choice=False,
         validators=[Optional()]
     )

@@ -1,16 +1,18 @@
-"""Dashboard views.
+"""Dashboard and team overview views."""
 
-Provides the main dashboard view with widgets and team overview.
-"""
-
+from calendar import monthrange
 from datetime import date, timedelta
 
-from flask import Blueprint, render_template
-from flask_login import login_required
+from flask import Blueprint, redirect, render_template
 
+from core.auth import login_required, current_user
+from utils.navigation import start_page_url
 from utils.helpers import format_date_for_user
-from utils.request_validators import validate_year_param, validate_month_param, validate_date_param
-from utils.filters import parse_absence_filters
+from utils.request_validators import (
+    validate_year_param, validate_month_param, validate_date_range,
+    resolve_week_start
+)
+from utils.filters import parse_absence_filters, default_scope_redirect
 from modules.holidays.services import get_holidays_for_month
 from .services import (
     get_today_absences,
@@ -34,6 +36,12 @@ WEEKDAY_NAMES = [
 def require_login():
     """Require login for all dashboard routes."""
     pass
+
+
+@bp.route('/home')
+def home():
+    """Redirect to the current user's configured start page."""
+    return redirect(start_page_url(current_user.start_page))
 
 
 @bp.route('/')
@@ -67,6 +75,10 @@ def index():
 @bp.route('/team-overview')
 def team_overview():
     """Display team overview matrix (users × days) - responsive week/month view."""
+    scope_redirect = default_scope_redirect('dashboard.team_overview')
+    if scope_redirect:
+        return scope_redirect
+
     today = date.today()
 
     month_names = [
@@ -79,13 +91,13 @@ def team_overview():
     year = validate_year_param()
     month = validate_month_param()
 
-    week_start = validate_date_param('week_start')
-    if week_start:
-        week_start = week_start - timedelta(days=week_start.weekday())
-    else:
-        week_start = today - timedelta(days=today.weekday())
+    week_start = resolve_week_start(year, month)
 
     week_end = week_start + timedelta(days=4)
+
+    first_day = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+    validate_date_range(min(week_start, first_day), max(week_end, last_day))
 
     filters = parse_absence_filters()
 

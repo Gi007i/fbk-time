@@ -1,0 +1,426 @@
+/**
+ * Absence Views CSS
+ *
+ * Scoped styles for the absence list, calendar and team matrix views.
+ *
+ * @license MIT
+ * @copyright 2026 FBK-Time
+ * @see https://github.com/Gi007i/fbk-time
+ * @see https://gitlab.com/Gi007i/fbk-time
+ */
+
+/* =============================================
+   PAGE NAVIGATION
+   ============================================= */
+.page-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.page-nav h2 {
+    text-align: center;
+}
+
+.page-nav ul {
+    justify-content: center;
+}
+
+@media (min-width: 768px) {
+    .page-nav {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 1rem;
+        align-items: center;
+    }
+
+    .page-nav h2 {
+        text-align: left;
+    }
+
+    .page-nav ul {
+        justify-content: flex-start;
+        justify-self: end;
+    }
+}
+
+/* =============================================
+   ABSENCE LIST
+   ============================================= */
+.list-desktop-col {
+    display: none;
+}
+
+.list-name span,
+.list-cards .list-truncate {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.list-cards .category-badge {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (min-width: 768px) {
+    .list-desktop-col {
+        display: table-cell;
+    }
+
+    .list-mobile-col {
+        display: none;
+    }
+
+    .list-name span,
+    .list-cards .list-truncate {
+        max-width: 12rem;
+    }
+}
+
+@media (max-width: 767px) {
+    .list-cards thead {
+        display: none;
+    }
+
+    .list-cards tbody,
+    .list-cards tr,
+    .list-cards td:not(.list-desktop-col) {
+        display: block;
+    }
+
+    .list-cards tr {
+        position: relative;
+        border: 1px solid var(--pico-muted-border-color);
+        border-radius: var(--pico-border-radius);
+        padding: 0.6rem 0.75rem 0.6rem 3rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .list-cards td {
+        border-bottom: none;
+        padding: 0.1rem 0;
+        background: transparent;
+    }
+
+    .list-cards td:first-child {
+        position: absolute;
+        top: 0.6rem;
+        left: 0.75rem;
+        padding: 0;
+    }
+
+    .list-cards .list-name {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+    }
+
+    .list-cards td[data-label] {
+        display: flex;
+        align-items: baseline;
+        gap: 0.35rem;
+    }
+
+    .list-cards td[data-label]::before {
+        content: attr(data-label) ":";
+        font-weight: 600;
+    }
+}
+
+/* =============================================
+   BULK ACTIONS BAR
+   ============================================= */
+.bulk-actions-bar button {
+    white-space: nowrap;
+}
+
+.bulk-actions-bar ul {
+    flex-wrap: wrap;
+}
+
+.bulk-actions-bar li:first-child {
+    white-space: nowrap;
+}
+
+/* =============================================
+   CALENDAR
+   ============================================= */
+.calendar {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.calendar th,
+.calendar td {
+    border: 1px solid var(--pico-muted-border-color);
+    padding: 0.25rem;
+    vertical-align: top;
+}
+
+.calendar td {
+    height: auto;
+    min-height: 60px;
+}
+
+.calendar th {
+    text-align: center;
+    font-weight: 600;
+}
+
+@media (min-width: 768px) {
+    .calendar td {
+        height: 100px;
+    }
+
+    .calendar .absence-item {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.375rem;
+    }
+}
+
+.calendar .day-number {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 0.25rem;
+}
+
+.calendar .day-today .day-number {
+    background: var(--pico-primary-background);
+    color: var(--pico-primary-inverse);
+    border-radius: 50%;
+    width: 1.75rem;
+    height: 1.75rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.calendar mark {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.calendar .calendar-weekend-col {
+    display: none;
+}
+
+@media (min-width: 768px) {
+    .calendar .calendar-weekend-col {
+        display: table-cell;
+    }
+}
+
+.day-header {
+    background: var(--pico-card-sectioning-background-color);
+}
+
+.team-matrix th.day-weekend,
+.team-matrix td.day-weekend,
+.calendar td.day-weekend {
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme="dark"] .team-matrix th.day-weekend,
+[data-theme="dark"] .team-matrix td.day-weekend,
+[data-theme="dark"] .calendar td.day-weekend {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.team-matrix th.day-holiday,
+.team-matrix td.day-holiday {
+    background: var(--pico-mark-background-color);
+}
+
+.calendar .absence-item {
+    display: block;
+    padding: 0.125rem 0.25rem;
+    margin-bottom: 0.125rem;
+    border-radius: 0.25rem;
+    font-size: 0.65rem;
+    text-decoration: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* =============================================
+   TEAM MATRIX
+   ============================================= */
+.team-matrix {
+    max-height: 70vh;
+    overflow: auto;
+    scroll-padding-top: 4rem;
+    scroll-padding-left: 10.5rem;
+}
+
+.team-matrix table {
+    min-width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.team-matrix th,
+.team-matrix td {
+    border-right: 1px solid var(--pico-muted-border-color);
+    border-bottom: 1px solid var(--pico-muted-border-color);
+    padding: 0.5rem 0.25rem;
+    text-align: center;
+    min-width: 44px;
+}
+
+.team-matrix th small {
+    display: block;
+    margin-top: 0;
+}
+
+.team-matrix thead th {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-top: 1px solid var(--pico-muted-border-color);
+    background: var(--pico-card-sectioning-background-color);
+}
+
+.team-matrix thead th.day-weekend {
+    background: linear-gradient(rgba(0, 0, 0, 0.03), rgba(0, 0, 0, 0.03)),
+        var(--pico-card-sectioning-background-color);
+}
+
+[data-theme="dark"] .team-matrix thead th.day-weekend {
+    background: linear-gradient(rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.05)),
+        var(--pico-card-sectioning-background-color);
+}
+
+.team-matrix .user-name {
+    position: sticky;
+    left: 0;
+    background: var(--pico-background-color);
+    border-left: 1px solid var(--pico-muted-border-color);
+    text-align: left;
+    padding-left: 0.5rem;
+    font-weight: 500;
+    z-index: 1;
+}
+
+.team-matrix thead th.user-name {
+    z-index: 3;
+}
+
+.team-matrix .user-name small {
+    display: block;
+    max-width: 9.375rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.team-matrix .half-day-morning .category-initial {
+    margin-right: 50%;
+}
+
+.team-matrix .half-day-afternoon .category-initial {
+    margin-left: 50%;
+}
+
+.team-matrix td[data-href],
+.team-matrix td[data-href-morning] {
+    cursor: pointer;
+}
+
+.team-matrix td.cell-add {
+    position: relative;
+}
+
+.team-matrix td.cell-add > .row-link-fill {
+    position: absolute;
+    inset: 0;
+}
+
+@media (min-width: 768px) {
+    .team-matrix-month .team-matrix table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    .team-matrix-month .team-matrix th.user-name,
+    .team-matrix-month .team-matrix td.user-name {
+        width: 7.5rem;
+        min-width: 7.5rem;
+        max-width: 7.5rem;
+    }
+
+    .team-matrix-month .team-matrix th:not(.user-name),
+    .team-matrix-month .team-matrix td:not(.user-name) {
+        min-width: 0;
+        width: auto;
+        padding: 0.25rem 0.1rem;
+        font-size: 0.625rem;
+    }
+
+    .team-matrix-month .team-matrix th:not(.user-name) small {
+        font-size: 0.5rem;
+    }
+}
+
+.team-matrix th.day-today {
+    box-shadow: inset 0 2px 0 var(--pico-primary),
+        inset 2px 0 0 var(--pico-primary),
+        inset -2px 0 0 var(--pico-primary);
+}
+
+.team-matrix td.day-today {
+    box-shadow: inset 2px 0 0 var(--pico-primary),
+        inset -2px 0 0 var(--pico-primary);
+}
+
+.team-matrix tr:last-child td.day-today {
+    box-shadow: inset 2px 0 0 var(--pico-primary),
+        inset -2px 0 0 var(--pico-primary),
+        inset 0 -2px 0 var(--pico-primary);
+}
+
+.cell-split {
+    display: flex;
+    width: 100%;
+}
+
+.cell-split-half {
+    flex: 1;
+    min-width: 0;
+    container-type: inline-size;
+    text-align: center;
+}
+
+.team-matrix td.combined-half-day {
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.cell-split-half .category-icon {
+    font-size: min(1rem, 65cqw);
+}
+
+/* =============================================
+   LEGEND
+   ============================================= */
+.legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1rem;
+    align-items: center;
+}
+
+.legend-divider {
+    display: inline-block;
+    width: 1px;
+    height: 1.2em;
+    background-color: var(--pico-muted-border-color);
+    vertical-align: middle;
+}

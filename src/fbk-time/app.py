@@ -12,14 +12,16 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config, get_config
 from core import (
+    auth,
     context_processors,
     error_handlers,
     jinja_filters,
     session_lifecycle,
 )
 from core.backup import backup_manager, start_auto_discovery
+from core.db import db
+from core.extensions import csrf
 from core.scheduler import start_scheduler
-from core.extensions import csrf, db, login_manager
 from core.licenses import ensure_licenses_current
 from core.settings_manager import settings_manager
 
@@ -43,13 +45,10 @@ def create_app(config_class=None, cli_mode=False):
     config_class.init_app(application)
 
     db.init_app(application)
-    login_manager.init_app(application)
     csrf.init_app(application)
 
-    login_manager.login_view = 'auth.login'
-    login_manager.login_message = None
-
     if not cli_mode:
+        auth.register(application)
         _register_blueprints(application)
 
     backup_manager.init_app(application)

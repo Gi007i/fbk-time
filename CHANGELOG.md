@@ -1,5 +1,58 @@
 # Changelog
 
+## [2.0.0] - 2026-09-29
+
+### Added
+- Barrierefreiheit nach WCAG 2.2 Stufe A und AA
+- Persönliche Startseite und Standardansicht (alle oder nur eigene Einträge)
+- Team-Übersicht: Klick auf einen freien Tag legt eine Abwesenheit an
+- Passwortbestätigung vor folgenreichen Aktionen wie Kontoverwaltung, Systemeinstellungen und Datensicherung
+- Sitzungen beenden: für ein Konto durch Administratoren und Manager, für sich selbst unter „Mein Profil"
+- Administratoren heben Anmeldesperren in der Übersicht „Mitarbeitende" auf
+- Datensicherung: Hinweis, wenn die geplante Sicherung ausgeblieben ist
+- Schlüsselwechsel ohne Abmeldung aller über `SECRET_KEY_FALLBACKS`
+- Upgrade-Skript für v1.6.x → v2.0.0
+
+### Changed
+- „Angemeldet bleiben" greift nur, wenn der Browser die Sitzung beim Beenden verworfen hat; die Leerlauf-Abmeldung gilt auch damit
+- Adresswechsel innerhalb desselben Netzes beendet die Sitzung nicht mehr
+- Kategorie-Symbole auf jedem Gerät und im PDF gleich; nur Symbole aus der Symbolauswahl zulässig
+- Benutzernamen neuer Konten: mindestens drei Zeichen aus Kleinbuchstaben, Ziffern, Punkt, Unterstrich und Bindestrich
+- `cli/backup.py` und `cli/manage_user.py` laufen nur noch unter dem Dienst-Benutzer
+- `cli/backup.py` stellt nur Sicherungen derselben Version wieder her; `--allow-version-mismatch` erlaubt Ausnahmen
+- Abhängigkeiten aktualisiert
+
+### Fixed
+- Halbtags-Angabe bei mehrtägigen Abwesenheiten galt nur für den Randtag und kehrte die Tageshälfte um
+- Deaktivierte Kategorie ließ ihre Abwesenheiten aus allen Ansichten und Exporten verschwinden
+- Kategorien über die Weboberfläche nicht zuverlässig löschbar oder übertragbar
+- Mitarbeitende ohne Verwaltungsrechte konnten ihre persönlichen Einstellungen nicht speichern
+- Kalenderdatei-Export ohne Zeitzonen-Definition; Kalenderprogramme mussten die Zeitverschiebung raten
+- Liste, Kalender, Team-Übersicht und Exporte bauen sich schneller auf
+- Leeres Sicherungsverzeichnis, etwa ein nicht eingebundenes Laufwerk, löschte sämtliche Sicherungsdatensätze
+- Beschädigte Sicherung als Erfolg gemeldet
+- Upgrade-Skripte von v1.4.0 und v1.6.0 brachen bei laufender Anwendung mit einem Programmabbruch ab; nachgezogen, Schemaänderungen unverändert
+
+### Removed
+- Benutzerdefinierte Uhrzeit bei mehrtägigen Abwesenheiten; dafür sind Serien vorgesehen
+- Detailseiten für Konten und Kategorien; stattdessen aufklappbare Zeilen in der Übersicht
+- Abhängigkeiten Flask-Login, Flask-SQLAlchemy und pip-licenses
+
+### Security
+- Neues Konto übernahm Sitzungen eines gelöschten Kontos mit derselben Nummer (Kontoübernahme)
+- Fehlanmeldungen konnten fremde Konten und Adressen sperren; Browser mit früherer erfolgreicher Anmeldung sind ausgenommen (Aussperrung)
+- Passwortwechsel zählt Fehlversuche wie die Anmeldung (Passwort-Raten)
+- Kontobearbeitung: eigenes Passwort ohne das bisherige änderbar, letzter Administratorzugang deaktivierbar
+- Übersicht „Mitarbeitende" zeigte Managern E-Mail und Erstelldatum von Administratoren und Managern
+- Registrierung verriet, welche Angabe bereits vergeben ist (Enumeration)
+- Umleitungsziele mit Backslash, Tabulator oder Zeilenumbruch verworfen (Open Redirect)
+- Kalenderdatei-Export übernahm Wagenrücklauf-Zeichen aus Notizen unmaskiert (eingeschleuste Kalenderzeilen)
+- Datumsangaben im Abwesenheitsformular begrenzt (Überlastung)
+- Datenbank, Protokolle und Sicherungen gegen andere lokale Konten abgeschirmt; symbolische Links brechen den Start ab
+- Wiederherstellung prüft das Archiv gegen die gespeicherte Prüfsumme (untergeschobenes Archiv)
+- Cookies mit `__Host-`-Präfix; Nginx-Beispiele erzwingen Trusted Types und begrenzen auch Registrierung, Passwortwechsel und Passwortbestätigung
+- Debian-Beispiel-systemd-Unit gehärtet wie die RHEL-Unit
+
 ## [1.6.1] - 2026-07-16
 
 ### Fixed

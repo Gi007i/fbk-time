@@ -1,37 +1,57 @@
 <h1>Systemeinstellungen</h1>
 
-<p>Dieses Kapitel richtet sich an Admins. Für Manager und Mitarbeitende ohne Admin-Rechte ist der Menüpunkt <strong>Systemeinstellungen</strong> nicht erreichbar. Anders als unter <strong>Meine Einstellungen</strong> gelten die hier festgelegten Werte für die gesamte Anwendung und alle Konten.</p>
+<p>Nur Admins sehen den Menüpunkt <strong>Systemeinstellungen</strong>. Hier legen Sie Werte fest, die anders als unter <strong>Meine Einstellungen</strong> für die gesamte Anwendung und alle Konten gelten.</p>
 
-<p>Die Einstellungen sind in aufklappbare Bereiche gegliedert. Änderungen werden erst nach Klick auf <strong>Speichern</strong> übernommen.</p>
+<p>Liegt Ihre letzte Passworteingabe länger als 15 Minuten zurück oder hat <strong>Angemeldet bleiben</strong> Sie angemeldet, fragt die Anwendung vor dem Öffnen der Systemeinstellungen Ihr Passwort ab. Mehr dazu steht im Kapitel <strong>Anmeldung und Passwort</strong>.</p>
+
+<p>Die Einstellungen liegen in aufklappbaren Bereichen. Erst wenn Sie auf <strong>Speichern</strong> klicken, übernimmt die Anwendung Ihre Änderungen.</p>
 
 <h2>Allgemein</h2>
 
-<p><strong>Zeitzone.</strong> Legt fest, in welcher Zeitzone alle Datums- und Zeitangaben der Anwendung dargestellt werden. Sie bestimmt außerdem, wann die geplante tägliche Sicherung läuft (siehe Kapitel <strong>Datensicherung</strong>).</p>
+<p><strong>Anwendungs-Zeitzone.</strong> Hier legen Sie fest, in welcher Zeitzone die Anwendung alle Datums- und Zeitangaben darstellt. Sie bestimmt außerdem, wann die geplante tägliche Sicherung läuft. Wie diese Sicherung arbeitet, beschreibt das Kapitel <strong>Datensicherung</strong>.</p>
 
 <h2>Kontosperrung</h2>
 
-<p>Steuert das Verhalten bei fehlgeschlagenen Anmeldeversuchen: ab welcher Anzahl ein Konto vorübergehend gesperrt wird und wie lange die Sperre gilt. Zusätzlich lässt sich eine ansteigende Verzögerung nach jedem Fehlversuch aktivieren, die automatische Anmeldeversuche ausbremst, ohne das Konto sofort zu sperren. Gespeicherte Fehlversuche werden nach einer einstellbaren Frist automatisch bereinigt. Die konkreten Schwellenwerte und Fristen legen Sie in diesem Bereich fest.</p>
+<p>Dieser Bereich steuert, was nach fehlgeschlagenen Anmeldeversuchen passiert: ab welcher Anzahl die Anwendung ein Konto vorübergehend sperrt und wie lange die Sperre gilt. Browser, in denen sich die Person mit diesem Benutzernamen bereits erfolgreich angemeldet hat, nimmt die Anwendung von der Sperre aus. Scheitert die Anmeldung in einem solchen Browser selbst wiederholt, verliert er die Ausnahme für die Sperrdauer. Kommt aus einem Netzwerk das Fünffache der Schwelle an Fehlversuchen, nimmt die Anwendung von dort für dieselbe Dauer nur noch Anmeldungen aus solchen bekannten Browsern an.</p>
+
+<p>Zusätzlich schalten Sie hier eine ansteigende Verzögerung nach jedem Fehlversuch frei. Sie bremst automatische Anmeldeversuche auf ein Konto aus, bevor die Sperre greift, und nimmt dieselben Browser aus wie die Sperre. Gespeicherte Fehlversuche räumt die Anwendung nach einer einstellbaren Frist von selbst wieder weg. Die konkreten Schwellenwerte und Fristen legen Sie in diesem Bereich fest.</p>
 
 <h2>Passwort-Richtlinie</h2>
 
-<p>Bestimmt die Anforderungen an Passwörter: Mindest- und Höchstlänge sowie die erforderlichen Zeichenarten (Groß- und Kleinbuchstaben, Ziffern, Sonderzeichen). Außerdem legen Sie hier fest, ob neu angelegte Konten ihr Passwort beim ersten Login ändern müssen. Die geltenden Anforderungen werden den Mitarbeitenden bei der Passwortvergabe angezeigt.</p>
+<p>Hier bestimmen Sie die Anforderungen an Passwörter: Mindest- und Höchstlänge sowie, ob Groß- und Kleinbuchstaben, Ziffern oder Sonderzeichen verlangt werden. Außerdem legen Sie fest, ob neu angelegte Konten ihr Passwort bei der ersten Anmeldung ändern müssen. Die geltenden Anforderungen zeigt die Anwendung den Mitarbeitenden bei der Passwortvergabe an.</p>
 
 <h2>Kontoverwaltung</h2>
 
-<p><strong>Betriebsmodus.</strong> Im <strong>Mehrbenutzer</strong>-Modus melden sich alle Mitarbeitenden mit eigenem Login an. Im <strong>Einzelbenutzer</strong>-Modus melden sich nur Admin und Manager an; alle übrigen Konten werden ohne eigenes Login als verwaltete Konten geführt.</p>
+<p><strong>Inaktive Konten.</strong> Auf Wunsch deaktiviert die Anwendung Konten automatisch, die sich über eine einstellbare Dauer nicht angemeldet haben. Wieder aktivieren kann ein Admin jedes Konto, ein Manager nur Konten mit der Rolle <strong>Benutzer</strong>. Admin-Konten lässt die Automatik unangetastet. Die maßgebliche Frist legen Sie in diesem Bereich fest.</p>
 
-<p><strong>Selbstregistrierung.</strong> Ist sie aktiviert, können sich neue Personen auf der Anmeldeseite selbst registrieren; sie erhalten zunächst die Rolle Benutzer und müssen von einem Admin freigeschaltet werden. Die Option wirkt nur im Mehrbenutzer-Modus.</p>
+<p><strong>Selbstregistrierung.</strong> Ist sie aktiviert, können sich neue Personen auf der Anmeldeseite selbst registrieren. Sie erhalten zunächst die Rolle <strong>Benutzer</strong>; erst ein Admin schaltet sie frei.</p>
 
-<p><strong>Inaktive Konten.</strong> Optional werden Konten, die sich über eine einstellbare Dauer nicht angemeldet haben, automatisch deaktiviert. Ein Admin kann sie später wieder aktivieren. Die maßgebliche Frist legen Sie in diesem Bereich fest.</p>
+<p>Nur im <strong>Mehrbenutzermodus</strong> wirkt die Option. Im <strong>Einzelbenutzermodus</strong> bleibt die Registrierung geschlossen, weil sich Konten mit der Rolle <strong>Benutzer</strong> dort ohnehin nicht anmelden können.</p>
+
+<p><strong>Betriebsmodus.</strong> Im <strong>Mehrbenutzermodus</strong> melden sich alle Mitarbeitenden mit eigenem Login an. Im <strong>Einzelbenutzermodus</strong> melden sich nur Admin und Manager an; alle übrigen Konten laufen ohne eigenes Login als verwaltete Konten.</p>
 
 <h2>Limits</h2>
 
-<p>Begrenzt zwei Mengen: wie weit im Voraus Abwesenheiten und Serien geplant werden dürfen und wie viele Einträge sich in einem Schritt über das Sammel-Löschen der Listenansicht entfernen lassen.</p>
+<p>Hier begrenzen Sie zwei Mengen: wie weit im Voraus Abwesenheiten und Serien geplant werden dürfen und wie viele Einträge Sie in einem Schritt über das Sammel-Löschen der Listenansicht entfernen können.</p>
 
 <h2>Datensicherung</h2>
 
-<p>Aktiviert und konfiguriert die geplante tägliche Sicherung: die Uhrzeit des Sicherungslaufs (in der eingestellten Zeitzone) und die Anzahl der aufzubewahrenden Sicherungen. Ältere Sicherungen werden nach jedem erfolgreichen Lauf automatisch entfernt. Einzelheiten und die manuelle Sicherung beschreibt das Kapitel <strong>Datensicherung</strong>.</p>
+<p>In diesem Bereich schalten Sie die geplante tägliche Sicherung ein und richten sie ein: die Uhrzeit des Sicherungslaufs in der eingestellten Zeitzone und die Anzahl der aufzubewahrenden Sicherungen. Nach jedem erfolgreichen Lauf entfernt die Anwendung ältere Sicherungen automatisch. Diese Grenze gilt für alle Sicherungen, also auch für die manuell erstellten.</p>
+
+<p>Einzelheiten und die manuelle Sicherung beschreibt das Kapitel <strong>Datensicherung</strong>.</p>
 
 <h2>Standardwerte für neue Benutzer</h2>
 
-<p>Legt die Voreinstellungen fest, mit denen neu angelegte Konten starten – etwa Farbschema, Datumsformat, Einträge pro Seite, Feiertags-Region und die Standard-Schriftfarbe für Kategorien. Jedes Konto kann diese Werte später unter <strong>Meine Einstellungen</strong> anpassen.</p>
+<p>Hier legen Sie fest, mit welchen Voreinstellungen neu angelegte Konten starten:</p>
+
+<ul>
+<li>Startseite</li>
+<li>Standardansicht</li>
+<li>Design</li>
+<li>Datumsformat</li>
+<li>Einträge pro Seite</li>
+<li>Feiertags-Region</li>
+<li>Standard-Schriftfarbe für Kategorien</li>
+</ul>
+
+<p>Diese Werte kann jedes Konto später unter <strong>Meine Einstellungen</strong> anpassen. Ausgenommen ist die Standard-Schriftfarbe: Nur Managern und Admins bietet die Anwendung diese Einstellung dort an.</p>

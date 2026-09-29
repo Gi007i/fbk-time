@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Passwort bestätigen - FBK-Time{% endblock %}
+
+{% block content %}
+<div class="grid">
+    <div></div>
+    <article>
+        <hgroup>
+            <h1>Bestätigung</h1>
+            <p>Bitte geben Sie Ihr Passwort ein</p>
+        </hgroup>
+
+        <form method="POST" action="{{ url_for('auth.reauthenticate', next=request.args.get('next')) }}">
+            {{ form.hidden_tag() }}
+
+            <label>
+                Passwort
+                {% if form.password.errors %}
+                {{ form.password(autocomplete="current-password", autofocus=true, **{'aria-invalid': 'true'}) }}
+                <small>{{ form.password.errors[0] }}</small>
+                {% else %}
+                {{ form.password(autocomplete="current-password", autofocus=true) }}
+                {% endif %}
+            </label>
+
+            <button type="submit" class="outline">Bestätigen</button>
+        </form>
+    </article>
+    <div></div>
+</div>
+{% endblock %}

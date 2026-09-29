@@ -8,9 +8,10 @@ overlap logic lives in ``timeslots``.
 from datetime import date, datetime, time, timedelta
 from typing import List, Optional, Tuple
 
-from dateutil.rrule import rrulestr
+from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 
-from core.extensions import db
+from core.db import db
 from modules.absence.models import Absence, RecurrenceException
 from modules.auth.models import User
 from utils.helpers import format_date_for_user
@@ -18,8 +19,8 @@ from utils.helpers import format_date_for_user
 from .recurrence import recurrence_service
 from .timeslots import (
     _check_slot_conflict,
-    _get_slot_for_date,
     _get_slot_for_occurrence,
+    _slot_from_flags,
 )
 
 
@@ -78,7 +79,7 @@ def check_absence_conflicts(
 
     conflicting_dates = _get_user_conflict_dates_with_slots(
         user_id, start_date, range_end, new_dates,
-        exclude_absence_id, is_recurring, time_flags
+        exclude_absence_id, time_flags
     )
 
     if conflicting_dates:
@@ -88,9 +89,7 @@ def check_absence_conflicts(
         )
 
     if substitute_id:
-        new_slots = _get_new_entry_slots(
-            start_date, new_dates, is_recurring, time_flags
-        )
+        new_slots = _get_new_entry_slots(new_dates, time_flags)
 
         substitute_absent_slots = get_user_absent_slots(
             substitute_id, start_date, range_end, exclude_absence_id
@@ -184,7 +183,7 @@ def validate_time_slot_overlap(
         occurrences_by_date[occ_date].append(occ)
 
     new_dates = _expand_new_entry_dates(start_date, end_date, rrule_str, recurrence_end_date)
-    new_slots = _get_new_entry_slots(start_date, new_dates, is_recurring, {
+    new_slots = _get_new_entry_slots(new_dates, {
         'is_all_day': is_all_day,
         'is_half_day_morning': is_half_day_morning,
         'is_half_day_afternoon': is_half_day_afternoon,
@@ -232,35 +231,21 @@ def _format_conflict_dates(dates) -> str:
 
 
 def _get_new_entry_slots(
-    start_date: date,
     new_dates: List[date],
-    is_recurring: bool,
     time_flags: Optional[dict]
 ) -> dict:
-    """Map each date of the new entry to its time slot.
-
-    For recurring entries every occurrence is a single day; for a
-    non-recurring range the half-day flags apply to the boundary days.
-    """
+    """Map each date of the new entry to its time slot."""
     if not time_flags:
         time_flags = {'is_all_day': True}
 
-    absence_end = new_dates[-1] if new_dates else start_date
-    slots = {}
-    for occ_date in new_dates:
-        if is_recurring:
-            span_start, span_end = occ_date, occ_date
-        else:
-            span_start, span_end = start_date, absence_end
-        slots[occ_date] = _get_slot_for_date(
-            occ_date, span_start, span_end,
-            time_flags.get('is_all_day', True),
-            time_flags.get('is_half_day_morning', False),
-            time_flags.get('is_half_day_afternoon', False),
-            time_flags.get('start_time'),
-            time_flags.get('end_time')
-        )
-    return slots
+    slot = _slot_from_flags(
+        time_flags.get('is_all_day', True),
+        time_flags.get('is_half_day_morning', False),
+        time_flags.get('is_half_day_afternoon', False),
+        time_flags.get('start_time'),
+        time_flags.get('end_time')
+    )
+    return {occ_date: slot for occ_date in new_dates}
 
 
 def _dates_with_slot_overlap(
@@ -270,7 +255,7 @@ def _dates_with_slot_overlap(
     """Return the new-entry dates whose slot overlaps another slot.
 
     A morning-only entry does not conflict with an afternoon-only slot on
-    the same day, so half-day splits no longer raise false positives.
+    the same day.
     """
     conflicting = set()
     for occ_date, new_slot in new_slots.items():
@@ -323,57 +308,12 @@ def get_user_absent_slots(
     return slots_by_date
 
 
-def substitute_slot_available(
-    substitute_id: int,
-    occurrence_date: date,
-    is_all_day: bool,
-    is_half_day_morning: bool,
-    is_half_day_afternoon: bool,
-    start_time: Optional[time] = None,
-    end_time: Optional[time] = None,
-    exclude_absence_id: Optional[int] = None
-) -> bool:
-    """Report whether the substitute is free to cover a slot on a date.
-
-    Returns False only when the substitute is genuinely absent in a slot
-    that overlaps the coverage need. A morning coverage need does not
-    conflict with an afternoon-only absence, and vice versa; custom
-    start/end times are compared as real time ranges.
-
-    Args:
-        substitute_id: User ID of the proposed substitute.
-        occurrence_date: Date to check.
-        is_all_day: All-day flag of the slot to cover.
-        is_half_day_morning: Morning half-day flag.
-        is_half_day_afternoon: Afternoon half-day flag.
-        start_time: Custom start time of the slot to cover.
-        end_time: Custom end time of the slot to cover.
-        exclude_absence_id: Absence ID to exclude (for edits).
-
-    Returns:
-        True if the substitute is available for the slot.
-    """
-    slot = _get_slot_for_date(
-        occurrence_date, occurrence_date, occurrence_date,
-        is_all_day, is_half_day_morning, is_half_day_afternoon,
-        start_time, end_time
-    )
-    absent_slots = get_user_absent_slots(
-        substitute_id, occurrence_date, occurrence_date, exclude_absence_id
-    )
-    return not any(
-        _check_slot_conflict(slot, other)
-        for other in absent_slots.get(occurrence_date, ())
-    )
-
-
 def _get_user_conflict_dates_with_slots(
     user_id: int,
     start_date: date,
     range_end: date,
     new_dates: List[date],
     exclude_absence_id: Optional[int],
-    is_recurring: bool,
     time_flags: Optional[dict]
 ) -> set:
     """Get dates with actual time slot conflicts for user.
@@ -388,7 +328,6 @@ def _get_user_conflict_dates_with_slots(
             (recurrence_end_date for series, end_date otherwise).
         new_dates: List of dates for new absence.
         exclude_absence_id: Absence ID to exclude (for edits).
-        is_recurring: Whether new absence is recurring.
         time_flags: Time slot info (is_all_day, is_half_day_morning, etc.).
 
     Returns:
@@ -407,9 +346,7 @@ def _get_user_conflict_dates_with_slots(
             _get_slot_for_occurrence(occ)
         )
 
-    new_slots = _get_new_entry_slots(
-        start_date, new_dates, is_recurring, time_flags
-    )
+    new_slots = _get_new_entry_slots(new_dates, time_flags)
     return _dates_with_slot_overlap(new_slots, existing_slots_by_date)
 
 
@@ -438,36 +375,38 @@ def _get_substitute_assignment_dates(
         List of dicts with date, slot, absence_id, user_id (the absent
         person). The slot reflects any per-occurrence exception override.
     """
-    # Candidate absences: either the master substitute matches, or at
-    # least one exception assigns the substitute via override. The union
-    # keeps the expansion loop aware of both sources of assignment.
-    override_absence_ids = db.select(
+    # An exception override can assign the substitute to a series whose
+    # master substitute is someone else, so both sources are candidates.
+    override_absence_ids = select(
         RecurrenceException.absence_id
     ).where(
         RecurrenceException.modified_substitute_overridden == True,
         RecurrenceException.modified_substitute_id == substitute_id
     )
 
-    query = Absence.query.filter(
-        db.or_(
+    query = select(Absence).where(
+        or_(
             Absence.substitute_id == substitute_id,
             Absence.id.in_(override_absence_ids)
-        )
-    )
+        ),
+        Absence.overlaps(range_start, range_end)
+    ).options(selectinload(Absence.category))
 
     if exclude_absence_id:
-        query = query.filter(Absence.id != exclude_absence_id)
+        query = query.where(Absence.id != exclude_absence_id)
 
-    absences = query.all()
+    absences = db.session.scalars(query).all()
+    exceptions = recurrence_service.load_exceptions(
+        absences, range_start, range_end
+    )
     assignments = []
 
     for absence in absences:
         if absence.is_recurring and absence.rrule:
-            # expand_occurrences already filters 'deleted' exceptions.
-            # For each remaining occurrence we determine the effective
-            # substitute: an override wins over the master assignment.
+            # Deleted occurrences are already filtered; an exception
+            # override wins over the master substitute.
             for occ_date, exception in recurrence_service.expand_occurrences(
-                absence, range_start, range_end
+                absence, range_start, range_end, exceptions[absence.id]
             ):
                 if exception is not None and exception.modified_substitute_overridden:
                     effective_substitute_id = exception.modified_substitute_id
@@ -477,10 +416,7 @@ def _get_substitute_assignment_dates(
                 if effective_substitute_id != substitute_id:
                     continue
 
-                # expand_occurrences already carries the effective
-                # exception, so the slot is derived without a second
-                # per-occurrence merge lookup. A modified time type wins
-                # over the master's flags.
+                # A modified time type wins over the master's flags.
                 if exception is not None and exception.modified_time_type is not None:
                     slot = exception.modified_time_type
                 else:
@@ -510,16 +446,16 @@ def _get_substitute_assignment_dates(
             current = max(range_start, absence.start_date)
             end = min(range_end, absence.end_date)
 
+            slot = _slot_from_flags(
+                absence.is_all_day,
+                absence.is_half_day_morning,
+                absence.is_half_day_afternoon,
+                absence.start_time, absence.end_time
+            )
             while current <= end:
                 assignments.append({
                     'date': current,
-                    'slot': _get_slot_for_date(
-                        current, absence.start_date, absence.end_date,
-                        absence.is_all_day,
-                        absence.is_half_day_morning,
-                        absence.is_half_day_afternoon,
-                        absence.start_time, absence.end_time
-                    ),
+                    'slot': slot,
                     'absence_id': absence.id,
                     'user_id': absence.user_id
                 })
@@ -549,20 +485,28 @@ def _get_expanded_user_occurrences(
     Returns:
         List of occurrence dicts with date and slot information.
     """
-    query = Absence.query.filter(Absence.user_id == user_id)
+    query = select(Absence).where(
+        Absence.user_id == user_id,
+        Absence.overlaps(range_start, range_end)
+    ).options(selectinload(Absence.category))
 
     if exclude_absence_id:
-        query = query.filter(Absence.id != exclude_absence_id)
+        query = query.where(Absence.id != exclude_absence_id)
 
-    absences = query.all()
+    absences = db.session.scalars(query).all()
+    exceptions = recurrence_service.load_exceptions(
+        absences, range_start, range_end
+    )
     occurrences = []
 
     for absence in absences:
         if absence.is_recurring and absence.rrule:
-            for occ_date, _exception in recurrence_service.expand_occurrences(
-                absence, range_start, range_end
+            for occ_date, exception in recurrence_service.expand_occurrences(
+                absence, range_start, range_end, exceptions[absence.id]
             ):
-                occ_data = recurrence_service.get_occurrence_data(absence, occ_date)
+                occ_data = recurrence_service.get_occurrence_data(
+                    absence, occ_date, exception
+                )
                 if occ_data:
                     if only_absent and occ_data['category'].is_present:
                         continue
@@ -620,15 +564,12 @@ def _expand_new_entry_dates(
 
     Returns:
         List of dates covered by the new entry.
+
+    Raises:
+        ValueError: If the RRULE cannot be parsed.
     """
     if rrule_str:
-        dtstart = start_date.strftime('%Y%m%dT000000')
-        rrule_full = f"DTSTART:{dtstart}\nRRULE:{rrule_str}"
-
-        try:
-            rule = rrulestr(rrule_full)
-        except (ValueError, TypeError):
-            return [start_date]
+        rule = recurrence_service.build_rule(start_date, rrule_str)
 
         dt_start = datetime.combine(start_date, datetime.min.time())
         effective_end = recurrence_end_date or end_date

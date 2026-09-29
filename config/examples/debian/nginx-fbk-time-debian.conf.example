@@ -1,7 +1,7 @@
 # FBK-Time Application Server Configuration for Ubuntu
 # /etc/nginx/sites-available/fbk-time
 #
-# Requires: nginx-ubuntu.conf.example as /etc/nginx/nginx.conf
+# Requires: nginx-debian.conf.example as /etc/nginx/nginx.conf
 #
 # Installation:
 #   sudo ln -s /etc/nginx/sites-available/fbk-time /etc/nginx/sites-enabled/
@@ -39,7 +39,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header X-XSS-Protection "0" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types" always;
     add_header Referrer-Policy "strict-origin-when-cross-origin" always;
     add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), fullscreen=(self), sync-xhr=()" always;
     add_header X-Permitted-Cross-Domain-Policies "none" always;
@@ -61,7 +61,7 @@ server {
             add_header X-Content-Type-Options "nosniff" always;
             add_header X-XSS-Protection "0" always;
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), fullscreen=(self), sync-xhr=()" always;
             add_header X-Permitted-Cross-Domain-Policies "none" always;
@@ -79,7 +79,7 @@ server {
             add_header X-Content-Type-Options "nosniff" always;
             add_header X-XSS-Protection "0" always;
             add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types" always;
             add_header Referrer-Policy "strict-origin-when-cross-origin" always;
             add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), fullscreen=(self), sync-xhr=()" always;
             add_header X-Permitted-Cross-Domain-Policies "none" always;
@@ -105,8 +105,8 @@ server {
         access_log off;
     }
 
-    # Login - strict rate limiting
-    location = /auth/login {
+    # Login, registration, password change and re-authentication - strict rate limiting
+    location ~ ^/auth/(login|register|change-password|reauthenticate)$ {
         limit_req zone=login burst=5 nodelay;
         limit_req_status 429;
 
@@ -119,7 +119,7 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "0" always;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), fullscreen=(self), sync-xhr=()" always;
         add_header X-Permitted-Cross-Domain-Policies "none" always;
@@ -151,7 +151,7 @@ server {
         add_header X-Content-Type-Options "nosniff" always;
         add_header X-XSS-Protection "0" always;
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'" always;
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; require-trusted-types-for 'script'; trusted-types" always;
         add_header Referrer-Policy "strict-origin-when-cross-origin" always;
         add_header Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=(), magnetometer=(), gyroscope=(), fullscreen=(self), sync-xhr=()" always;
         add_header X-Permitted-Cross-Domain-Policies "none" always;

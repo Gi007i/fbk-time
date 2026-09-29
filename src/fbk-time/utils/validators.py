@@ -1,6 +1,7 @@
 """Input validation utilities.
 
-Provides configurable password strength validation and email format checking.
+Provides configurable password strength validation, username rules and email
+format checking.
 """
 
 import re
@@ -12,11 +13,7 @@ from core.settings_manager import settings_manager
 
 
 class PasswordValidator:
-    """Validates password strength against configured policy.
-
-    Reads policy settings from settings_manager. All requirements must be met
-    for a password to be considered valid.
-    """
+    """Validates password strength against the configured policy."""
 
     UPPERCASE_PATTERN = re.compile(r'[A-Z]')
     LOWERCASE_PATTERN = re.compile(r'[a-z]')
@@ -60,7 +57,7 @@ class PasswordValidator:
             return False, f'Passwort darf maximal {policy["max_length"]} Zeichen lang sein.'
 
         if policy['require_uppercase'] and not self.UPPERCASE_PATTERN.search(password):
-            return False, 'Passwort muss mindestens einen Grossbuchstaben enthalten.'
+            return False, 'Passwort muss mindestens einen Großbuchstaben enthalten.'
 
         if policy['require_lowercase'] and not self.LOWERCASE_PATTERN.search(password):
             return False, 'Passwort muss mindestens einen Kleinbuchstaben enthalten.'
@@ -83,7 +80,7 @@ class PasswordValidator:
         requirements = [f'Mindestens {policy["min_length"]} Zeichen']
 
         if policy['require_uppercase']:
-            requirements.append('Mindestens ein Grossbuchstabe (A-Z)')
+            requirements.append('Mindestens ein Großbuchstabe (A-Z)')
         if policy['require_lowercase']:
             requirements.append('Mindestens ein Kleinbuchstabe (a-z)')
         if policy['require_numbers']:
@@ -116,6 +113,51 @@ class EmailFormat:
     def __call__(self, form, field):
         """Validate field contains a valid email format."""
         if field.data and not EMAIL_PATTERN.match(field.data.strip()):
+            raise ValidationError(self.message)
+
+
+# Allowlist after strip().lower(): 3-80 characters, starting with a letter or
+# digit. Keeps usernames unambiguous in lists, logs and the
+# "<network>|<username>" identifier of login throttling.
+_USERNAME_PATTERN = re.compile(r'[a-z0-9][a-z0-9._-]{2,79}')
+
+USERNAME_RULE_MESSAGE = (
+    'Benutzername: 3–80 Zeichen aus Kleinbuchstaben a–z, Ziffern, Punkt, '
+    'Unterstrich und Bindestrich, beginnend mit Buchstabe oder Ziffer.'
+)
+
+
+def normalize_username(username: str) -> str:
+    """Return the stored form of a username (stripped, lowercase)."""
+    return username.strip().lower()
+
+
+def normalize_email(email: str | None) -> str | None:
+    """Return the stored form of an e-mail address, None when empty."""
+    return (email or '').strip().lower() or None
+
+
+def is_valid_username(username: str) -> bool:
+    """Check a username against the allowlist after normalization.
+
+    Applies to account creation only; login accepts every existing name.
+    """
+    return _USERNAME_PATTERN.fullmatch(normalize_username(username)) is not None
+
+
+class UsernameFormat:
+    """WTForms validator enforcing the username allowlist.
+
+    Args:
+        message: Error message on validation failure.
+    """
+
+    def __init__(self, message: str = USERNAME_RULE_MESSAGE):
+        self.message = message
+
+    def __call__(self, form, field):
+        """Validate field holds an allowed username."""
+        if field.data and not is_valid_username(field.data):
             raise ValidationError(self.message)
 
 

@@ -17,21 +17,21 @@
     {% block head %}{% endblock %}
 </head>
 <body>
+    <a class="skip-link" href="#main-content">Zum Hauptinhalt springen</a>
     {% if current_user.is_authenticated %}
-    <nav class="container-fluid main-nav">
+    <nav class="container-fluid main-nav" aria-label="Hauptnavigation">
         <ul>
             <li><strong><a href="{{ url_for('dashboard.index') }}">FBK-Time</a></strong></li>
         </ul>
         <ul>
-            {% if session_timeout_enabled %}
             <li>
-                <button type="button" id="session-timer" class="outline secondary" data-tooltip="Sitzung verlängern">--:--</button>
+                <button type="button" id="session-timer" class="outline secondary" data-tooltip="Sitzung verlängern" aria-label="Sitzung verlängern">--:--</button>
             </li>
-            {% endif %}
             <li>
                 <details class="dropdown">
                     <summary role="button" class="outline">{{ current_user.name or current_user.username }}</summary>
                     <ul>
+                        <li><a href="{{ url_for('dashboard.home') }}">Startseite</a></li>
                         <li><a href="{{ url_for('profile.index') }}"{% if request.endpoint and request.endpoint.startswith('profile.') %} aria-current="page"{% endif %}>Mein Profil</a></li>
                         <li><a href="{{ url_for('settings.index') }}"{% if request.endpoint == 'settings.index' %} aria-current="page"{% endif %}>Meine Einstellungen</a></li>
                         <li><a href="{{ url_for('dashboard.team_overview') }}"{% if request.endpoint in ['absences.calendar', 'absences.list_absences', 'dashboard.team_overview'] %} aria-current="page"{% endif %}>Abwesenheiten</a></li>
@@ -47,7 +47,7 @@
                         <li>
                             <form action="{{ url_for('auth.logout') }}" method="post" class="logout-form">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit">Abmelden</button>
+                                <button type="submit" class="outline secondary">Abmelden</button>
                             </form>
                         </li>
                     </ul>
@@ -57,19 +57,20 @@
     </nav>
     {% endif %}
 
-    <div id="toast-container">
+    <div id="toast-container" role="status" aria-live="polite" aria-atomic="false" aria-relevant="additions">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% for category, message in messages %}
-            <article role="alert" class="toast alert-{{ category }}">
+            <article class="toast alert-{{ category }}">
                 <span>{{ message }}</span>
-                <button type="button" class="toast-close" aria-label="Schließen">&times;</button>
+                <button type="button" class="toast-close" aria-label="Meldung schließen">&times;</button>
             </article>
             {% endfor %}
         {% endwith %}
     </div>
 
-    {% if session_timeout_enabled %}
+    {% if current_user.is_authenticated %}
     <dialog id="session-timeout"
+            aria-labelledby="session-timeout-title"
             data-remaining="{{ session_remaining_seconds }}"
             data-idle="{{ session_idle_seconds }}"
             data-absolute="{{ session_absolute_seconds }}"
@@ -77,8 +78,9 @@
             data-keepalive-url="{{ url_for('auth.keepalive') }}"
             data-logout-url="{{ url_for('auth.logout') }}">
         <article>
-            <header><strong>Sitzung läuft ab</strong></header>
+            <header><strong id="session-timeout-title">Sitzung läuft ab</strong></header>
             <p>Ihre Sitzung wird aus Sicherheitsgründen in <strong data-countdown>--</strong> automatisch beendet.</p>
+            <p class="hidden" data-absolute-note>Die maximale Sitzungsdauer ist erreicht; eine Verlängerung ist nicht möglich. Sichern Sie Ihre Eingaben und melden Sie sich anschließend neu an.</p>
             <footer>
                 <button type="button" class="outline secondary" data-logout>Jetzt abmelden</button>
                 <button type="button" class="outline contrast" data-extend autofocus>Angemeldet bleiben</button>
@@ -87,18 +89,18 @@
     </dialog>
     {% endif %}
 
-    <main class="container">
+    <main class="container" id="main-content" tabindex="-1">
         {% block content %}{% endblock %}
     </main>
 
     <footer class="container">
-        <small>&copy; {{ now().year if now is defined else 2026 }} FBK-Time | v{{ app_version }} | <a href="{{ url_for('licenses.index') }}">Licenses</a></small>
+        <small>&copy; {{ current_year }} FBK-Time | v{{ app_version }}{% if current_user.is_authenticated %} | <a href="{{ url_for('licenses.index') }}" lang="en">Licenses</a>{% endif %}</small>
     </footer>
 
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script src="{{ url_for('static', filename='js/tooltip.js') }}"></script>
-    {% if session_timeout_enabled %}
+    {% if current_user.is_authenticated %}
     <script src="{{ url_for('static', filename='js/session-timeout.js') }}"></script>
     {% endif %}
 

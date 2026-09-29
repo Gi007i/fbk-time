@@ -7,7 +7,8 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 from flask import request, redirect, url_for, abort
-from flask_login import current_user
+
+from core.auth import current_user
 
 
 @dataclass
@@ -102,8 +103,11 @@ def get_pagination(
 
     if page > total_pages:
         # flat=False keeps repeated params (multi-valued person/category
-        # filters) so the redirect does not drop them.
-        args = request.args.to_dict(flat=False)
+        # filters) so the redirect does not drop them. Flask's reserved
+        # url_for keys (_scheme, _external, _anchor, _method) must not come
+        # from the query string — url_for raises on them.
+        args = {k: v for k, v in request.args.to_dict(flat=False).items()
+                if not k.startswith('_')}
         args['page'] = str(total_pages)
         args.update(endpoint_kwargs)
         return None, redirect(url_for(endpoint, **args))

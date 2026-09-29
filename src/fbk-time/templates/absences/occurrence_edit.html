@@ -32,7 +32,7 @@
             {% endif %}
         </label>
 
-        <fieldset>
+        <fieldset id="time-type"{% if form.time_type.errors %} aria-invalid="true" aria-describedby="error-time-type"{% endif %}>
             <legend>Zeittyp <span class="info-tip" data-placement="right" data-tooltip="Die Änderung gilt nur für diesen einzelnen Termin. Eine eigene Uhrzeit lässt sich für einzelne Serien-Termine nicht setzen.">&#x24D8;</span></legend>
             <label>
                 <input type="radio" name="time_type" value="all_day" {% if form.time_type.data == 'all_day' %}checked{% endif %}>
@@ -46,7 +46,16 @@
                 <input type="radio" name="time_type" value="half_day_afternoon" {% if form.time_type.data == 'half_day_afternoon' %}checked{% endif %}>
                 Halbtags Nachmittag
             </label>
+            {% if has_series_time %}
+            <label>
+                <input type="radio" name="time_type" value="custom_time" {% if form.time_type.data == 'custom_time' %}checked{% endif %}>
+                Uhrzeit der Serie ({{ absence.start_time.strftime('%H:%M') }} - {{ absence.end_time.strftime('%H:%M') }})
+            </label>
+            {% endif %}
         </fieldset>
+        {% if form.time_type.errors %}
+        <small id="error-time-type">{{ form.time_type.errors[0] }}</small>
+        {% endif %}
 
         <label>
             Vertretung <span class="info-tip" data-placement="right" data-tooltip="Wer übernimmt an diesem Tag? Die Auswahl gilt nur für diesen einzelnen Termin der Serie.">&#x24D8;</span>
@@ -69,7 +78,7 @@
 
         <div class="grid">
             <button type="submit" class="outline">Änderungen speichern</button>
-            <button type="button" data-href="{{ back_url('absences.occurrence_detail', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ origin_url('absences.occurrence_detail', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>

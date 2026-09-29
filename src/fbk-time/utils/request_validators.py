@@ -4,7 +4,7 @@ Provides fail-fast validators for URL parameters with explicit error handling.
 No silent fallbacks - invalid input results in 400 errors.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from typing import Optional
 
 from flask import request, abort
@@ -13,6 +13,20 @@ from flask import request, abort
 # Cap filter lists well below the SQLite host-parameter limit so an oversized
 # request fails fast with 400 instead of a 500 raised by the IN(...) query.
 _MAX_LIST_ITEMS = 200
+
+# Accepted distance in years from today for any user-supplied date.
+YEAR_RANGE = 50
+
+
+def year_in_range(year: int) -> bool:
+    """Return True when the year lies within YEAR_RANGE years of today."""
+    current_year = date.today().year
+    return current_year - YEAR_RANGE <= year <= current_year + YEAR_RANGE
+
+
+def min_allowed_date() -> date:
+    """Return the earliest date accepted from user input."""
+    return date(date.today().year - YEAR_RANGE, 1, 1)
 
 
 def validate_int_param(
@@ -132,8 +146,7 @@ def validate_date_param(
     except ValueError:
         abort(400, 'Invalid date format')
 
-    current_year = date.today().year
-    if value.year < current_year - 50 or value.year > current_year + 50:
+    if not year_in_range(value.year):
         abort(400, 'Invalid date range')
 
     return value
@@ -146,15 +159,13 @@ def validate_year_param(default: Optional[int] = None) -> int:
         default: Default value (defaults to current year if None).
 
     Returns:
-        Validated year within ±50 years of current year.
+        Validated year within YEAR_RANGE years of the current year.
 
     Raises:
         abort(400) on invalid year.
     """
-    current_year = date.today().year
-
     if default is None:
-        default = current_year
+        default = date.today().year
 
     year_str = request.args.get('year')
 
@@ -166,7 +177,7 @@ def validate_year_param(default: Optional[int] = None) -> int:
     except ValueError:
         abort(400, 'Invalid year')
 
-    if year < current_year - 50 or year > current_year + 50:
+    if not year_in_range(year):
         abort(400, 'Invalid year')
 
     return year
@@ -203,74 +214,6 @@ def validate_month_param(default: Optional[int] = None) -> int:
     return month
 
 
-def validate_json_int(
-    data: dict,
-    name: str,
-    required: bool = False,
-    min_value: Optional[int] = None,
-    max_value: Optional[int] = None
-) -> Optional[int]:
-    """Validate integer from JSON request body.
-
-    Args:
-        data: Parsed JSON data dict.
-        name: Key name in data.
-        required: If True, return None signals error to caller.
-        min_value: Minimum allowed value.
-        max_value: Maximum allowed value.
-
-    Returns:
-        Validated integer or None if missing/invalid.
-    """
-    value = data.get(name)
-
-    if value is None:
-        return None
-
-    try:
-        value = int(value)
-    except (ValueError, TypeError):
-        return None
-
-    if min_value is not None and value < min_value:
-        return None
-
-    if max_value is not None and value > max_value:
-        return None
-
-    return value
-
-
-def validate_json_date(
-    data: dict,
-    name: str
-) -> Optional[date]:
-    """Validate date from JSON request body (YYYY-MM-DD format).
-
-    Args:
-        data: Parsed JSON data dict.
-        name: Key name in data.
-
-    Returns:
-        Validated date or None if missing/invalid.
-    """
-    value_str = data.get(name)
-
-    if not value_str or len(value_str) != 10:
-        return None
-
-    try:
-        value = datetime.strptime(value_str, '%Y-%m-%d').date()
-    except ValueError:
-        return None
-
-    current_year = date.today().year
-    if value.year < current_year - 50 or value.year > current_year + 50:
-        return None
-
-    return value
-
-
 def parse_date_string(value_str: str) -> Optional[date]:
     """Parse date string without aborting (YYYY-MM-DD format).
 
@@ -290,8 +233,7 @@ def parse_date_string(value_str: str) -> Optional[date]:
     except ValueError:
         return None
 
-    current_year = date.today().year
-    if value.year < current_year - 50 or value.year > current_year + 50:
+    if not year_in_range(value.year):
         return None
 
     return value
@@ -299,9 +241,6 @@ def parse_date_string(value_str: str) -> Optional[date]:
 
 def validate_date_string(value_str: str) -> date:
     """Validate date string from URL path parameter (YYYY-MM-DD format).
-
-    For use with Flask route parameters like <date_str>.
-    Raises abort(400) on invalid format.
 
     Args:
         value_str: Date string to validate.
@@ -320,8 +259,47 @@ def validate_date_string(value_str: str) -> date:
     except ValueError:
         abort(400, 'Invalid date format')
 
-    current_year = date.today().year
-    if value.year < current_year - 50 or value.year > current_year + 50:
+    if not year_in_range(value.year):
         abort(400, 'Invalid date range')
 
     return value
+
+
+def resolve_week_start(year: int, month: int) -> date:
+    """Return the Monday of the requested week for a month view.
+
+    Without a week_start parameter the week falls back to the current week
+    when today lies in the shown month, otherwise to the week of the month's
+    first day, so month navigation always stays within MAX_DATE_RANGE_DAYS.
+
+    Args:
+        year: Year of the shown month.
+        month: Month of the shown month.
+
+    Returns:
+        Monday of the resolved week.
+    """
+    week_start = validate_date_param('week_start')
+    if week_start is None:
+        today = date.today()
+        if (today.year, today.month) == (year, month):
+            week_start = today
+        else:
+            week_start = date(year, month, 1)
+    return week_start - timedelta(days=week_start.weekday())
+
+
+MAX_DATE_RANGE_DAYS = 1830  # ~5 years
+
+
+def validate_date_range(start: date, end: date) -> None:
+    """Reject an inverted or unreasonably long date range (Fail-Fast).
+
+    Raises:
+        abort(400) when end precedes start or the span exceeds
+        MAX_DATE_RANGE_DAYS.
+    """
+    if end < start:
+        abort(400, 'Invalid date range: end before start')
+    if (end - start).days > MAX_DATE_RANGE_DAYS:
+        abort(400, 'Invalid date range: span too large')

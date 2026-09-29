@@ -6,9 +6,9 @@ Restore is intentionally CLI-only (requires the service to be stopped).
 """
 
 from flask import Blueprint, render_template, redirect, url_for, flash, current_app
-from flask_login import current_user
 
-from utils.decorators import admin_required
+from core.auth import current_user
+from utils.decorators import admin_required, fresh_login_required
 from utils.pagination import get_pagination
 from .forms import CreateBackupForm
 from .services import (
@@ -19,6 +19,7 @@ from .services import (
     delete_backup,
     sync_filesystem,
     get_backup_stats,
+    get_overdue_scheduled_backup,
 )
 
 bp = Blueprint('backup', __name__, url_prefix='/backup')
@@ -49,28 +50,31 @@ def index():
         pagination=pagination,
         stats=stats,
         form=form,
-        backup_dir=current_app.config['BACKUP_DIR']
+        backup_dir=current_app.config['BACKUP_DIR'],
+        overdue=get_overdue_scheduled_backup()
     )
 
 
 @bp.route('/create', methods=['POST'])
+@fresh_login_required
 def create():
     """Create a new manual backup."""
     form = CreateBackupForm()
     if not form.validate_on_submit():
         errors = [e for field in form for e in field.errors]
-        flash(errors[0] if errors else 'Ungültige Eingabe.', 'error')
+        flash(errors[0] if errors else 'Ungültige Eingabe.', 'danger')
         return redirect(url_for('backup.index'))
 
     ok, message = create_backup(
         description=form.description.data or None,
         created_by_id=current_user.id
     )
-    flash(message, 'success' if ok else 'error')
+    flash(message, 'success' if ok else 'danger')
     return redirect(url_for('backup.index'))
 
 
 @bp.route('/sync', methods=['POST'])
+@fresh_login_required
 def sync():
     """Reconcile the backup directory with database records."""
     ok, message = sync_filesystem()
@@ -79,18 +83,20 @@ def sync():
 
 
 @bp.route('/<int:backup_id>/verify', methods=['POST'])
+@fresh_login_required
 def verify(backup_id: int):
     """Verify the integrity of a backup archive."""
     get_backup_or_404(backup_id)
     ok, message = verify_backup(backup_id)
-    flash(message, 'success' if ok else 'error')
+    flash(message, 'success' if ok else 'danger')
     return redirect(url_for('backup.index'))
 
 
 @bp.route('/<int:backup_id>/delete', methods=['POST'])
+@fresh_login_required
 def delete(backup_id: int):
     """Delete a backup record and its archive file."""
     get_backup_or_404(backup_id)
     ok, message = delete_backup(backup_id)
-    flash(message, 'success' if ok else 'error')
+    flash(message, 'success' if ok else 'danger')
     return redirect(url_for('backup.index'))

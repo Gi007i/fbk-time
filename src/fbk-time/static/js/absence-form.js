@@ -120,7 +120,6 @@
 
     /**
      * Update substitute field requirement based on category.
-     * Uses DOM manipulation instead of innerHTML for CSP compliance.
      */
     function updateSubstituteRequirement() {
         if (!categorySelect || !substituteSelect) return;
@@ -147,7 +146,6 @@
 
     /**
      * Check if a date string is within valid range.
-     * Uses global utility function from main.js.
      * @param {string} dateStr - Date string in YYYY-MM-DD format.
      * @returns {boolean} True if date is valid and within range.
      */
@@ -226,6 +224,9 @@
         var frequency = recurrenceFrequency.value;
         if (frequency === 'daily') {
             weekdayFields.classList.add('hidden');
+            // The group error sits next to the fieldset, not inside it, and
+            // would stay behind without a field to refer to.
+            window.FBKTime.clearFieldError(weekdayFields);
         } else {
             weekdayFields.classList.remove('hidden');
         }
@@ -245,8 +246,7 @@
     }
 
     /**
-     * Update the maximum allowed recurrence end date (1 year from start).
-     * Only sets constraints if recurrence is active and start date is within valid range.
+     * Set the recurrence end date bounds from the start date.
      */
     function updateMaxRecurrenceEndDate() {
         if (!recurrenceEndDate || !startDateInput) return;
@@ -270,10 +270,34 @@
         recurrenceEndDate.min = startDate;
 
         if (!recurrenceEndDate.value) {
-            var defaultEnd = new Date(startDate);
-            defaultEnd.setMonth(defaultEnd.getMonth() + 3);
-            recurrenceEndDate.value = defaultEnd.toISOString().split('T')[0];
+            recurrenceEndDate.value = addMonths(startDate, 3);
         }
+    }
+
+    /**
+     * Add calendar months to a date, clamping the day to the target month's end.
+     * Works on the date parts directly, so the time zone cannot shift the day.
+     * @param {string} dateStr - Date string in YYYY-MM-DD format.
+     * @param {number} months - Number of months to add.
+     * @returns {string} Resulting date string in YYYY-MM-DD format.
+     */
+    function addMonths(dateStr, months) {
+        var parts = dateStr.split('-');
+        var monthIndex = parseInt(parts[1], 10) - 1 + months;
+        var year = parseInt(parts[0], 10) + Math.floor(monthIndex / 12);
+        var month = monthIndex % 12;
+        var lastDay = new Date(year, month + 1, 0).getDate();
+        var day = Math.min(parseInt(parts[2], 10), lastDay);
+        return year + '-' + pad2(month + 1) + '-' + pad2(day);
+    }
+
+    /**
+     * Left-pad a number to two digits.
+     * @param {number} value - Number to pad.
+     * @returns {string} Two-digit string.
+     */
+    function pad2(value) {
+        return (value < 10 ? '0' : '') + value;
     }
 
     /**

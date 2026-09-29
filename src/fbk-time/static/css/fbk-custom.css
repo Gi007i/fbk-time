@@ -10,17 +10,123 @@
  */
 
 /* =============================================
+   ACCESSIBILITY
+   ============================================= */
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.skip-link {
+    position: absolute;
+    top: 0;
+    left: -100vw;
+    z-index: 1100;
+    padding: 0.5rem 1rem;
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-background-color);
+    box-shadow: var(--pico-card-box-shadow);
+}
+
+.skip-link:focus {
+    left: 0;
+}
+
+#main-content:focus {
+    outline: none;
+}
+
+.row-link {
+    color: inherit;
+    text-decoration: none;
+}
+
+.row-link-fill {
+    display: block;
+}
+
+:root {
+    scroll-padding-top: 5rem;
+}
+
+[role="group"] > [role="button"]:focus-visible,
+[role="group"] > button:focus-visible {
+    box-shadow: 0 0 0 var(--pico-outline-width) var(--pico-primary-focus);
+}
+
+:root:not([data-theme="dark"]) {
+    --pico-form-element-border-color: #8a919e;
+}
+
+@media only screen and (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --pico-form-element-border-color: #6a7180;
+    }
+}
+
+[data-theme="dark"] {
+    --pico-form-element-border-color: #6a7180;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .toast,
+    .search-clear {
+        transition: none;
+    }
+}
+
+/* =============================================
    UTILITIES
    ============================================= */
 .hidden { display: none !important; }
 .text-negative { color: var(--pico-del-color); }
 .text-positive { color: var(--pico-ins-color); }
 .nowrap { white-space: nowrap; }
+.center { text-align: center; }
+
+.status-on {
+    color: var(--pico-ins-color);
+}
+
+.status-off {
+    color: var(--pico-del-color);
+    text-decoration: line-through;
+}
+
+.status-role {
+    display: inline-block;
+    padding: 0.375rem;
+    border-radius: var(--pico-border-radius);
+    background: var(--pico-code-kbd-background-color);
+    color: var(--pico-code-kbd-color);
+    font-family: var(--pico-font-family-monospace);
+    font-size: 0.875em;
+    font-weight: bolder;
+    line-height: initial;
+    vertical-align: baseline;
+}
+
+tr[data-href],
+li[data-href] {
+    cursor: pointer;
+}
+
+.license-text {
+    max-height: 20rem;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
 
 /* =============================================
    TOOLTIP
-   Suppress the framework's edge-clipping pseudo-element bubble; a shared
-   fixed-position element is placed by js/tooltip.js so it stays in view.
    ============================================= */
 [data-tooltip]::before,
 [data-tooltip]::after {
@@ -35,7 +141,8 @@
     visibility: hidden;
     max-width: min(20rem, calc(100vw - 1rem));
     max-height: calc(100vh - 1rem);
-    overflow: hidden;
+    overflow-x: hidden;
+    overflow-y: auto;
     padding: 0.25rem 0.5rem;
     border-radius: var(--pico-border-radius);
     background: var(--pico-tooltip-background-color);
@@ -45,7 +152,6 @@
     white-space: pre-line;
     overflow-wrap: anywhere;
     box-shadow: var(--pico-card-box-shadow);
-    pointer-events: none;
 }
 
 .tooltip-visible {
@@ -56,9 +162,26 @@
    INFO TOOLTIP ICONS
    ============================================= */
 .info-tip {
+    position: relative;
     border-bottom: none;
     color: var(--pico-muted-color);
     cursor: help;
+}
+
+.info-tip::after {
+    display: block;
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 24px;
+    height: 24px;
+    transform: translate(-50%, -50%);
+}
+
+.info-tip:focus-visible {
+    outline: var(--pico-outline-width) solid var(--pico-primary);
+    outline-offset: 2px;
 }
 
 .page-header {
@@ -67,15 +190,39 @@
     align-items: center;
 }
 
+.page-header nav button,
+.page-header nav [type="submit"] {
+    width: auto;
+    height: auto;
+    margin-bottom: 0;
+    padding: calc(var(--pico-nav-link-spacing-vertical) - var(--pico-border-width) * 2) var(--pico-nav-link-spacing-horizontal);
+}
+
 /* =============================================
    TABLE VERTICAL ALIGNMENT
    ============================================= */
-/* Buttons in tables: remove margin that causes misalignment */
 figure table button,
 figure table [type="submit"],
 figure table [type="button"] {
     margin-top: 0;
     margin-bottom: 0;
+}
+
+/* =============================================
+   LABEL/VALUE TABLES IN COLLAPSIBLE ROWS
+   ============================================= */
+.detail-table td {
+    overflow-wrap: break-word;
+}
+
+@media (min-width: 768px) {
+    .detail-table {
+        table-layout: fixed;
+    }
+
+    .detail-table th[scope="row"] {
+        width: 32ch;
+    }
 }
 
 /* =============================================
@@ -109,6 +256,8 @@ body > footer {
     left: auto;
     right: 0;
     min-width: 16rem;
+    max-height: none;
+    overflow-y: visible;
 }
 
 .main-nav details.dropdown > summary + ul li .logout-form {
@@ -140,11 +289,18 @@ body > footer {
     box-shadow: none;
 }
 
+.main-nav details.dropdown > summary + ul li > a:focus-visible,
+.main-nav details.dropdown > summary + ul li .logout-form button:focus-visible {
+    outline: var(--pico-outline-width) solid var(--pico-primary);
+    outline-offset: calc(var(--pico-outline-width) * -1);
+}
+
 /* =============================================
-   BULK ACTIONS BAR
+   DROPDOWN MENUS
    ============================================= */
-.bulk-actions-bar button {
-    white-space: nowrap;
+details.dropdown > summary + ul {
+    max-height: 16rem;
+    overflow-y: auto;
 }
 
 /* =============================================
@@ -159,8 +315,6 @@ body > footer {
     margin-bottom: 0;
 }
 
-/* Align all controls in a filter bar to equal height so the absolutely
-   positioned clear button stays vertically centered inside the input. */
 .dashboard-filter > * {
     margin-bottom: 0;
 }
@@ -172,15 +326,29 @@ body > footer {
 
 .search-clear {
     position: absolute;
-    right: 0.75rem;
+    right: 0.375rem;
     top: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: auto;
+    min-width: 24px;
+    min-height: 24px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: inherit;
+    line-height: 1;
     transform: translateY(-50%);
     cursor: pointer;
+    visibility: hidden;
     opacity: 0;
-    transition: opacity 0.15s;
+    transition: opacity 0.15s, visibility 0.15s;
 }
 
 .search-clear.visible {
+    visibility: visible;
     opacity: 1;
 }
 
@@ -203,295 +371,14 @@ body > footer {
 }
 
 .pagination .current {
-    background: var(--pico-primary);
+    background: var(--pico-primary-background);
     color: var(--pico-primary-inverse);
-    border-color: var(--pico-primary);
-}
-
-.pagination + .center {
-    text-align: center;
+    border-color: var(--pico-primary-background);
 }
 
 /* =============================================
-   CALENDAR
+   CATEGORY COLORS
    ============================================= */
-.calendar {
-    width: 100%;
-    border-collapse: collapse;
-    table-layout: fixed;
-}
-
-.calendar th,
-.calendar td {
-    border: 1px solid var(--pico-muted-border-color);
-    padding: 0.25rem;
-    vertical-align: top;
-}
-
-.calendar td {
-    height: auto;
-    min-height: 60px;
-}
-
-.calendar th {
-    text-align: center;
-    font-weight: 600;
-}
-
-@media (min-width: 768px) {
-    .calendar td {
-        height: 100px;
-    }
-
-    .calendar .absence-item {
-        font-size: 0.75rem;
-        padding: 0.25rem 0.375rem;
-    }
-}
-
-.calendar .day-number {
-    display: block;
-    font-weight: 600;
-    margin-bottom: 0.25rem;
-}
-
-.calendar .day-today .day-number {
-    background: var(--pico-primary);
-    color: var(--pico-primary-inverse);
-    border-radius: 50%;
-    width: 28px;
-    height: 28px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.calendar mark {
-    display: block;
-    margin-bottom: 0.25rem;
-}
-
-/* Hide weekend columns on mobile (5-day week view) */
-.calendar .calendar-weekend-col {
-    display: none;
-}
-
-@media (min-width: 768px) {
-    .calendar .calendar-weekend-col {
-        display: table-cell;
-    }
-}
-
-/* Hide detail columns on mobile (absence list) */
-.list-desktop-col {
-    display: none;
-}
-
-.list-name span {
-    display: block;
-    max-width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-@media (min-width: 768px) {
-    .list-desktop-col {
-        display: table-cell;
-    }
-
-    .list-mobile-col {
-        display: none;
-    }
-
-    .list-name span {
-        max-width: 12rem;
-    }
-}
-
-@media (max-width: 767px) {
-    .list-cards thead {
-        display: none;
-    }
-
-    .list-cards tbody,
-    .list-cards tr,
-    .list-cards td:not(.list-desktop-col) {
-        display: block;
-    }
-
-    .list-cards tr {
-        position: relative;
-        border: 1px solid var(--pico-muted-border-color);
-        border-radius: var(--pico-border-radius);
-        padding: 0.6rem 0.75rem 0.6rem 3rem;
-        margin-bottom: 0.5rem;
-    }
-
-    .list-cards td {
-        border-bottom: none;
-        padding: 0.1rem 0;
-        background: transparent;
-    }
-
-    .list-cards td:first-child {
-        position: absolute;
-        top: 0.6rem;
-        left: 0.75rem;
-        padding: 0;
-    }
-
-    .list-cards .list-name {
-        font-size: 1.05rem;
-        font-weight: 600;
-        margin-bottom: 0.2rem;
-    }
-
-    .list-cards td[data-label] {
-        display: flex;
-        align-items: baseline;
-        gap: 0.35rem;
-    }
-
-    .list-cards td[data-label]::before {
-        content: attr(data-label) ":";
-        font-weight: 600;
-    }
-}
-
-.bulk-actions-bar ul {
-    flex-wrap: wrap;
-}
-
-.bulk-actions-bar li:first-child {
-    white-space: nowrap;
-}
-
-tr[data-href],
-li[data-href],
-td[data-href-morning] {
-    cursor: pointer;
-}
-
-/* Generic day state styles (applies to calendar and team-matrix) */
-.day-header {
-    background: var(--pico-card-sectioning-background-color);
-}
-
-.team-matrix th.day-weekend,
-.team-matrix td.day-weekend,
-.calendar td.day-weekend {
-    background: rgba(0, 0, 0, 0.03);
-}
-
-[data-theme="dark"] .team-matrix th.day-weekend,
-[data-theme="dark"] .team-matrix td.day-weekend,
-[data-theme="dark"] .calendar td.day-weekend {
-    background: rgba(255, 255, 255, 0.05);
-}
-
-.team-matrix th.day-holiday,
-.team-matrix td.day-holiday {
-    background: var(--pico-mark-background-color);
-}
-
-.calendar .absence-item {
-    display: block;
-    padding: 0.125rem 0.25rem;
-    margin-bottom: 0.125rem;
-    border-radius: 0.25rem;
-    font-size: 0.65rem;
-    text-decoration: none;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
-/* =============================================
-   TEAM MATRIX
-   ============================================= */
-.team-matrix table {
-    min-width: 100%;
-    border-collapse: collapse;
-}
-
-.team-matrix th,
-.team-matrix td {
-    border: 1px solid var(--pico-muted-border-color);
-    padding: 0.5rem 0.25rem;
-    text-align: center;
-    min-width: 44px;
-}
-
-.team-matrix th small {
-    display: block;
-    margin-top: 0;
-}
-
-.team-matrix .user-name {
-    position: sticky;
-    left: 0;
-    background: var(--pico-background-color);
-    text-align: left;
-    padding-left: 0.5rem;
-    font-weight: 500;
-    z-index: 1;
-}
-
-.team-matrix .user-name small {
-    display: block;
-    max-width: 150px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Desktop optimization: Fit 31 days without horizontal scrolling */
-@media (min-width: 768px) {
-    .team-matrix-month .team-matrix table {
-        table-layout: fixed;
-        width: 100%;
-    }
-
-    .team-matrix-month .team-matrix th.user-name,
-    .team-matrix-month .team-matrix td.user-name {
-        width: 120px;
-        min-width: 120px;
-        max-width: 120px;
-    }
-
-    .team-matrix-month .team-matrix th:not(.user-name),
-    .team-matrix-month .team-matrix td:not(.user-name) {
-        min-width: 0;
-        width: auto;
-        padding: 0.25rem 0.1rem;
-        font-size: 0.625rem;
-    }
-
-    .team-matrix-month .team-matrix th small {
-        font-size: 0.5rem;
-    }
-}
-
-.team-matrix th.day-today {
-    border: 2px solid var(--pico-primary);
-    border-bottom: 0;
-}
-
-.team-matrix td.day-today {
-    border-left: 2px solid var(--pico-primary);
-    border-right: 2px solid var(--pico-primary);
-}
-
-.team-matrix tr:last-child td.day-today {
-    border-bottom: 2px solid var(--pico-primary);
-}
-
-/* =============================================
-   CATEGORY COLORS (dynamic from backend)
-   ============================================= */
-/* .category-{id} classes are generated by /css/categories.css */
-
 .category-badge {
     display: inline-block;
     padding: 0.25rem 0.5rem;
@@ -499,11 +386,10 @@ td[data-href-morning] {
     font-weight: 500;
 }
 
-.category-icon {
-    /* Preserve native emoji colors */
-    -webkit-text-fill-color: initial;
-    color: initial;
-    font-style: normal;
+.category-icon img {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.125em;
 }
 
 /* =============================================
@@ -576,64 +462,12 @@ td[data-href-morning] {
    CATEGORY PREVIEW
    ============================================= */
 .category-preview {
-    background: var(--preview-bg, #3b82f6);
+    background: var(--preview-bg, #2563eb);
     color: var(--preview-color, #ffffff);
 }
 
-/* =============================================
-   PAGE NAVIGATION
-   ============================================= */
-/* Mobile: Stack layout (title on top, buttons below) */
-.page-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 0.75rem;
-    margin-bottom: 1rem;
-}
-
-.page-nav h2 {
-    text-align: center;
-}
-
-.page-nav ul {
-    justify-content: center;
-}
-
-/* Desktop: Title left, buttons right (horizontal) */
-@media (min-width: 768px) {
-    .page-nav {
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: 1rem;
-        align-items: center;
-    }
-
-    .page-nav h2 {
-        text-align: left;
-    }
-
-    .page-nav ul {
-        justify-content: flex-start;
-        justify-self: end;
-    }
-}
-
-/* =============================================
-   LEGEND
-   ============================================= */
-.legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem 1rem;
-    align-items: center;
-}
-
-.legend-divider {
-    display: inline-block;
-    width: 1px;
-    height: 1.2em;
-    background-color: var(--pico-muted-border-color);
-    vertical-align: middle;
+#contrast-hint {
+    margin-top: var(--pico-spacing);
 }
 
 /* =============================================
@@ -669,10 +503,6 @@ td[data-href-morning] {
     pointer-events: none;
 }
 
-#toast-container:empty {
-    display: none;
-}
-
 .toast {
     display: flex;
     align-items: center;
@@ -706,6 +536,8 @@ td[data-href-morning] {
     cursor: pointer;
     color: var(--pico-muted-color);
     width: auto;
+    min-width: 24px;
+    min-height: 24px;
 }
 
 .toast-close:hover {
@@ -717,7 +549,7 @@ td[data-href-morning] {
 }
 
 /* =============================================
-   ALERT COLOR VARIANTS (used by .toast)
+   ALERT COLOR VARIANTS
    ============================================= */
 .alert-success {
     border-left-color: var(--pico-ins-color);
@@ -736,16 +568,8 @@ td[data-href-morning] {
 }
 
 /* =============================================
-   TABLE SORTING
-   ============================================= */
-th[data-sort] {
-    cursor: pointer;
-}
-
-/* =============================================
    FORM VALIDATION ERRORS
    ============================================= */
-/* Error messages inside labels should be red when field is invalid */
 label [aria-invalid="true"] ~ small,
 label:has([aria-invalid="true"]) > small:last-child,
 fieldset[aria-invalid="true"] > small {

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/emoji_picker.html" import emoji_picker %}
 
 {% block title %}Neue Kategorie - FBK-Time{% endblock %}
 
@@ -44,15 +45,7 @@
 
             <label for="icon">
                 Emoji
-                <div class="emoji-picker-wrapper">
-                    {{ form.icon(class="emoji-input", id="icon", readonly=true,
-                       **{'aria-invalid': 'true' if form.icon.errors else none}) }}
-                    <button type="button" class="outline emoji-picker-btn" aria-label="Emoji auswählen">😀</button>
-                    <button type="button" class="outline emoji-clear-btn" aria-label="Emoji entfernen">✕</button>
-                    <div class="emoji-picker hidden">
-                        <div class="emoji-grid"></div>
-                    </div>
-                </div>
+                {{ emoji_picker(form.icon, category_icons) }}
                 {% if form.icon.errors %}
                 <small>{{ form.icon.errors[0] }}</small>
                 {% endif %}
@@ -64,11 +57,12 @@
                 Vorschau <span class="info-tip" data-placement="right" data-tooltip="So sieht Ihre Kategorie später in Kalender, Team-Übersicht und Listen aus.">&#x24D8;</span>
                 <div>
                     <span class="category-badge category-preview" id="category-preview">
-                        <span class="category-icon" id="preview-icon"></span>
+                        <span id="preview-icon"></span>
                         <span id="preview-name">Kategorie</span>
                     </span>
                 </div>
             </label>
+            <small id="contrast-hint" class="hidden" role="status"><mark id="contrast-hint-text"></mark></small>
         </div>
 
         <label for="sort_order">

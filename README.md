@@ -1,6 +1,6 @@
 # FBK-Time — Fehlzeiten-Buchung und Koordination
 
-![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
+![Python Version](https://img.shields.io/badge/python-3.11.4%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey)
 
@@ -14,7 +14,7 @@ Ein webbasiertes Abwesenheitsmanagement mit rollenbasierter Zugriffskontrolle (R
 - **Konflikt-Validierung** - Automatische Erkennung überlappender Abwesenheiten und Vertretungs-Konflikte
 - **Kategorien-System** - Anpassbare Abwesenheitstypen mit Farben, Icons und Vertretungs-Anforderungen
 - **Account-Sicherheit** - Automatische Sperrung, Passwort-Richtlinien, Inaktivitäts-Erkennung
-- **Benutzerpräferenzen** - Individuelles Datumsformat, Theme, Paginierung und Feiertagsregion
+- **Benutzerpräferenzen** - Startseite, Standardansicht, Datumsformat, Design, Paginierung und Feiertagsregion
 - **Team-Kalender** - Monatsbasierte Übersicht mit deutscher Feiertags-Integration (alle 16 Bundesländer)
 - **Team-Matrix** - Übersicht aller Benutzer-Abwesenheiten auf einen Blick
 - **PDF & iCal Export** - Reports mit visuellen Halbtags-Indikatoren
@@ -22,7 +22,7 @@ Ein webbasiertes Abwesenheitsmanagement mit rollenbasierter Zugriffskontrolle (R
 
 ## Anforderungen
 
-- Python 3.11 oder höher
+- Python 3.11.4 oder höher
 - SQLite3
 - Linux-Server (Debian/Ubuntu oder RHEL/CentOS/Rocky/Alma) für Production
 - Nginx (für Production-Deployment)
@@ -47,6 +47,10 @@ pip install -r requirements.txt
 
 # Setup ausführen (erstellt settings.json und .env)
 python cli/setup.py init
+
+# Sicherungsverzeichnis anlegen (Vorgabe in settings.json, muss dem
+# ausführenden Benutzer gehören)
+sudo install -d -m 700 -o "$USER" /var/backups/fbk-time
 
 # Admin-Benutzer erstellen
 python cli/manage_user.py create-user admin --role admin
@@ -116,6 +120,10 @@ Plattform-spezifische Anleitungen (Systemd, Nginx, SSL, Firewall, SELinux):
 6. **Reports erstellen** - PDF- oder iCal-Dateien exportieren
 
 ### Verwaltung
+
+Die Kommandozeilen-Werkzeuge laufen unter dem Dienst-Benutzer, dem das
+Sicherungsverzeichnis gehört, auf Debian/Ubuntu etwa per
+`sudo -u www-data venv/bin/python cli/manage_user.py list-users`.
 
 **Benutzerverwaltung über CLI:**
 

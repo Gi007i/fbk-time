@@ -1,0 +1,17 @@
+{% from "components/category_icon.html" import category_icon %}
+{% macro emoji_picker(field, icons) %}
+<div class="emoji-picker-wrapper">
+    {{ field(class="emoji-input", id="icon", readonly=true,
+       **{'aria-label': 'Emoji',
+          'aria-invalid': 'true' if field.errors else none}) }}
+    <button type="button" class="outline emoji-picker-btn" aria-label="Emoji auswählen" aria-expanded="false" aria-controls="emoji-picker-panel">😀</button>
+    <button type="button" class="outline emoji-clear-btn" aria-label="Emoji entfernen">✕</button>
+    <div class="emoji-picker hidden" id="emoji-picker-panel">
+        <div class="emoji-grid">
+            {% for icon in icons %}
+            <button type="button" class="emoji-btn" data-emoji="{{ icon }}" aria-label="{{ icon }}">{{ category_icon(icon) }}</button>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endmacro %}

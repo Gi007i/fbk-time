@@ -1,11 +1,7 @@
 /**
- * Session idle countdown with a keep-alive extension.
- * Shows the remaining session time as a live countdown in the header that
- * the user can click to extend, raises a modal warning dialog shortly
- * before expiry, and signs the user out when the countdown reaches zero.
- * Activity is mirrored across tabs so a background tab never signs out a
- * session that is still active elsewhere, and the countdown is capped at
- * the absolute session lifetime.
+ * Session idle countdown with a keep-alive extension, a warning dialog
+ * before expiry and activity mirrored across tabs, so a background tab
+ * never signs out a session that is still active elsewhere.
  * @module session-timeout
  */
 (function() {
@@ -26,16 +22,16 @@
     var countdownEl = dialog.querySelector('[data-countdown]');
     var extendBtn = dialog.querySelector('[data-extend]');
     var logoutButton = dialog.querySelector('[data-logout]');
+    var absoluteNote = dialog.querySelector('[data-absolute-note]');
     var timerEl = document.getElementById('session-timer');
 
-    if (!countdownEl || !extendBtn || !logoutButton || !keepaliveUrl || !logoutUrl) {
+    if (!countdownEl || !extendBtn || !logoutButton || !absoluteNote
+            || !keepaliveUrl || !logoutUrl) {
         return;
     }
-    if (!(idleSeconds > 0) || !(warningSeconds > 0) || warningSeconds >= idleSeconds) {
+    if (!(idleSeconds > 0) || !(warningSeconds > 0) || warningSeconds >= idleSeconds
+            || !Number.isFinite(remainingSeconds)) {
         return;
-    }
-    if (!(remainingSeconds > 0)) {
-        remainingSeconds = idleSeconds;
     }
 
     var absoluteDeadline = (absoluteSeconds > 0)
@@ -48,7 +44,13 @@
 
     var expireAt = 0;
     var warnAt = 0;
-    var loggingOut = false;
+    var leaving = false;
+    var lastExtendable = null;
+    var warningDismissed = false;
+
+    // The remaining time arrives in whole seconds rounded down; wait until
+    // the session has surely expired before reloading.
+    var RELOAD_GRACE_MS = 2000;
 
     /**
      * Apply an expiry deadline, capped at the absolute lifetime, and reset
@@ -57,7 +59,13 @@
      * @returns {void}
      */
     function applyDeadline(deadline) {
-        expireAt = Math.min(deadline, absoluteDeadline);
+        var next = Math.min(deadline, absoluteDeadline);
+        // Only real extra time justifies warning again: at the absolute cap
+        // every activity elsewhere would otherwise reopen a dismissed dialog.
+        if (next > expireAt) {
+            warningDismissed = false;
+        }
+        expireAt = next;
         warnAt = expireAt - warningSeconds * 1000;
         if (dialog.open) {
             dialog.close();
@@ -74,7 +82,52 @@
     function registerActivity(seconds) {
         applyDeadline(Date.now() + seconds * 1000);
         if (channel) {
-            channel.postMessage(expireAt);
+            channel.postMessage({ expireAt: expireAt, absoluteAt: absoluteDeadline });
+        }
+    }
+
+    /**
+     * Report whether extending can still gain time: once a full idle window
+     * reaches past the absolute deadline, the deadline no longer moves.
+     * @returns {boolean} True while a keep-alive still defers expiry.
+     */
+    function canExtend() {
+        return Date.now() + idleSeconds * 1000 < absoluteDeadline;
+    }
+
+    /**
+     * Format the absolute deadline as a local wall-clock time.
+     * @returns {string} The end time as HH:MM.
+     */
+    function absoluteEndLabel() {
+        var end = new Date(absoluteDeadline);
+        var hours = end.getHours();
+        var minutes = end.getMinutes();
+        return (hours < 10 ? '0' : '') + hours
+            + ':' + (minutes < 10 ? '0' : '') + minutes;
+    }
+
+    /**
+     * Mirror the current extendability into the controls. The dialog button
+     * stays usable as a plain dismiss, otherwise the modal would trap the
+     * user during the final minute with unsaved work on the page.
+     * @returns {void}
+     */
+    function refreshExtendControls() {
+        var extendable = canExtend();
+        if (extendable === lastExtendable) {
+            return;
+        }
+        lastExtendable = extendable;
+        extendBtn.textContent = extendable ? 'Angemeldet bleiben' : 'Fenster schließen';
+        absoluteNote.classList.toggle('hidden', extendable);
+        if (timerEl) {
+            var label = extendable
+                ? 'Sitzung verlängern'
+                : 'Sitzungsende um ' + absoluteEndLabel() + ' Uhr';
+            timerEl.setAttribute('aria-disabled', extendable ? 'false' : 'true');
+            timerEl.setAttribute('data-tooltip', label);
+            timerEl.setAttribute('aria-label', label);
         }
     }
 
@@ -100,10 +153,10 @@
      * @returns {void}
      */
     function forceLogout() {
-        if (loggingOut) {
+        if (leaving) {
             return;
         }
-        loggingOut = true;
+        leaving = true;
 
         var form = document.createElement('form');
         form.method = 'POST';
@@ -117,6 +170,29 @@
 
         document.body.appendChild(form);
         form.submit();
+    }
+
+    /**
+     * Load the current page again via GET without adding a history entry,
+     * so a page that answered a form submission is not submitted twice.
+     * The fragment is dropped, otherwise the browser would only scroll.
+     * @returns {void}
+     */
+    function reloadPage() {
+        window.location.replace(window.location.href.split('#')[0]);
+    }
+
+    /**
+     * Reload the page once the countdown has run out, so the next page
+     * reflects the current sign-in state.
+     * @returns {void}
+     */
+    function reloadExpired() {
+        if (leaving) {
+            return;
+        }
+        leaving = true;
+        reloadPage();
     }
 
     /**
@@ -144,13 +220,17 @@
             }
             if (result.ok && typeof result.data.remaining_seconds === 'number'
                     && result.data.remaining_seconds > 0) {
+                if (typeof result.data.absolute_seconds === 'number'
+                        && result.data.absolute_seconds > 0) {
+                    absoluteDeadline = Date.now() + result.data.absolute_seconds * 1000;
+                }
                 registerActivity(result.data.remaining_seconds);
             } else {
-                window.location.reload();
+                reloadPage();
             }
         })
         .catch(function() {
-            window.location.reload();
+            reloadPage();
         });
     }
 
@@ -161,11 +241,12 @@
      */
     function tick() {
         var now = Date.now();
-        if (now >= expireAt) {
-            forceLogout();
+        if (now >= expireAt + RELOAD_GRACE_MS) {
+            reloadExpired();
             return;
         }
-        var label = formatDuration(Math.ceil((expireAt - now) / 1000));
+        refreshExtendControls();
+        var label = formatDuration(Math.max(0, Math.ceil((expireAt - now) / 1000)));
         var warning = now >= warnAt;
         if (timerEl) {
             timerEl.textContent = label;
@@ -173,28 +254,55 @@
             timerEl.classList.toggle('secondary', !warning);
         }
         if (warning) {
-            if (!dialog.open) {
+            if (!dialog.open && !warningDismissed) {
                 dialog.showModal();
             }
             countdownEl.textContent = label;
         }
     }
 
-    extendBtn.addEventListener('click', extend);
+    /**
+     * Handle the dialog's primary button: extend while that still gains
+     * time, otherwise dismiss the warning for the current deadline.
+     * @returns {void}
+     */
+    function extendOrDismiss() {
+        if (canExtend()) {
+            extend();
+            return;
+        }
+        warningDismissed = true;
+        dialog.close();
+    }
+
+    extendBtn.addEventListener('click', extendOrDismiss);
     logoutButton.addEventListener('click', forceLogout);
     if (timerEl) {
-        timerEl.addEventListener('click', extend);
+        timerEl.addEventListener('click', function() {
+            if (canExtend()) {
+                extend();
+            }
+        });
     }
 
     dialog.addEventListener('cancel', function(event) {
-        event.preventDefault();
+        if (canExtend()) {
+            event.preventDefault();
+            return;
+        }
+        warningDismissed = true;
     });
 
     if (channel) {
         channel.onmessage = function(event) {
-            if (Number.isFinite(event.data)) {
-                applyDeadline(event.data);
+            var data = event.data;
+            if (!data || !Number.isFinite(data.expireAt)) {
+                return;
             }
+            if (typeof data.absoluteAt === 'number' && !Number.isNaN(data.absoluteAt)) {
+                absoluteDeadline = data.absoluteAt;
+            }
+            applyDeadline(data.expireAt);
         };
     }
 
@@ -203,7 +311,7 @@
     if (typeof originalFetch === 'function') {
         window.fetch = function() {
             return originalFetch.apply(window, arguments).then(function(response) {
-                if (!loggingOut && response.status !== 401) {
+                if (!leaving && response.status !== 401) {
                     registerActivity(idleSeconds);
                 }
                 return response;
@@ -211,6 +319,10 @@
         };
     }
 
+    if (remainingSeconds <= 0) {
+        setTimeout(reloadExpired, RELOAD_GRACE_MS);
+        return;
+    }
     registerActivity(remainingSeconds);
     tick();
     setInterval(tick, 1000);

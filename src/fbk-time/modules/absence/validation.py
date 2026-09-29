@@ -1,34 +1,61 @@
 """Field-level validation for absence management.
 
-Holds the stateless field validators. Conflict detection and time-slot
-overlap checks live in ``conflicts`` and the low-level slot algebra in
-``timeslots``; both are re-exported here so callers keep a single import
-surface.
+The conflict checks from ``conflicts`` are re-exported so callers keep a
+single import surface.
 """
 
-from datetime import date
+from datetime import date, time
 from typing import Optional, Tuple
 
-from core.extensions import db
+from core.db import db
 from modules.category.models import Category
 
 from .conflicts import (
     ConflictResult,
     check_absence_conflicts,
-    substitute_slot_available,
     validate_time_slot_overlap,
 )
 
 __all__ = [
     'ConflictResult',
     'check_absence_conflicts',
-    'substitute_slot_available',
     'validate_time_slot_overlap',
     'validate_substitute_required',
     'validate_category_assignable',
     'validate_substitute_not_self',
     'validate_date_range',
+    'validate_custom_time_span',
 ]
+
+
+def validate_custom_time_span(
+    start_date: date,
+    end_date: date,
+    start_time: Optional[time],
+    end_time: Optional[time]
+) -> Tuple[bool, Optional[str]]:
+    """Reject a custom time window spanning more than one day.
+
+    The model cannot express it: no renderer or conflict rule covers a
+    continuous multi-day block, and a daily window is what a series is for.
+
+    Args:
+        start_date: Start date.
+        end_date: End date.
+        start_time: Custom start time, if any.
+        end_time: Custom end time, if any.
+
+    Returns:
+        Tuple of (is_valid, error_message).
+    """
+    if start_date == end_date or (start_time is None and end_time is None):
+        return True, None
+
+    return False, (
+        'Eine benutzerdefinierte Uhrzeit ist nur für einen einzelnen Tag '
+        'möglich. Für ein tägliches Zeitfenster über mehrere Tage legen Sie '
+        'eine Serie an.'
+    )
 
 
 def validate_substitute_required(
@@ -60,11 +87,8 @@ def validate_category_assignable(
 ) -> Tuple[bool, Optional[str]]:
     """Reject newly assigning a disabled category.
 
-    Disabled categories remain visible on legacy records so that
-    existing data keeps rendering, but they must not be freshly
-    assigned to another record. A record that already carries a
-    disabled category may keep it (no-op change) so that unrelated
-    edits on old data do not fail.
+    A record that already carries a disabled category may keep it, so
+    unrelated edits on existing data do not fail.
 
     Args:
         category_id: The desired category ID (new value from the form).

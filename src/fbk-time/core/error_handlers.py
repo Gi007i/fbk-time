@@ -11,7 +11,7 @@ from flask import flash, redirect, render_template, url_for
 
 from utils.response_helpers import is_ajax_request
 
-from .extensions import db
+from .db import db
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,8 @@ logger = logging.getLogger(__name__)
 def register(application) -> None:
     """Register all error handlers on the application."""
     from flask_wtf.csrf import CSRFError
-    from flask_login import current_user
+
+    from core.auth import current_user
     from utils.response_helpers import api_error
 
     @application.errorhandler(CSRFError)

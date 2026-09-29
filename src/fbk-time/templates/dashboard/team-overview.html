@@ -1,15 +1,22 @@
 {% extends "base.html" %}
 {% from "components/filters.html" import render as filter_panel %}
+{% from "components/team_matrix.html" import render as team_matrix with context %}
+{% from "components/legend.html" import render as legend %}
+{% from "components/export_panel.html" import render as export_panel %}
 
 {% block title %}Team-Übersicht - FBK-Time{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/absences.css') }}">
+{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Team</h1>
-    <nav><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav aria-label="Seitenaktionen"><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
-<nav class="page-nav page-nav-week">
+<nav class="page-nav page-nav-week" aria-label="Wochennavigation">
     <h2>{{ week_title }}</h2>
     <ul>
         <li><a href="{{ filter_url('dashboard.team_overview', week_start=prev_week.isoformat(), year=year, month=month) }}" role="button" class="outline">← Vorwoche</a></li>
@@ -18,7 +25,7 @@
     </ul>
 </nav>
 
-<nav class="page-nav page-nav-month hidden">
+<nav class="page-nav page-nav-month hidden" aria-label="Monatsnavigation">
     <h2>{{ month_title }}</h2>
     <ul>
         <li><a href="{{ filter_url('dashboard.team_overview', year=prev_month.year, month=prev_month.month) }}" role="button" class="outline">← Vormonat</a></li>
@@ -29,149 +36,15 @@
 
 {{ filter_panel(filters, all_users, categories, url_for('dashboard.team_overview', year=year, month=month, week_start=week_start.isoformat()), hidden={'year': year, 'month': month, 'week_start': week_start.isoformat()}) }}
 
-<article class="team-matrix-week">
-    <div class="team-matrix">
-        {% if users %}
-        <table>
-            <thead>
-                <tr>
-                    <th class="user-name">Person</th>
-                    {% for day in week_days %}
-                    <th class="day-header{% if day.is_holiday %} day-holiday{% endif %}{% if day.is_today %} day-today{% endif %}"
-                        {% if day.holiday_name %}data-tooltip="{{ day.holiday_name }}"{% endif %}>
-                        {{ day.day }}
-                        <small>{{ day.weekday_short }}</small>
-                    </th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in users %}
-                <tr>
-                    <td class="user-name"><small>{{ user.name }}</small></td>
-                    {% for day in week_days %}
-                    {% set absence = matrix.get((user.id, day.date)) %}
-                    {% if absence and absence.is_combined_half_day %}
-                    <td class="absence-cell combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
-                        data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
-                        data-href-morning="{% if absence.is_recurring %}{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence.id) }}{% endif %}"
-                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ origin_url('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
-                        {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% endif %}{% if absence.category_afternoon.icon %}<span class="category-icon">{{ absence.category_afternoon.icon }}</span>{% endif %}
-                    </td>
-                    {% else %}
-                    <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% endif %}{% if day.is_today %} day-today{% endif %}"
-                        {% if absence %}
-                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
-                        {% if absence.is_recurring %}
-                        data-href="{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
-                        {% else %}
-                        data-href="{{ origin_url('absences.detail', id=absence.absence.id) }}"
-                        {% endif %}
-                        {% elif day.holiday_name %}
-                        data-tooltip="{{ day.holiday_name }}"
-                        {% endif %}>
-                        {% if absence %}
-                        {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% else %}•{% endif %}
-                        {% endif %}
-                    </td>
-                    {% endif %}
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p><small>Keine aktiven Mitarbeitenden vorhanden.</small></p>
-        {% endif %}
-    </div>
-</article>
+{{ team_matrix('team-matrix-week', 'Wochenmatrix', week_title, week_days,
+               users, matrix, current_user) }}
 
-<article class="team-matrix-month hidden">
-    <div class="team-matrix">
-        {% if users %}
-        <table>
-            <thead>
-                <tr>
-                    <th class="user-name">Person</th>
-                    {% for day in month_days %}
-                    {% if not day.empty %}
-                    <th class="day-header{% if day.is_holiday %} day-holiday{% elif day.is_weekend %} day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
-                        {% if day.holiday_name %}data-tooltip="{{ day.holiday_name }}"{% endif %}>
-                        {{ day.day }}
-                        <small>{{ day.weekday_short }}</small>
-                    </th>
-                    {% endif %}
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in users %}
-                <tr>
-                    <td class="user-name"><small>{{ user.name }}</small></td>
-                    {% for day in month_days %}
-                    {% if not day.empty %}
-                    {% set absence = matrix.get((user.id, day.date)) %}
-                    {% if absence and absence.is_combined_half_day %}
-                    <td class="absence-cell combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
-                        data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
-                        data-href-morning="{% if absence.is_recurring %}{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence.id) }}{% endif %}"
-                        data-href-afternoon="{% if absence.is_recurring_afternoon %}{{ origin_url('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=absence.absence_afternoon.id) }}{% endif %}">
-                    </td>
-                    {% else %}
-                    <td class="{% if absence %}absence-cell category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% elif day.is_weekend %}day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
-                        {% if absence %}
-                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
-                        {% if absence.is_recurring %}
-                        data-href="{{ origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) }}"
-                        {% else %}
-                        data-href="{{ origin_url('absences.detail', id=absence.absence.id) }}"
-                        {% endif %}
-                        {% elif day.holiday_name %}
-                        data-tooltip="{{ day.holiday_name }}"
-                        {% endif %}>
-                        {% if absence %}
-                        {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span>{% else %}•{% endif %}
-                        {% endif %}
-                    </td>
-                    {% endif %}
-                    {% endif %}
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p><small>Keine aktiven Mitarbeitenden vorhanden.</small></p>
-        {% endif %}
-    </div>
-</article>
+{{ team_matrix('team-matrix-month hidden', 'Monatsmatrix', month_title, month_days,
+               users, matrix, current_user, mark_weekend=True) }}
 
-<article class="legend">
-    <strong>Legende:</strong>
-    {% for category in categories %}
-    <span class="category-badge category-{{ category.id }}">
-        {% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}
-        {{ 'A' if category.is_present else 'X' }}
-    </span>
-    {% endfor %}
-    <mark>Feiertag</mark>
-    |
-    <strong>A</strong> = Anwesend
-    <strong>X</strong> = Abwesend
-</article>
+{{ legend(categories) }}
 
-<article>
-    <strong>Export-Format</strong>
-    <div class="grid">
-        <select id="export-type">
-            <option value="pdf-matrix">PDF - Kalender-Matrix</option>
-            <option value="pdf-list">PDF - Tabelle</option>
-            <option value="ical">iCal-Datei</option>
-        </select>
-        <button type="button" id="export-btn" class="outline">Exportieren</button>
-        <div></div>
-    </div>
-</article>
+{{ export_panel(order=['pdf-matrix', 'pdf-list', 'ical']) }}
 
 <nav aria-label="Abwesenheits-Ansichten">
     <div role="group">

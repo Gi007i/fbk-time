@@ -1,27 +1,19 @@
 """Generic application task scheduler.
 
-Runs periodic background tasks (cleanup, backup) in a daemon thread that
-is started in every Gunicorn worker. A process-bound advisory lock elects
-a single leader so tasks execute exactly once; workers that do not hold
-the lock keep polling and take over within one tick if the leader exits
-(e.g. on worker recycling), so scheduling survives the loss of any worker.
+A daemon thread runs in every Gunicorn worker; a process-bound advisory lock
+elects one leader so tasks run once, and another worker takes over within
+one tick if the leader exits. Settings changes (``cache_version`` bumps)
+re-register the tasks without a restart.
 
-The leader polls ``cache_version`` once per tick. When another worker
-commits a settings change (which always bumps the version), the leader
-re-registers its tasks — so admin changes in the UI take effect within at
-most ``_POLL_INTERVAL`` seconds without a restart.
-
-Task schedules are process-local and not persisted: each worker registers
-its tasks from its own start time, and a new leader re-anchors wall-clock
-tasks on takeover. Interval tasks therefore offer best-effort timing across
-a leader change rather than a hard guarantee — acceptable here because the
-worker recycle interval stays well above the task intervals under the
-expected low-throughput, offline workload.
+Schedules are process-local. A daily slot passed within ``CATCH_UP_GRACE``
+still runs after a restart, takeover or reload, so daily tasks must be
+idempotent per slot; interval timing across a leader change is best-effort.
 """
 
 import fcntl
 import os
 import threading
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -29,40 +21,43 @@ from typing import Callable, List, Optional
 
 from core.timezone import get_app_timezone
 
+# A daily slot that passed within this window is still run when a task is
+# registered or a worker takes over, so a restart or leader change right
+# after the slot does not skip the day.
+CATCH_UP_GRACE = timedelta(minutes=30)
+
 
 @dataclass
 class _Task:
     name: str
     func: Callable
     interval_hours: float
+    daily_at: Optional[str] = None  # local "HH:MM" pinning a wall-clock task
+    timezone_key: Optional[str] = None  # zone daily_at was resolved in
     next_run: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    anchor: Optional[Callable[[], datetime]] = None
 
     def due(self, now: datetime) -> bool:
         return now >= self.next_run
 
+    @property
+    def spec(self) -> tuple:
+        return (self.interval_hours, self.daily_at, self.timezone_key)
+
     def reschedule(self, now: datetime) -> None:
         """Compute the next run time.
 
-        Anchored (wall-clock) tasks recompute their next occurrence, so a
-        daily time stays pinned across DST changes and never drifts over
-        days. Interval tasks advance by their fixed interval.
+        Daily tasks recompute their next occurrence, so the time stays
+        pinned across DST changes and never drifts over days. Interval
+        tasks advance by their fixed interval.
         """
-        if self.anchor is not None:
-            self.next_run = self.anchor()
+        if self.daily_at is not None:
+            self.next_run = _next_daily_run(self.daily_at)
         else:
             self.next_run = now + timedelta(hours=self.interval_hours)
 
 
 class AppScheduler:
-    """Thread-based scheduler for periodic application tasks.
-
-    A process-bound advisory lock elects a single leader among the workers
-    so tasks run exactly once. Tasks are added before start() and executed
-    in a daemon thread. The leader detects settings changes via
-    cache_version and rebuilds its task list without a service restart;
-    if the leader exits, another worker acquires the lock and takes over.
-    """
+    """Thread-based scheduler for periodic application tasks."""
 
     # Tick interval for task firing and settings-change detection.
     # A wall-clock-anchored task fires within this many seconds after its
@@ -73,10 +68,8 @@ class AppScheduler:
         self.app = app
         self._tasks: List[_Task] = []
         self._thread: Optional[threading.Thread] = None
-        self._running = False
-        self._lock_fd = None
+        self._lock_fd: Optional[int] = None
         self._is_leader = False
-        self._stop_event = threading.Event()
         self._last_seen_cache_version = 0
 
         if app is not None:
@@ -87,26 +80,28 @@ class AppScheduler:
 
     def add_task(self, name: str, func: Callable, interval_hours: float,
                  delay_hours: Optional[float] = None,
-                 anchor: Optional[Callable[[], datetime]] = None) -> None:
+                 daily_at: Optional[str] = None) -> None:
         """Register a periodic task.
 
         Args:
             name: Unique task identifier used in log messages.
             func: Callable executed within the Flask app context.
-            interval_hours: Interval between executions (used when no anchor).
+            interval_hours: Interval between executions (used without daily_at).
             delay_hours: Initial delay before first run (defaults to interval).
-            anchor: Optional callable returning the next UTC run time for a
-                wall-clock-pinned task; overrides interval-based scheduling.
-                Evaluated here and on every reschedule, so it must run within
-                an app context.
+            daily_at: Local "HH:MM" pinning the task to a wall-clock time;
+                overrides interval-based scheduling. Resolved here and on
+                every reschedule, so it must run within an app context.
         """
-        if anchor is not None:
-            next_run = anchor()
+        timezone_key = None
+        if daily_at is not None:
+            timezone_key = get_app_timezone().key
+            next_run = _next_daily_run(daily_at, grace=CATCH_UP_GRACE)
         else:
             initial_delay = delay_hours if delay_hours is not None else interval_hours
             next_run = datetime.now(timezone.utc) + timedelta(hours=initial_delay)
         self._tasks.append(_Task(name=name, func=func, interval_hours=interval_hours,
-                                 next_run=next_run, anchor=anchor))
+                                 daily_at=daily_at, timezone_key=timezone_key,
+                                 next_run=next_run))
 
     def clear_tasks(self) -> None:
         """Drop the current task list (used before re-registration)."""
@@ -115,51 +110,49 @@ class AppScheduler:
     def start(self) -> None:
         """Start the scheduler thread.
 
-        The thread runs in every worker, but only the worker that holds
-        the advisory lock executes tasks. The others poll for the lock
-        once per tick and take over within one interval if the current
-        holder exits (e.g. on worker recycling), so scheduling survives
-        the loss of any single worker without a service restart.
+        Starts even without tasks, so enabling one later takes effect on
+        reload.
         """
-        if not self._tasks:
-            return
-
         if self._thread and self._thread.is_alive():
             if self.app:
                 self.app.logger.warning("Scheduler already running")
             return
 
         self._last_seen_cache_version = self._read_cache_version()
-        self._running = True
-        self._stop_event.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
         if self.app:
-            task_names = ', '.join(t.name for t in self._tasks)
+            task_names = ', '.join(t.name for t in self._tasks) or '(none)'
             self.app.logger.info(f"Scheduler thread started; tasks: {task_names}")
 
     def _acquire_lock(self) -> bool:
         """Try to become the single task-executing worker.
 
-        Returns True if this process already holds or just acquired the
-        process-bound advisory lock. Uses ``fcntl.lockf`` (process-bound),
-        not ``flock`` (OFD-bound): the lock is released cleanly when the
-        worker exits and is never inherited across a later fork, so a
-        surviving worker can take over after the holder recycles.
+        ``lockf`` instead of ``flock``: the lock ends with the worker and is
+        never inherited across a fork, so a surviving worker can take over.
+
+        Returns:
+            True if this process holds the lock.
         """
         if self._lock_fd is not None:
             return True
 
         lock_file = Path(self.app.config['RUNTIME_DIR']) / 'scheduler.lock'
-        fd = open(lock_file, 'w')
+        try:
+            # O_NOFOLLOW: a planted symlink must not redirect the open.
+            fd = os.open(lock_file, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+        except OSError as e:
+            if self.app:
+                self.app.logger.error(f"Failed to open scheduler lock: {e}")
+            return False
         try:
             fcntl.lockf(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
-            fd.close()
+            os.close(fd)
             return False
         except Exception as e:
-            fd.close()
+            os.close(fd)
             if self.app:
                 self.app.logger.error(f"Failed to acquire scheduler lock: {e}")
             return False
@@ -169,60 +162,33 @@ class AppScheduler:
             self.app.logger.info(f"Worker {os.getpid()} acquired scheduler lock")
         return True
 
-    def stop(self) -> None:
-        """Signal the scheduler thread to exit and wait for it.
-
-        The file lock is retained so the same worker can resume scheduling
-        after re-registering tasks (used by hot reload).
-        """
-        if not self._running:
-            return
-
-        self._running = False
-        self._stop_event.set()
-
-        if self._thread and self._thread.is_alive():
-            self._thread.join(timeout=10)
-        self._thread = None
-        self._stop_event.clear()
-
     def _loop(self) -> None:
-        while self._running:
+        while True:
             try:
                 if not self._acquire_lock():
-                    if self._stop_event.wait(self._POLL_INTERVAL):
-                        break
+                    time.sleep(self._POLL_INTERVAL)
                     continue
 
                 if not self._is_leader:
-                    # First tick after acquiring the lock. Re-anchor
-                    # wall-clock tasks so a daily time that elapsed while
-                    # this worker was a follower pins to its next real
-                    # occurrence instead of firing stale. Interval tasks keep
-                    # the schedule set at startup, so a takeover never
-                    # postpones them — which could otherwise starve a
-                    # frequently recycling fleet.
                     self._is_leader = True
                     self._reanchor()
 
                 now = datetime.now(timezone.utc)
 
                 current_version = self._read_cache_version()
-                if current_version != self._last_seen_cache_version:
+                if (current_version != self._last_seen_cache_version
+                        and self._reload_tasks()):
                     self._last_seen_cache_version = current_version
-                    self._reload_tasks()
 
                 for task in self._tasks:
                     if task.due(now):
                         self._run_task(task, now)
 
-                if self._stop_event.wait(self._POLL_INTERVAL):
-                    break
+                time.sleep(self._POLL_INTERVAL)
             except Exception as e:
                 if self.app:
                     self.app.logger.error(f"Scheduler loop error: {e}")
-                if self._stop_event.wait(self._POLL_INTERVAL * 3):
-                    break
+                time.sleep(self._POLL_INTERVAL * 3)
 
     def _read_cache_version(self) -> int:
         """Read cache_version directly from the database.
@@ -235,7 +201,7 @@ class AppScheduler:
 
         try:
             with self.app.app_context():
-                from core.extensions import db
+                from core.db import db
                 from modules.settings.models import Setting
                 setting = db.session.get(Setting, 'cache_version')
                 return setting.get_typed_value() if setting else 0
@@ -244,39 +210,56 @@ class AppScheduler:
                 self.app.logger.error(f"Failed to read cache_version: {e}")
             return self._last_seen_cache_version
 
-    def _reload_tasks(self) -> None:
+    def _reload_tasks(self) -> bool:
         """Rebuild the task list from current settings.
 
-        Called from the scheduler thread when a settings change is
-        detected. Existing task schedules are discarded; new tasks
-        start from their initial-delay window.
+        Unchanged tasks keep their schedule, so a reload neither restarts an
+        interval countdown nor skips a due slot. A failed reload keeps the
+        previous task list.
+
+        Returns:
+            True if the task list was rebuilt, False if the reload failed
+            and should be retried on the next tick.
         """
+        from core.settings_manager import settings_manager
+
+        previous = self._tasks
         self._tasks = []
         try:
             with self.app.app_context():
+                # The cache of this worker may have been checked within the
+                # throttle interval and still hold the values before the change.
+                settings_manager.refresh()
                 _register_tasks(self.app)
         except Exception as e:
+            self._tasks = previous
             if self.app:
                 self.app.logger.error(f"Scheduler task reload failed: {e}")
-            return
+            return False
+
+        previous_by_name = {task.name: task for task in previous}
+        for task in self._tasks:
+            old = previous_by_name.get(task.name)
+            if old is not None and old.spec == task.spec:
+                task.next_run = old.next_run
 
         if self.app:
             task_names = ', '.join(t.name for t in self._tasks) or '(none)'
             self.app.logger.info(f"Scheduler reloaded — active tasks: {task_names}")
+        return True
 
     def _reanchor(self) -> None:
-        """Re-evaluate wall-clock anchors after acquiring leadership.
+        """Re-pin daily tasks after acquiring leadership.
 
-        A follower's anchored tasks were pinned at this worker's startup;
-        by the time it becomes leader that time may have passed. Re-anchoring
-        moves them to their next real occurrence so they do not fire stale.
-        Interval-only tasks are left untouched.
+        A follower's schedule dates from its startup, so the slot it holds
+        may be long gone. Interval tasks keep their schedule so a takeover
+        never postpones them.
         """
         try:
             with self.app.app_context():
                 for task in self._tasks:
-                    if task.anchor is not None:
-                        task.next_run = task.anchor()
+                    if task.daily_at is not None:
+                        task.next_run = _next_daily_run(task.daily_at, grace=CATCH_UP_GRACE)
         except Exception as e:
             if self.app:
                 self.app.logger.error(f"Scheduler re-anchor failed: {e}")
@@ -291,11 +274,8 @@ class AppScheduler:
             if self.app:
                 self.app.logger.error(f"Scheduler task '{task.name}' failed: {e}")
         finally:
-            # Reschedule inside an app context: an anchored task derives its
-            # next run from settings (timezone, backup time), which may read
-            # the database. Guard it so a transient read failure cannot leave
-            # next_run in the past and refire the task on every tick; fall
-            # back to the fixed interval until the next successful reschedule.
+            # Anchored tasks read settings to reschedule; a failed read must
+            # not leave next_run in the past and refire on every tick.
             try:
                 with self.app.app_context():
                     task.reschedule(now)
@@ -331,12 +311,22 @@ def _cleanup_task() -> None:
 def _backup_task() -> None:
     """Create a scheduled database backup and prune old archives.
 
-    Backup creation and retention cleanup run together: cleanup only
-    happens after a successful backup, so a failed run never deletes
-    archives without a fresh replacement.
+    Cleanup runs only after a successful backup, so a failed run never
+    deletes archives without a replacement.
     """
     from core.backup import backup_manager
+    from core.settings_manager import settings_manager
     from flask import current_app
+    from modules.backup.services import latest_usable_scheduled_backup_at
+
+    # Catch-up after a restart or takeover may hit a slot the previous
+    # leader already completed.
+    slot = last_daily_run(settings_manager.get('backup_time')).replace(tzinfo=None)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    last_at = latest_usable_scheduled_backup_at(not_after=now)
+    if last_at is not None and last_at >= slot:
+        current_app.logger.info("Scheduled backup for this slot already exists, skipping")
+        return
 
     record = backup_manager.create_backup(
         description='Scheduled backup',
@@ -368,7 +358,7 @@ def _register_tasks(app) -> None:
     if settings_manager.get('backup_scheduled_enabled'):
         backup_time = settings_manager.get('backup_time')
         try:
-            _seconds_until(backup_time)
+            _next_slot(backup_time)
         except ValueError:
             app.logger.error(
                 "backup_time has invalid format (expected HH:MM) — "
@@ -379,16 +369,15 @@ def _register_tasks(app) -> None:
                 name='backup',
                 func=_backup_task,
                 interval_hours=24,
-                anchor=lambda t=backup_time: _next_daily_run(t)
+                daily_at=backup_time
             )
 
 
 def start_scheduler(app) -> None:
     """Register all enabled tasks and start the scheduler.
 
-    Task registration runs inside an app context because it reads settings
-    from the database; the callers (Gunicorn ``post_fork`` and the
-    standalone entry point) do not provide one.
+    Opens its own app context, since registration reads settings and the
+    callers provide none.
     """
     app_scheduler.init_app(app)
     app_scheduler.clear_tasks()
@@ -397,39 +386,57 @@ def start_scheduler(app) -> None:
     app_scheduler.start()
 
 
-def _next_daily_run(time_str: str) -> datetime:
-    """Return the next UTC datetime matching a daily local time of day.
+def _next_daily_run(time_str: str, grace: timedelta = timedelta(0)) -> datetime:
+    """Return the UTC datetime of the next daily slot.
 
-    Used as a task anchor so the scheduled backup re-pins to its configured
-    wall-clock time on every reschedule, immune to DST shifts and tick drift.
-    Must be called within an app context (reads the timezone setting).
+    A slot passed within ``grace`` is returned instead, so registration and
+    takeover shortly after the slot still run it. Needs an app context.
+
+    Args:
+        time_str: Local time in "HH:MM" format.
+        grace: How long a passed slot still counts as pending.
+
+    Raises:
+        ValueError: If time_str is not a valid "HH:MM" string.
     """
-    return datetime.now(timezone.utc) + timedelta(seconds=_seconds_until(time_str))
+    now = datetime.now(timezone.utc)
+    if grace:
+        recent = last_daily_run(time_str)
+        if now - recent <= grace:
+            return recent
+    return _next_slot(time_str)
 
 
-def _seconds_until(time_str: str) -> int:
-    """Calculate seconds until the next occurrence of a daily time of day.
+def last_daily_run(time_str: str) -> datetime:
+    """Return the most recent UTC datetime matching a daily local time of day.
 
-    The configured time is interpreted in the active application
-    timezone (admin setting ``app_timezone``). DST transitions are
-    handled explicitly:
-
-    * Spring forward (non-existent local time): the candidate is moved
-      forward day by day until it falls outside the DST gap. For a
-      daily-recurring 02:30 backup with a 02:00→03:00 jump, this skips
-      the affected day and resumes on the following one.
-    * Fall back (ambiguous local time): ``fold=0`` selects the earlier
-      occurrence (still DST), so the backup runs once on the transition
-      day rather than twice.
-
-    Delta is computed via UTC timestamps so wall-clock additions cannot
-    drift across DST boundaries.
+    Used to check whether a scheduled task has run. Needs an app context.
 
     Args:
         time_str: Local time in "HH:MM" format.
 
-    Returns:
-        Seconds until the next occurrence (always >= 1).
+    Raises:
+        ValueError: If time_str is not a valid "HH:MM" string.
+    """
+    hour, minute = _parse_hhmm(time_str)
+    tz = get_app_timezone()
+    now_local = datetime.now(tz)
+
+    # Step the base date back, not the anchored result: a slot in a
+    # spring-forward gap is moved behind the gap, and stepping back from that
+    # shifted wall-clock time would carry the shift into the previous day.
+    # Compare instants, not wall-clock: same-zone comparisons ignore fold.
+    base = now_local
+    candidate = _anchor_local(base, hour, minute, tz)
+    while candidate.timestamp() > now_local.timestamp():
+        base -= timedelta(days=1)
+        candidate = _anchor_local(base, hour, minute, tz)
+
+    return candidate.astimezone(timezone.utc)
+
+
+def _parse_hhmm(time_str: str) -> tuple[int, int]:
+    """Parse a strict "HH:MM" string into hour and minute.
 
     Raises:
         ValueError: If time_str is not a valid "HH:MM" string.
@@ -443,31 +450,44 @@ def _seconds_until(time_str: str) -> int:
         raise ValueError(f'Ungültiges Zeitformat: {time_str!r}') from exc
     if not (0 <= hour < 24 and 0 <= minute < 60):
         raise ValueError(f'Ungültiges Zeitformat: {time_str!r}')
+    return hour, minute
+
+
+def _next_slot(time_str: str) -> datetime:
+    """Return the UTC instant of the next occurrence of a daily time of day.
+
+    Interpreted in the app timezone; DST handling see ``_anchor_local``.
+
+    Args:
+        time_str: Local time in "HH:MM" format.
+
+    Returns:
+        Timezone-aware UTC datetime strictly after now.
+
+    Raises:
+        ValueError: If time_str is not a valid "HH:MM" string.
+    """
+    hour, minute = _parse_hhmm(time_str)
 
     tz = get_app_timezone()
     now_local = datetime.now(tz)
 
+    # Compare instants, not wall-clock: same-zone comparisons ignore fold.
     candidate = _anchor_local(now_local, hour, minute, tz)
-    if candidate <= now_local:
-        candidate = _anchor_local(candidate + timedelta(days=1), hour, minute, tz)
+    if candidate.timestamp() <= now_local.timestamp():
+        candidate = _anchor_local(now_local + timedelta(days=1), hour, minute, tz)
 
-    delta = candidate.timestamp() - now_local.timestamp()
-    return max(int(delta), 1)
+    return candidate.astimezone(timezone.utc)
 
 
 def _anchor_local(base, hour: int, minute: int, tz) -> datetime:
-    """Return ``base``'s date at hour:minute local time, skipping DST gaps.
+    """Return ``base``'s date at hour:minute local time, shifted past DST gaps.
 
-    Sets ``fold=0`` so ambiguous fall-back times resolve to the earlier
-    (DST) occurrence. Detects spring-forward gaps by round-tripping
-    through UTC: when the result does not survive the round trip, the
-    requested local time does not exist on that date and the next day is
-    tried instead. The loop terminates because DST transitions occur at
-    most twice a year.
+    ``fold=0`` runs an ambiguous fall-back time once, at its earlier
+    occurrence. A time in a spring-forward gap fails the UTC round trip and
+    moves to the first valid minute after the gap (cron-like).
     """
     candidate = base.replace(hour=hour, minute=minute, second=0, microsecond=0, fold=0)
     while candidate.astimezone(timezone.utc).astimezone(tz) != candidate:
-        candidate = (candidate + timedelta(days=1)).replace(
-            hour=hour, minute=minute, second=0, microsecond=0, fold=0
-        )
+        candidate += timedelta(minutes=1)
     return candidate

@@ -4,16 +4,15 @@ Provides user-specific settings management and admin system settings.
 """
 
 from flask import Blueprint, render_template, redirect, url_for, request
-from flask_login import login_required, current_user
 
-from utils.decorators import login_required_api, admin_required
-from utils.response_helpers import ajax_response, api_success, api_error, is_ajax_request
+from core.auth import login_required, current_user
+from utils.decorators import admin_required, fresh_login_required
+from utils.response_helpers import ajax_response, is_ajax_request
 from .forms import SettingsForm, AdminSettingsForm
 from .services import (
     get_date_format_choices,
     update_user_settings,
     update_system_settings,
-    set_user_theme,
     get_current_settings
 )
 from modules.holidays.services import get_region_choices
@@ -34,13 +33,20 @@ def index():
     form = SettingsForm()
     form.date_format.choices = get_date_format_choices()
 
+    # The default category color is a manager-only concept; drop it for regular
+    # users so its DataRequired does not block saving a form that never renders it.
+    if not current_user.is_manager:
+        del form.default_text_color
+
     if form.validate_on_submit():
         update_user_settings(
             holiday_region=form.holiday_region.data,
             theme=form.theme.data,
             date_format=form.date_format.data,
             pagination=form.pagination.data,
-            default_text_color=form.default_text_color.data
+            default_text_color=form.default_text_color.data if current_user.is_manager else None,
+            start_page=form.start_page.data,
+            view_scope=form.view_scope.data
         )
 
         if is_ajax_request():
@@ -56,7 +62,10 @@ def index():
         form.theme.data = current_user.theme
         form.date_format.data = current_user.date_format
         form.pagination.data = current_user.items_per_page
-        form.default_text_color.data = current_user.default_text_color
+        if current_user.is_manager:
+            form.default_text_color.data = current_user.default_text_color
+        form.start_page.data = current_user.start_page
+        form.view_scope.data = current_user.view_scope
 
     if request.method == 'POST' and is_ajax_request():
         errors = {field.name: field.errors[0] for field in form if field.errors}
@@ -76,6 +85,7 @@ def index():
 
 @bp.route('/system', methods=['GET', 'POST'])
 @admin_required
+@fresh_login_required
 def system_settings():
     """Display and update system settings (Admin only)."""
     from core.settings_manager import settings_manager
@@ -110,6 +120,8 @@ def system_settings():
             user_default_items_per_page=form.user_default_items_per_page.data,
             user_default_holiday_region=form.user_default_holiday_region.data,
             user_default_text_color=form.user_default_text_color.data,
+            user_default_start_page=form.user_default_start_page.data,
+            user_default_view_scope=form.user_default_view_scope.data,
             limits_max_future_months=form.limits_max_future_months.data,
             limits_bulk_delete_items=form.limits_bulk_delete_items.data,
             backup_scheduled_enabled=form.backup_scheduled_enabled.data,
@@ -157,6 +169,8 @@ def system_settings():
         form.user_default_items_per_page.data = settings_manager.get('user_default_items_per_page')
         form.user_default_holiday_region.data = settings_manager.get('user_default_holiday_region')
         form.user_default_text_color.data = settings_manager.get('user_default_text_color')
+        form.user_default_start_page.data = settings_manager.get('user_default_start_page')
+        form.user_default_view_scope.data = settings_manager.get('user_default_view_scope')
 
         form.limits_max_future_months.data = settings_manager.get('limits_max_future_months')
         form.limits_bulk_delete_items.data = settings_manager.get('limits_bulk_delete_items')
@@ -171,27 +185,3 @@ def system_settings():
         return ajax_response(success=False, message=first_error, errors=errors)
 
     return render_template('settings/system.html', form=form)
-
-
-@bp.route('/api/theme', methods=['POST'])
-@login_required_api
-def api_set_theme():
-    """API endpoint to set theme (for JavaScript theme switcher)."""
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict):
-        return api_error('No data provided')
-
-    theme = data.get('theme', 'light')
-    error = set_user_theme(theme)
-
-    if error:
-        return api_error(error)
-
-    return api_success(data={'theme': theme})
-
-
-@bp.route('/api/theme', methods=['GET'])
-@login_required_api
-def api_get_theme():
-    """API endpoint to get current theme."""
-    return api_success(data={'theme': current_user.theme})

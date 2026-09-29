@@ -1,10 +1,6 @@
-"""Absence forms.
+"""Absence forms."""
 
-Provides forms for absence CRUD operations.
-"""
-
-from datetime import date, timedelta
-from dateutil.relativedelta import relativedelta
+from datetime import date
 
 from flask_wtf import FlaskForm
 from wtforms import (
@@ -13,7 +9,35 @@ from wtforms import (
 )
 from wtforms.validators import DataRequired, InputRequired, Optional, Length, ValidationError
 
+from core.settings_manager import settings_manager
 from modules.absence.recurrence import recurrence_service
+from utils.helpers import format_date_for_user
+from utils.request_validators import MAX_DATE_RANGE_DAYS, min_allowed_date
+
+
+def _check_lower_bound(value: date | None) -> None:
+    """Reject dates before the range accepted for URL parameters."""
+    if value is not None and value < min_allowed_date():
+        raise ValidationError(
+            f'Datum darf nicht vor dem {format_date_for_user(min_allowed_date())} liegen.'
+        )
+
+
+def _check_span(start: date | None, end: date | None) -> None:
+    """Reject spans longer than the maximum date range of the views."""
+    if start is not None and end is not None and (end - start).days > MAX_DATE_RANGE_DAYS:
+        raise ValidationError(
+            f'Der Zeitraum darf höchstens {MAX_DATE_RANGE_DAYS} Tage umfassen.'
+        )
+
+
+def _check_planning_horizon(value: date, label: str) -> None:
+    """Reject dates beyond the configured planning horizon."""
+    if value > recurrence_service.max_future_date:
+        months = settings_manager.get('limits_max_future_months')
+        raise ValidationError(
+            f'{label} darf maximal {months} Monate in der Zukunft liegen.'
+        )
 
 
 class AbsenceForm(FlaskForm):
@@ -110,19 +134,21 @@ class AbsenceForm(FlaskForm):
         validators=[Optional()]
     )
 
+    def validate_start_date(self, field):
+        """Ensure the start date is not before the accepted range."""
+        _check_lower_bound(field.data)
+
     def validate_end_date(self, field):
         """Ensure end date is after start date and within planning horizon."""
-        if self.start_date.data and field.data:
-            if field.data < self.start_date.data:
-                raise ValidationError('Enddatum darf nicht vor dem Startdatum liegen.')
-        if field.data:
-            from core.settings_manager import settings_manager
-            months = settings_manager.get('limits_max_future_months')
-            max_date = date.today() + relativedelta(months=months)
-            if field.data > max_date:
-                raise ValidationError(
-                    f'Enddatum darf maximal {months} Monate in der Zukunft liegen.'
-                )
+        if field.data is None:
+            return
+        _check_lower_bound(field.data)
+        if self.start_date.data and field.data < self.start_date.data:
+            raise ValidationError('Enddatum darf nicht vor dem Startdatum liegen.')
+        # A series takes its length from the recurrence end, not from end_date.
+        if not self.is_recurring.data:
+            _check_span(self.start_date.data, field.data)
+        _check_planning_horizon(field.data, 'Enddatum')
 
     def validate_end_time(self, field):
         """Ensure end time is after start time when custom times are used."""
@@ -133,16 +159,12 @@ class AbsenceForm(FlaskForm):
 
     def validate_recurrence_end_date(self, field):
         """Ensure recurrence end date is within planning horizon."""
-        if self.is_recurring.data and field.data:
-            from core.settings_manager import settings_manager
-            months = settings_manager.get('limits_max_future_months')
-            max_date = date.today() + relativedelta(months=months)
-            if field.data > max_date:
-                raise ValidationError(
-                    f'Serien-Enddatum darf maximal {months} Monate in der Zukunft liegen.'
-                )
-            if field.data < self.start_date.data:
-                raise ValidationError('Serien-Enddatum darf nicht vor dem Startdatum liegen.')
+        if not self.is_recurring.data or field.data is None:
+            return
+        _check_lower_bound(field.data)
+        _check_planning_horizon(field.data, 'Serien-Enddatum')
+        if self.start_date.data and field.data < self.start_date.data:
+            raise ValidationError('Serien-Enddatum darf nicht vor dem Startdatum liegen.')
 
     def validate_recurrence_weekdays(self, field):
         """Ensure at least one weekday is selected for weekly/biweekly patterns."""
@@ -186,7 +208,6 @@ class AbsenceForm(FlaskForm):
         weekdays = self.recurrence_weekdays.data if self.recurrence_frequency.data in ('weekly', 'biweekly') else None
 
         end_date = recurrence_service.validate_recurrence_end_date(
-            self.start_date.data,
             self.recurrence_end_date.data
         )
 
@@ -203,14 +224,24 @@ class AbsenceForm(FlaskForm):
         }
 
     def set_recurrence_from_absence(self, absence):
-        """Set recurrence fields based on absence data."""
+        """Set recurrence fields based on absence data.
+
+        An unreadable stored pattern leaves the pattern fields empty and shows
+        the message there, so saving the form writes a fresh, valid rule.
+        """
         self.is_recurring.data = absence.is_recurring
 
         if absence.is_recurring and absence.rrule:
-            parsed = recurrence_service.parse_rrule_string(absence.rrule)
+            self.recurrence_end_date.data = absence.recurrence_end_date
+            try:
+                parsed = recurrence_service.validate_rrule(absence.rrule)
+            except ValueError as error:
+                self.recurrence_weekdays.errors = [str(error)]
+                return
             self.recurrence_frequency.data = parsed['frequency']
             self.recurrence_weekdays.data = parsed['weekdays']
-            self.recurrence_end_date.data = absence.recurrence_end_date or parsed.get('end_date')
+            if self.recurrence_end_date.data is None:
+                self.recurrence_end_date.data = parsed['end_date']
 
 
 class OccurrenceEditForm(FlaskForm):
@@ -246,59 +277,34 @@ class OccurrenceEditForm(FlaskForm):
         ]
     )
 
+    def allow_series_time(self) -> None:
+        """Offer keeping the series time window as a choice.
+
+        Only a series with a custom time window has one to keep; a single
+        occurrence cannot define a window of its own.
+        """
+        self.time_type.choices = list(self.time_type.choices) + [
+            ('custom_time', 'Uhrzeit der Serie')
+        ]
+
     def get_effective_state(self) -> dict:
         """Return the complete desired state for the occurrence.
 
-        Maps the UI time_type selection to the stored enum value
-        ('all_day', 'morning', 'afternoon'). All four fields are
-        always provided so the caller can compare each field
-        against the parent absence and decide which fields need
-        to be stored as overrides.
+        Maps the UI time_type selection to the stored value ('all_day',
+        'morning', 'afternoon', 'custom_time'). All fields are always
+        provided so the caller can store only those differing from the
+        parent absence as overrides.
         """
         time_type_map = {
             'all_day': 'all_day',
             'half_day_morning': 'morning',
-            'half_day_afternoon': 'afternoon'
+            'half_day_afternoon': 'afternoon',
+            'custom_time': 'custom_time'
         }
         notes = self.notes.data.strip() if self.notes.data else None
         return {
             'category_id': self.category_id.data,
-            'time_type': time_type_map.get(self.time_type.data, 'all_day'),
+            'time_type': time_type_map[self.time_type.data],
             'substitute_id': self.substitute_id.data,
             'notes': notes or None
         }
-
-
-class FilterForm(FlaskForm):
-    """Absence list filter form."""
-
-    class Meta:
-        csrf = False  # Not needed for GET forms
-
-    user_id = SelectField(
-        'Person',
-        coerce=lambda x: int(x) if x and x != '' and x != 'all' else None,
-        validators=[Optional()]
-    )
-    category_id = SelectField(
-        'Kategorie',
-        coerce=lambda x: int(x) if x and x != '' and x != 'all' else None,
-        validators=[Optional()]
-    )
-    date_from = DateField(
-        'Von',
-        validators=[Optional()]
-    )
-    date_to = DateField(
-        'Bis',
-        validators=[Optional()]
-    )
-    has_substitute = SelectField(
-        'Vertretung',
-        choices=[
-            ('', 'Alle'),
-            ('yes', 'Mit Vertretung'),
-            ('no', 'Ohne Vertretung')
-        ],
-        validators=[Optional()]
-    )

@@ -5,6 +5,34 @@
 (function() {
     'use strict';
 
+    var ANNOUNCE_DELAY_MS = 400;
+
+    /**
+     * Report the result count to a live region. Typing fires per keystroke,
+     * so the update is delayed and skipped when unchanged; otherwise every
+     * character would produce its own announcement.
+     * @param {HTMLElement} region - The live region element.
+     * @returns {Function} Callback taking the message to announce.
+     */
+    function announcer(region) {
+        var timer = null;
+
+        return function(message) {
+            if (!region) {
+                return;
+            }
+            // Cleared before the comparison: a pending timer may still hold
+            // an outdated value even when the current one is unchanged.
+            clearTimeout(timer);
+            if (region.textContent === message) {
+                return;
+            }
+            timer = setTimeout(function() {
+                region.textContent = message;
+            }, ANNOUNCE_DELAY_MS);
+        };
+    }
+
     /**
      * Initialize license search functionality.
      * @returns {void}
@@ -13,6 +41,7 @@
         var searchInput = document.getElementById('license-search');
         var licenseItems = document.querySelectorAll('article[data-name]');
         var noResults = document.getElementById('no-results');
+        var announce = announcer(document.getElementById('license-search-status'));
 
         if (!searchInput || !licenseItems.length) return;
 
@@ -40,6 +69,8 @@
                     noResults.classList.add('hidden');
                 }
             }
+
+            announce(query.length > 0 ? visibleCount + ' Treffer' : '');
         });
     }
 

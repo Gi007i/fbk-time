@@ -8,8 +8,6 @@ Provides commands for managing user accounts with RBAC:
 - set-status: Change user status
 - delete-user: Delete a user
 - list-users: List all users with roles
-
-Uses argparse (Python standard library) and Argon2id for password hashing.
 """
 
 import argparse
@@ -18,16 +16,24 @@ import sys
 from datetime import timezone
 from pathlib import Path
 
-# Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from sqlalchemy import func, select
+
 from app import create_app
-from core.extensions import db
+from core.db import db
 from core.settings_manager import settings_manager
 from core.timezone import get_app_timezone
-from modules.auth.models import User, UserRole, UserStatus, LoginAttempt
-from modules.auth.services import ph
-from utils.validators import validate_password_strength
+from modules.auth.models import User, UserRole, UserStatus
+from modules.auth.services import clear_login_attempts_for_username, ph
+from modules.user.services import set_user_password, validate_last_admin
+from utils.validators import (
+    USERNAME_RULE_MESSAGE,
+    is_valid_username,
+    normalize_email,
+    normalize_username,
+    validate_password_strength,
+)
 
 
 def get_cli_app():
@@ -60,9 +66,9 @@ def get_password(confirm=True):
         return None
 
     if confirm:
-        password_confirm = getpass.getpass('Passwort bestaetigen: ')
+        password_confirm = getpass.getpass('Passwort bestätigen: ')
         if password != password_confirm:
-            print('Fehler: Passwoerter stimmen nicht ueberein.')
+            print('Fehler: Passwörter stimmen nicht überein.')
             return None
 
     return password
@@ -87,9 +93,15 @@ def create_user(username, role='user', no_login=False):
         print('Fehler: Admin und Manager können nicht mit --no-login erstellt werden.')
         sys.exit(1)
 
+    if not is_valid_username(username):
+        print(f'Fehler: {USERNAME_RULE_MESSAGE}')
+        sys.exit(1)
+
     with app.app_context():
-        username = username.lower()
-        existing = User.query.filter_by(username=username).first()
+        username = normalize_username(username)
+        existing = db.session.scalars(
+            select(User).filter_by(username=username)
+        ).first()
         if existing:
             print(f'Fehler: Benutzer "{username}" existiert bereits.')
             sys.exit(1)
@@ -104,10 +116,10 @@ def create_user(username, role='user', no_login=False):
             print('Fehler: Anzeigename darf nicht leer sein.')
             sys.exit(1)
 
-        email = input('E-Mail (optional): ').strip() or None
+        email = normalize_email(input('E-Mail (optional): '))
 
         if no_login:
-            # Generate random hash (unusable for login)
+            # Random secret: no password can ever match it.
             import secrets
             password_hash = ph.hash(secrets.token_hex(32))
             status = UserStatus.MANAGED
@@ -137,7 +149,9 @@ def create_user(username, role='user', no_login=False):
             date_format=settings_manager.get('user_default_date_format'),
             items_per_page=settings_manager.get('user_default_items_per_page'),
             holiday_region=settings_manager.get('user_default_holiday_region'),
-            default_text_color=settings_manager.get('user_default_text_color')
+            default_text_color=settings_manager.get('user_default_text_color'),
+            start_page=settings_manager.get('user_default_start_page'),
+            view_scope=settings_manager.get('user_default_view_scope')
         )
 
         db.session.add(user)
@@ -157,7 +171,9 @@ def reset_password(username):
 
     with app.app_context():
         username = username.lower()
-        user = User.query.filter_by(username=username).first()
+        user = db.session.scalars(
+            select(User).filter_by(username=username)
+        ).first()
         if not user:
             print(f'Fehler: Benutzer "{username}" nicht gefunden.')
             sys.exit(1)
@@ -171,10 +187,7 @@ def reset_password(username):
         if not password:
             sys.exit(1)
 
-        user.password_hash = ph.hash(password)
-        user.force_password_change = True
-        user.has_real_password = True
-        user.credential_version += 1
+        set_user_password(user, password, require_change=True)
         db.session.commit()
 
         print(f'Passwort für "{username}" wurde zurückgesetzt.')
@@ -197,18 +210,19 @@ def set_role(username, role):
 
     with app.app_context():
         username = username.lower()
-        user = User.query.filter_by(username=username).first()
+        user = db.session.scalars(
+            select(User).filter_by(username=username)
+        ).first()
         if not user:
             print(f'Fehler: Benutzer "{username}" nicht gefunden.')
             sys.exit(1)
 
         new_role = UserRole[role_lower.upper()]
 
-        if user.role == UserRole.ADMIN and new_role != UserRole.ADMIN:
-            admin_count = User.query.filter_by(role=UserRole.ADMIN, status=UserStatus.ACTIVE).count()
-            if admin_count <= 1:
-                print('Fehler: Der letzte aktive Admin kann seine Rolle nicht ändern.')
-                sys.exit(1)
+        is_valid, error = validate_last_admin(user, new_role)
+        if not is_valid:
+            print(f'Fehler: {error}')
+            sys.exit(1)
 
         if user.status == UserStatus.MANAGED and new_role in [UserRole.ADMIN, UserRole.MANAGER]:
             print('Fehler: MANAGED User muss zuerst aktiviert werden, bevor Rolle geändert werden kann.')
@@ -237,7 +251,9 @@ def set_status(username, status):
 
     with app.app_context():
         username = username.lower()
-        user = User.query.filter_by(username=username).first()
+        user = db.session.scalars(
+            select(User).filter_by(username=username)
+        ).first()
         if not user:
             print(f'Fehler: Benutzer "{username}" nicht gefunden.')
             sys.exit(1)
@@ -246,10 +262,9 @@ def set_status(username, status):
             print('Fehler: Admin und Manager können nicht auf MANAGED gesetzt werden.')
             sys.exit(1)
 
-        # Activating a MANAGED user requires password if no real password exists
         if user.status == UserStatus.MANAGED and status_lower == 'active':
             if user.has_real_password:
-                # Force password change for security (password may be old/compromised)
+                # The stored password may be stale or compromised.
                 user.force_password_change = True
                 print('Hinweis: MANAGED User hat bereits ein Passwort. Status wird geändert.')
                 print('Benutzer muss Passwort beim nächsten Login ändern.')
@@ -258,15 +273,13 @@ def set_status(username, status):
                 password = get_password(confirm=True)
                 if not password:
                     sys.exit(1)
-                user.password_hash = ph.hash(password)
-                user.force_password_change = True
-                user.has_real_password = True
+                set_user_password(user, password, require_change=True)
 
         old_status = user.status.value
         user.status = UserStatus[status_lower.upper()]
 
         if status_lower == 'active':
-            LoginAttempt.query.filter_by(identifier=user.username).delete()
+            clear_login_attempts_for_username(user.username)
 
         db.session.commit()
 
@@ -283,14 +296,20 @@ def delete_user(username):
 
     with app.app_context():
         username = username.lower()
-        user = User.query.filter_by(username=username).first()
+        user = db.session.scalars(
+            select(User).filter_by(username=username)
+        ).first()
         if not user:
             print(f'Fehler: Benutzer "{username}" nicht gefunden.')
             sys.exit(1)
 
         print(f'Benutzer: {user.name} ({user.username})')
         print(f'Rolle: {user.role.value}')
-        print(f'Abwesenheiten: {user.absences.count()}')
+        from modules.absence.models import Absence
+        absence_count = db.session.scalar(
+            select(func.count()).select_from(Absence).filter_by(user_id=user.id)
+        )
+        print(f'Abwesenheiten: {absence_count}')
         print()
 
         confirm = input('Benutzer wirklich löschen? Alle Abwesenheiten werden ebenfalls gelöscht! (ja/nein): ')
@@ -298,8 +317,8 @@ def delete_user(username):
             print('Löschung abgebrochen.')
             sys.exit(0)
 
-        db.session.delete(user)
-        db.session.commit()
+        from modules.user.services import delete_user
+        delete_user(user)
 
         print(f'Benutzer "{username}" wurde gelöscht.')
 
@@ -309,7 +328,9 @@ def list_users():
     app = get_cli_app()
 
     with app.app_context():
-        users = User.query.order_by(User.role, User.name).all()
+        users = db.session.scalars(
+            select(User).order_by(User.role, User.name)
+        ).all()
 
         if not users:
             print('Keine Benutzer vorhanden.')

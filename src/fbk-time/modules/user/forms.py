@@ -5,7 +5,7 @@ from wtforms import StringField, PasswordField, SelectField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
 
 from modules.auth.models import UserRole, UserStatus
-from utils.validators import validate_password_strength, EmailFormat, SafeText
+from utils.validators import validate_password_strength, EmailFormat, SafeText, UsernameFormat
 from .services import username_exists, email_exists
 
 
@@ -14,7 +14,8 @@ class UserCreateForm(FlaskForm):
 
     username = StringField('Benutzername', validators=[
         DataRequired(message='Benutzername ist erforderlich'),
-        Length(min=3, max=80, message='Benutzername muss zwischen 3 und 80 Zeichen lang sein')
+        Length(min=3, max=80, message='Benutzername muss zwischen 3 und 80 Zeichen lang sein'),
+        UsernameFormat()
     ])
 
     password = PasswordField('Passwort', validators=[

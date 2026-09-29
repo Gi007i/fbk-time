@@ -1,0 +1,77 @@
+{% from "components/category_icon.html" import category_icon %}
+
+{% macro render(article_class, region_label, title, days, users, matrix,
+                current_user, mark_weekend=False) %}
+<article class="{{ article_class }}">
+    <div class="team-matrix" tabindex="0" role="region" aria-label="{{ region_label }}">
+        {% if users %}
+        <table>
+            <caption class="visually-hidden">Abwesenheiten {{ title }}</caption>
+            <thead>
+                <tr>
+                    <th scope="col" class="user-name">Person</th>
+                    {% for day in days %}
+                    {% if not day.empty %}
+                    <th scope="col" class="day-header{% if day.is_holiday %} day-holiday{% elif mark_weekend and day.is_weekend %} day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}"
+                        {% if day.holiday_name %}data-tooltip="{{ day.holiday_name }}"{% endif %}>
+                        {{ day.day }}
+                        <small>{{ day.weekday_short }}</small>
+                        {% if day.is_today %}<span class="visually-hidden">Heute</span>{% endif %}
+                        {% if day.holiday_name %}<span class="visually-hidden">Feiertag: {{ day.holiday_name }}</span>{% endif %}
+                    </th>
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr>
+                    <th scope="row" class="user-name"><small>{{ user.name }}</small></th>
+                    {% for day in days %}
+                    {% if not day.empty %}
+                    {% set absence = matrix.get((user.id, day.date)) %}
+                    {% if absence and absence.is_combined_half_day %}
+                    {% set morning_url = origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) if absence.is_recurring else origin_url('absences.detail', id=absence.absence.id) %}
+                    {% set afternoon_url = origin_url('absences.occurrence_detail', id=absence.absence_afternoon.id, date_str=day.date.isoformat()) if absence.is_recurring_afternoon else origin_url('absences.detail', id=absence.absence_afternoon.id) %}
+                    <td class="combined-half-day morning-{{ absence.category.id }} afternoon-{{ absence.category_afternoon.id }}{% if day.is_today %} day-today{% endif %}"
+                        data-tooltip="{{ absence.category.name }} (VM) / {{ absence.category_afternoon.name }} (NM)"
+                        data-href-morning="{{ morning_url }}"
+                        data-href-afternoon="{{ afternoon_url }}">
+                        <span class="cell-split">
+                            <span class="cell-split-half"><a class="row-link" href="{{ morning_url }}">{% if absence.category.icon %}{{ category_icon(absence.category.icon, absence.category.name) }}{% else %}<span class="category-initial" aria-hidden="true">{{ absence.category.name|trim|first }}</span><span class="visually-hidden">{{ absence.category.name }}</span>{% endif %}<span class="visually-hidden">, Vormittag</span></a></span>
+                            <span class="cell-split-half"><a class="row-link" href="{{ afternoon_url }}">{% if absence.category_afternoon.icon %}{{ category_icon(absence.category_afternoon.icon, absence.category_afternoon.name) }}{% else %}<span class="category-initial" aria-hidden="true">{{ absence.category_afternoon.name|trim|first }}</span><span class="visually-hidden">{{ absence.category_afternoon.name }}</span>{% endif %}<span class="visually-hidden">, Nachmittag</span></a></span>
+                        </span>
+                    </td>
+                    {% else %}
+                    {% set cell_url = (origin_url('absences.occurrence_detail', id=absence.absence.id, date_str=day.date.isoformat()) if absence.is_recurring else origin_url('absences.detail', id=absence.absence.id)) if absence else '' %}
+                    {% set can_add = not absence and (current_user.is_manager or user.id == current_user.id) %}
+                    <td class="{% if absence %}category-{{ absence.category.id }}{% if absence.is_half_day_morning %} half-day-morning{% elif absence.is_half_day_afternoon %} half-day-afternoon{% endif %}{% elif day.is_holiday %}day-holiday{% elif mark_weekend and day.is_weekend %}day-weekend{% endif %}{% if day.is_today %} day-today{% endif %}{% if can_add %} cell-add{% endif %}"
+                        {% if absence %}
+                        data-tooltip="{{ absence.category.name }}{% if absence.is_half_day_morning %} (VM){% elif absence.is_half_day_afternoon %} (NM){% endif %}{% if absence.is_recurring %} 🔁{% endif %}"
+                        data-href="{{ cell_url }}"
+                        {% elif day.holiday_name %}
+                        data-tooltip="{{ day.holiday_name }}"
+                        {% endif %}>
+                        {% if absence %}
+                        <a class="row-link" href="{{ cell_url }}">{% if absence.category.icon %}{{ category_icon(absence.category.icon, absence.category.name) }}{% else %}<span class="category-initial" aria-hidden="true">{{ absence.category.name|trim|first }}</span><span class="visually-hidden">{{ absence.category.name }}</span>{% endif %}{% if absence.is_half_day_morning %}<span class="visually-hidden">, Vormittag</span>{% elif absence.is_half_day_afternoon %}<span class="visually-hidden">, Nachmittag</span>{% endif %}{% if absence.is_recurring %}<span class="visually-hidden">, Serie</span>{% endif %}</a>
+                        {% elif can_add %}
+                        <a class="row-link row-link-fill" href="{{ origin_url('absences.create', user_id=user.id, date=day.date.isoformat()) }}"><span class="visually-hidden">Abwesenheit für {{ user.name }} am {{ day.date|format_date }} anlegen</span></a>
+                        {% endif %}
+                    </td>
+                    {% endif %}
+                    {% endif %}
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        {% if filters.user_ids or filters.category_ids or filters.has_substitute %}
+        <p><small>Keine Treffer für den gewählten Filter.</small></p>
+        {% else %}
+        <p><small>Keine aktiven Mitarbeitenden vorhanden.</small></p>
+        {% endif %}
+        {% endif %}
+    </div>
+</article>
+{% endmacro %}

@@ -1,16 +1,16 @@
-"""Export services.
-
-Provides business logic for building export queries and data preparation.
-"""
+"""Export queries and occurrence preparation."""
 
 from datetime import date
 from calendar import monthrange
 from typing import List, Optional
 
-from core.extensions import db
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import selectinload
+
+from core.db import db
 from modules.absence.models import Absence
 from modules.absence.recurrence import recurrence_service
-from modules.auth.models import User, UserStatus
+from modules.auth.models import User, UserRole, UserStatus
 from modules.category.models import Category
 
 
@@ -34,10 +34,8 @@ def build_absence_query(
 ):
     """Build SQLAlchemy query for absences with filters.
 
-    Category filtering is deliberately not performed here: it must be
-    applied to expanded occurrences so that modified recurring exceptions
-    are filtered by their effective category. Recurring absences are
-    always considered; callers apply range filters post-expansion.
+    Category filtering is left to the expanded occurrences, so modified
+    occurrences of a series are filtered by their effective category.
 
     Args:
         from_date: Start date filter.
@@ -46,37 +44,37 @@ def build_absence_query(
             list means no person filter.
 
     Returns:
-        SQLAlchemy query object.
+        SQLAlchemy select statement.
     """
-    # The role filter is intentionally omitted so that an Admin or Manager
-    # who owns absences (e.g. their own calendar entries) can still export
-    # them. Authorisation is enforced in the export views before this
-    # query runs.
-    user_status_filter = User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED])
-
-    query = Absence.query.join(
+    # Same visibility as the absence list and team views: an account promoted
+    # from USER keeps its old absences, which must not surface only here.
+    query = select(Absence).join(
         User, Absence.user_id == User.id
-    ).join(Category).filter(
-        user_status_filter,
-        Category.active == True
+    ).where(
+        User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED]),
+        User.role == UserRole.USER
+    ).options(
+        selectinload(Absence.user),
+        selectinload(Absence.category),
+        selectinload(Absence.substitute)
     )
 
     if user_ids:
-        query = query.filter(Absence.user_id.in_(user_ids))
+        query = query.where(Absence.user_id.in_(user_ids))
 
     if to_date is not None:
-        query = query.filter(Absence.start_date <= to_date)
+        query = query.where(Absence.start_date <= to_date)
 
     if from_date is not None:
-        query = query.filter(
-            db.or_(
-                db.and_(
+        query = query.where(
+            or_(
+                and_(
                     Absence.is_recurring == False,
                     Absence.end_date >= from_date
                 ),
-                db.and_(
+                and_(
                     Absence.is_recurring == True,
-                    db.or_(
+                    or_(
                         Absence.recurrence_end_date >= from_date,
                         Absence.recurrence_end_date.is_(None)
                     )
@@ -155,18 +153,16 @@ def build_filter_summary(
     parts = []
 
     if include_persons and user_ids:
-        names = [
-            u.name for u in
-            User.query.filter(User.id.in_(user_ids)).order_by(User.name).all()
-        ]
+        names = db.session.scalars(
+            select(User.name).where(User.id.in_(user_ids)).order_by(User.name)
+        ).all()
         if names:
             parts.append('Personen: ' + ', '.join(names))
 
     if category_ids:
-        names = [
-            c.name for c in
-            Category.query.filter(Category.id.in_(category_ids)).order_by(Category.name).all()
-        ]
+        names = db.session.scalars(
+            select(Category.name).where(Category.id.in_(category_ids)).order_by(Category.name)
+        ).all()
         if names:
             parts.append('Kategorien: ' + ', '.join(names))
 
@@ -184,16 +180,14 @@ def build_filter_summary(
 def get_absences_for_export(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
-    user_ids: Optional[List[int]] = None,
-    order_desc: bool = False
+    user_ids: Optional[List[int]] = None
 ) -> list[Absence]:
-    """Get filtered absences for export, ordered by start date.
+    """Get filtered absences for export.
 
     Args:
         from_date: Start date filter.
         to_date: End date filter.
         user_ids: Optional person filter (any of the given IDs).
-        order_desc: If True, order by start_date DESC; otherwise ASC.
 
     Returns:
         List of absences.
@@ -203,10 +197,7 @@ def get_absences_for_export(
         to_date=to_date,
         user_ids=user_ids
     )
-
-    if order_desc:
-        return query.order_by(Absence.start_date.desc()).all()
-    return query.order_by(Absence.start_date).all()
+    return db.session.scalars(query).all()
 
 
 def build_export_occurrences(
@@ -214,14 +205,12 @@ def build_export_occurrences(
     to_date: date,
     user_ids: Optional[List[int]] = None,
     category_ids: Optional[List[int]] = None,
-    has_substitute: Optional[str] = None,
-    order_desc: bool = False
+    has_substitute: Optional[str] = None
 ) -> list[dict]:
     """Load, expand and filter occurrences ready for rendering.
 
-    This is the single entry point used by all export endpoints so that
-    category and substitute filters operate on effective occurrence state
-    (not on parent absences).
+    Category and substitute filters apply to the effective occurrence
+    state, not to the parent absences.
 
     Args:
         from_date: Start of the range.
@@ -229,7 +218,6 @@ def build_export_occurrences(
         user_ids: Optional person filter (any of the given IDs).
         category_ids: Optional effective-category filter (any of the given IDs).
         has_substitute: 'yes', 'no', or None.
-        order_desc: Sort descending by date when True.
 
     Returns:
         List of occurrence dicts sorted by date (and user name for ties).
@@ -253,7 +241,6 @@ def build_export_occurrences(
     )
 
     occurrences.sort(
-        key=lambda o: (o['date'], o['user'].name if o.get('user') else ''),
-        reverse=order_desc
+        key=lambda o: (o['date'], o['user'].name if o.get('user') else '')
     )
     return occurrences

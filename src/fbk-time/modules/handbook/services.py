@@ -182,15 +182,17 @@ def get_handbook_settings() -> dict:
     as lockout thresholds and inactivity deadlines are deliberately
     omitted so that concrete values are not advertised in the manual.
 
-    In addition to settings, structural values are read directly from
-    forms and the iCal exporter so that the handbook stays in sync with
-    code changes without touching application code.
+    In addition to settings, derived values are read straight from
+    application code so that the handbook stays in sync with changes
+    there without being edited itself.
 
     Returns:
         Dict mapping whitelisted setting keys and derived values to
         their current state.
     """
+    from modules.auth.services import self_registration_available
     from .helpers import (
+        read_date_format_examples,
         read_half_day_time_ranges,
         read_pagination_choice_labels,
         read_sort_order_bounds,
@@ -198,11 +200,15 @@ def get_handbook_settings() -> dict:
 
     settings = {key: settings_manager.get(key) for key in HANDBOOK_SETTING_KEYS}
 
+    settings['self_registration_available'] = self_registration_available()
+
     settings['pagination_choices'] = read_pagination_choice_labels()
 
-    sort_bounds = read_sort_order_bounds()
-    if sort_bounds is not None:
-        settings['sort_order_min'], settings['sort_order_max'] = sort_bounds
+    settings['sort_order_min'], settings['sort_order_max'] = read_sort_order_bounds()
+
+    german, iso = read_date_format_examples()
+    settings['date_example_german'] = german
+    settings['date_example_iso'] = iso
 
     morning, afternoon = read_half_day_time_ranges()
     settings['half_day_morning_range'] = morning

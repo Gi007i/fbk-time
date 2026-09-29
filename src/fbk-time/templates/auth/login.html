@@ -7,11 +7,11 @@
     <div></div>
     <article>
         <hgroup>
-            <h1>FBK-Time</h1>
+            <h1>FBK-Time<span class="visually-hidden"> – Anmelden</span></h1>
             <p>Abwesenheitsmanagement</p>
         </hgroup>
 
-        <form method="POST" action="{{ url_for('auth.login') }}">
+        <form method="POST" action="{{ url_for('auth.login', next=request.args.get('next')) }}">
             {{ form.hidden_tag() }}
 
             <label>
@@ -39,7 +39,7 @@
                 Angemeldet bleiben <span class="info-tip" data-placement="right" data-tooltip="Hält Sie auch nach Schließen des Browsers angemeldet. Auf gemeinsam genutzten Geräten besser nicht aktivieren.">&#x24D8;</span>
             </label>
 
-            <button type="submit">Anmelden</button>
+            <button type="submit" class="outline">Anmelden</button>
         </form>
 
         {% if self_registration_enabled %}

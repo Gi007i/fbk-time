@@ -15,7 +15,7 @@
             {{ form.hidden_tag() }}
 
             <label>
-                Benutzername <span class="info-tip" data-placement="right" data-tooltip="Mit diesem Namen melden Sie sich später an, {{ form.username | field_range }} Zeichen. Nach der Registrierung muss ein Admin Ihr Konto erst freischalten, bevor Sie sich anmelden können.">&#x24D8;</span>
+                Benutzername <span class="info-tip" data-placement="right" data-tooltip="Mit diesem Namen melden Sie sich später an, {{ form.username | field_range }} Zeichen aus Kleinbuchstaben a–z, Ziffern, Punkt, Unterstrich und Bindestrich. Nach der Registrierung muss ein Admin Ihr Konto erst freischalten, bevor Sie sich anmelden können.">&#x24D8;</span>
                 {% if form.username.errors %}
                 {{ form.username(autocomplete="username", autofocus=true, **{'aria-invalid': 'true'}) }}
                 <small>{{ form.username.errors[0] }}</small>
@@ -65,7 +65,7 @@
                 {% endif %}
             </label>
 
-            <button type="submit">Registrieren</button>
+            <button type="submit" class="outline">Registrieren</button>
         </form>
 
         <hr>

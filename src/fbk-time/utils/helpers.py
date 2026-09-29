@@ -17,7 +17,7 @@ def format_date_for_user(d: date, short: bool = False, include_time: bool = Fals
     Returns:
         Formatted date string based on user's date_format setting.
     """
-    from flask_login import current_user
+    from core.auth import current_user
 
     if not d:
         return ''

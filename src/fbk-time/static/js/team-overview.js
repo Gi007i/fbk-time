@@ -35,16 +35,51 @@
          * @returns {void}
          */
         function refreshNameTooltips() {
-            var cells = document.querySelectorAll('.team-matrix tbody td.user-name');
+            var cells = document.querySelectorAll('.team-matrix tbody th.user-name');
             cells.forEach(function(cell) {
                 var label = cell.querySelector('small');
                 if (!label) return;
                 if (label.scrollWidth > label.clientWidth) {
                     cell.setAttribute('data-tooltip', label.textContent);
+                    // Without a tab stop the truncated name stays pointer-only.
+                    cell.setAttribute('tabindex', '0');
                 } else {
                     cell.removeAttribute('data-tooltip');
+                    if (document.activeElement !== cell) {
+                        cell.removeAttribute('tabindex');
+                    }
                 }
             });
+        }
+
+        /**
+         * Remember whether focus sits in the view about to be hidden and hand
+         * it to the matching part of the incoming one; a viewport change would
+         * otherwise drop focus to the document.
+         * @param {boolean} mobile - Whether the week view is taking over.
+         * @returns {Function} Callback that restores the focus position.
+         */
+        function captureFocus(mobile) {
+            var leavingNav = mobile ? monthNav : weekNav;
+            var leavingMatrix = mobile ? monthMatrix : weekMatrix;
+            var enteringNav = mobile ? weekNav : monthNav;
+            var enteringMatrix = mobile ? weekMatrix : monthMatrix;
+
+            if (leavingNav.contains(document.activeElement)) {
+                return function() {
+                    var link = enteringNav.querySelector('a');
+                    if (link) link.focus();
+                };
+            }
+            if (leavingMatrix.contains(document.activeElement)) {
+                // The scroll region names itself, so landing there tells the
+                // user which view they ended up in.
+                return function() {
+                    var region = enteringMatrix.querySelector('.team-matrix');
+                    if (region) region.focus();
+                };
+            }
+            return function() {};
         }
 
         /**
@@ -52,7 +87,10 @@
          * @returns {void}
          */
         function updateViewVisibility() {
-            if (window.FBKTime.isMobile()) {
+            var mobile = window.FBKTime.isMobile();
+            var restoreFocus = captureFocus(mobile);
+
+            if (mobile) {
                 weekNav.classList.remove('hidden');
                 monthNav.classList.add('hidden');
                 weekMatrix.classList.remove('hidden');
@@ -64,6 +102,7 @@
                 monthMatrix.classList.remove('hidden');
             }
             refreshNameTooltips();
+            restoreFocus();
         }
 
         updateViewVisibility();
@@ -82,13 +121,13 @@
                 if (window.FBKTime.isMobile()) {
                     switch (type) {
                         case 'pdf-matrix':
-                            window.location.href = urlMatrix + '?week_start=' + weekStart + '&week_end=' + weekEnd + extra;
+                            window.FBKTime.downloadFile(urlMatrix + '?week_start=' + weekStart + '&week_end=' + weekEnd + extra);
                             break;
                         case 'pdf-list':
-                            window.location.href = urlPdf + '?date_from=' + weekStart + '&date_to=' + weekEnd + extra;
+                            window.FBKTime.downloadFile(urlPdf + '?date_from=' + weekStart + '&date_to=' + weekEnd + extra);
                             break;
                         case 'ical':
-                            window.location.href = urlIcal + '?date_from=' + weekStart + '&date_to=' + weekEnd + extra;
+                            window.FBKTime.downloadFile(urlIcal + '?date_from=' + weekStart + '&date_to=' + weekEnd + extra);
                             break;
                     }
                 } else {
@@ -98,13 +137,13 @@
 
                     switch (type) {
                         case 'pdf-matrix':
-                            window.location.href = urlMatrix + '?week_start=' + firstDay + '&week_end=' + lastDay + extra;
+                            window.FBKTime.downloadFile(urlMatrix + '?week_start=' + firstDay + '&week_end=' + lastDay + extra);
                             break;
                         case 'pdf-list':
-                            window.location.href = urlPdf + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
+                            window.FBKTime.downloadFile(urlPdf + '?date_from=' + firstDay + '&date_to=' + lastDay + extra);
                             break;
                         case 'ical':
-                            window.location.href = urlIcal + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
+                            window.FBKTime.downloadFile(urlIcal + '?date_from=' + firstDay + '&date_to=' + lastDay + extra);
                             break;
                     }
                 }

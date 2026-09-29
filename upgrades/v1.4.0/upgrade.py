@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Upgrade runner for FBK-Time release v1.4.0.
+"""Upgrade runner for release v1.4.0.
 
 Reworks the recurrence_exceptions schema:
     - Adds modified_time_type (enum: 'all_day' | 'morning' | 'afternoon')
@@ -31,6 +31,7 @@ import argparse
 import json
 import os
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -41,6 +42,8 @@ import sqlite_runner
 
 
 TARGET_VERSION = '1.4.0'
+SERVICE_NAME = 'fbk-time'
+_SERVICE_STOPPED_STATES = frozenset({'inactive', 'failed'})
 SUPPORTED_FROM_VERSIONS = '1.3.x'
 REQUIRED_SQLITE_VERSION = (3, 35, 0)
 
@@ -294,6 +297,91 @@ def cmd_verify(
         conn.close()
 
 
+def _discard_unused_backup(backup_path: Path, logger: Logger) -> None:
+    """Remove a backup taken for an attempt that never opened its transaction.
+
+    The live database is provably untouched in that case, so the backup is a
+    byte-identical duplicate. Keeping it would accumulate copies of the full
+    database — including password hashes — on every failed attempt.
+    """
+    try:
+        backup_path.unlink()
+        logger.info('Backup from this attempt discarded (database unchanged).')
+    except OSError as exc:
+        logger.warning(f'Could not remove the unused backup {backup_path}: {exc}')
+
+
+def _check_service_stopped(logger: Logger) -> bool:
+    """Verify the application service is not running.
+
+    The decisive check: a running service holds a write lock again within
+    milliseconds, so probing the lock cannot stay valid until the upgrade
+    transaction opens. Systems without systemd fall through to the lock
+    probe further down, which is the best that can be done there.
+    """
+    try:
+        result = subprocess.run(
+            ['systemctl', 'is-active', SERVICE_NAME],
+            capture_output=True, text=True, timeout=10
+        )
+    except OSError as exc:
+        logger.warning(f'systemctl could not be run: {exc}')
+        logger.info(f'Make sure {SERVICE_NAME} is stopped before continuing.')
+        return True
+    except subprocess.TimeoutExpired:
+        logger.error('systemctl timed out while querying the service state')
+        return False
+
+    state = result.stdout.strip()
+    if state in _SERVICE_STOPPED_STATES:
+        logger.success(f'Service {SERVICE_NAME} is not running ({state})')
+        return True
+
+    # 'activating', 'deactivating' and 'reloading' all mean workers may still
+    # hold the database. An unknown unit proves nothing either — the
+    # application may well be running outside systemd.
+    if state in ('active', 'reloading', 'activating', 'deactivating'):
+        logger.error(f'Service {SERVICE_NAME} is not stopped (state: {state})')
+        logger.info(f'Stop it first: systemctl stop {SERVICE_NAME}')
+        logger.info('Nothing was read or written.')
+        return False
+
+    logger.warning(f'Service state could not be determined ({state or "no output"})')
+    if result.stderr.strip():
+        logger.info(f'systemctl: {result.stderr.strip()}')
+    logger.info(f'Make sure {SERVICE_NAME} is stopped before continuing.')
+    return True
+
+
+def _database_is_busy(db_path: Path, binary: Path | None, logger: Logger) -> bool:
+    """Report whether another process holds a write lock on the database.
+
+    Checked before the backup is written so a still-running application does
+    not leave an orphaned backup behind. A short IMMEDIATE transaction is the
+    only reliable probe: ``PRAGMA locking_mode`` merely sets the mode for
+    later locks and always succeeds.
+    """
+    try:
+        conn = sqlite_runner.connect(db_path, binary=binary)
+    except Exception as exc:
+        logger.error(f'Could not open the database: {exc}')
+        return True
+
+    if isinstance(conn, sqlite3.Connection):
+        conn.isolation_level = None
+    try:
+        conn.execute('BEGIN IMMEDIATE')
+        conn.execute('ROLLBACK')
+        return False
+    except sqlite3.DatabaseError as exc:
+        logger.error(f'Database is in use: {exc}')
+        logger.info(f'Stop the application first: systemctl stop {SERVICE_NAME}')
+        logger.info('Nothing was changed, no backup was written.')
+        return True
+    finally:
+        conn.close()
+
+
 def _create_backup(
     db_path: Path,
     backup_dir: Path,
@@ -520,6 +608,14 @@ def cmd_restore(
     logger.info(f'Database:    {db_path}')
     logger.info(f'Backup file: {backup_file}')
 
+    # A restore overwrites the live database wholesale — a running service
+    # would keep serving from, and writing to, the file being replaced.
+    if not _check_service_stopped(logger):
+        return False
+
+    if _database_is_busy(db_path, binary, logger):
+        return False
+
     if not backup_file.exists():
         logger.error(f'Backup file not found: {backup_file}')
         return False
@@ -610,6 +706,12 @@ def cmd_upgrade(
     logger.info(f'Database: {db_path}')
     logger.info(f'Backup directory: {backup_dir}')
 
+    # First of all, before anything is read, asked or written: a running
+    # service reacquires the write lock between any two steps, so a lock
+    # probe alone is always a stale snapshot.
+    if not _check_service_stopped(logger):
+        return False
+
     if not _check_integrity_standalone(db_path, binary, logger):
         return False
 
@@ -623,6 +725,9 @@ def cmd_upgrade(
             logger.warning('Upgrade cancelled by user')
             return False
 
+    if _database_is_busy(db_path, binary, logger):
+        return False
+
     backup_path = _create_backup(db_path, backup_dir, binary, logger)
     if backup_path is None:
         return False
@@ -635,18 +740,19 @@ def cmd_upgrade(
     try:
         # Hold an EXCLUSIVE lock for the duration of the upgrade so that
         # no concurrent writer can interleave between the column snapshot
-        # and the ALTER statements. Defense-in-depth: the operator is
-        # already expected to have stopped the application.
+        # and the ALTER statements. The PRAGMA only sets the mode for
+        # subsequent locks and never fails on its own; the write lock is
+        # taken by BEGIN IMMEDIATE below.
+        conn.execute('PRAGMA locking_mode = EXCLUSIVE')
+
         try:
-            conn.execute('PRAGMA locking_mode = EXCLUSIVE')
-        except sqlite3.Error as exc:
-            logger.error(
-                f'Could not enable EXCLUSIVE locking mode: {exc}'
-            )
-            logger.info('Ensure the application is stopped before upgrading.')
+            conn.execute('BEGIN IMMEDIATE')
+        except sqlite3.OperationalError as exc:
+            logger.error(f'Database is locked: {exc}')
+            logger.info(f'Stop the application first: systemctl stop {SERVICE_NAME}')
+            _discard_unused_backup(backup_path, logger)
             return False
 
-        conn.execute('BEGIN IMMEDIATE')
         try:
             columns = _get_column_names(conn)
 

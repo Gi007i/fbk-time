@@ -3,27 +3,47 @@
 #
 # Install:
 #   1. Set ownership: chown -R www-data:www-data /var/www/fbk-time
-#   2. Copy this file: cp systemd-ubuntu.service.example /etc/systemd/system/fbk-time.service
-#   3. Reload systemd: systemctl daemon-reload
-#   4. Enable service: systemctl enable --now fbk-time
+#   2. Create backup directory: install -d -m 700 -o www-data -g www-data /var/backups/fbk-time
+#   3. Copy this file: cp systemd-debian.service.example /etc/systemd/system/fbk-time.service
+#   4. Reload systemd: systemctl daemon-reload
+#   5. Enable service: systemctl enable --now fbk-time
 
 [Unit]
 Description=FBK-Time Gunicorn Application Server
 After=network.target
+# RequiresMountsFor=/mnt/backup
 
 [Service]
+Type=notify
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/fbk-time
-Environment=FLASK_ENV=production
 Environment=PYTHONPATH=/var/www/fbk-time
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/var/www/fbk-time/venv/bin/gunicorn --config gunicorn.conf.py app:app
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
 Restart=always
 RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=fbk-time
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+# ReadWritePaths=/var/www/fbk-time /mnt/backup
+ReadWritePaths=/var/www/fbk-time /var/backups/fbk-time
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
 
 [Install]
 WantedBy=multi-user.target

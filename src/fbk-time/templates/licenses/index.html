@@ -3,13 +3,13 @@
 {% block title %}Licenses - FBK-Time{% endblock %}
 
 {% block content %}
-<hgroup>
+<hgroup lang="en">
     <h1>Open Source Licenses</h1>
     <p>FBK-Time uses the following open source packages</p>
 </hgroup>
 
 {% if summary.total > 0 %}
-<article>
+<article lang="en">
     <p>
         <strong>{{ summary.total }}</strong> packages |
         {% for license_type, count in summary.by_type.items() %}
@@ -29,7 +29,7 @@
 </article>
 
 {% for pkg in licenses %}
-<article data-name="{{ pkg.Name|lower }}" data-license="{{ pkg.License|lower }}">
+<article lang="en" data-name="{{ pkg.Name|lower }}" data-license="{{ pkg.License|lower }}">
     <header>
         <strong>{{ pkg.Name }}</strong>
         <mark>{{ pkg.License }}</mark>
@@ -43,24 +43,25 @@
         <small>{{ pkg.Author }}</small>
         {% endif %}
         {% if pkg.URL %}
-        <small><a href="{{ pkg.URL }}" target="_blank" rel="noopener noreferrer">Homepage</a></small>
+        <small><a href="{{ pkg.URL }}" target="_blank" rel="noopener noreferrer">Homepage<span class="visually-hidden"> {{ pkg.Name }}</span></a></small>
         {% endif %}
     </footer>
     {% endif %}
     {% if pkg.LicenseText %}
     <hr>
-    <details>
+    <details lang="de">
         <summary><small>Lizenztext anzeigen</small></summary>
-        <p><code>{{ pkg.LicenseText }}</code></p>
+        <pre class="license-text" lang="en" tabindex="0">{{ pkg.LicenseText }}</pre>
     </details>
     {% endif %}
 </article>
 {% endfor %}
 
-<p id="no-results" class="hidden"><small>No packages found matching your search.</small></p>
+<p id="no-results" class="hidden" role="status" lang="en"><small>No packages found matching your search.</small></p>
+<p id="license-search-status" class="visually-hidden" role="status" lang="de"></p>
 
 {% else %}
-<article>
+<article lang="en">
     <p><small>License information not available. Run the application setup to generate license data.</small></p>
 </article>
 {% endif %}

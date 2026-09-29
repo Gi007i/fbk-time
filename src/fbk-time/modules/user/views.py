@@ -1,31 +1,36 @@
 """User management views."""
 
 from flask import Blueprint, render_template, redirect, request, abort
-from flask_login import login_required, current_user
 
-from core.extensions import db
-from utils.navigation import back_url, origin_link
+from core.auth import login_required, current_user
+from core.db import db
+from utils.navigation import back_url, back_url_focused, origin_link
 from utils.response_helpers import ajax_response, is_ajax_request
 from utils.pagination import get_pagination
-from utils.validators import validate_password_strength
+from utils.request_validators import validate_int_param
+from utils.validators import normalize_email
 from core.settings_manager import settings_manager
-from utils.decorators import manager_required, admin_required
+from utils.decorators import admin_required, fresh_login_required, manager_required
 from modules.auth.models import UserRole, UserStatus
-from modules.auth.services import get_lockout_status_for_users
+from modules.auth.services import clear_login_attempts_for_username, get_account_lockouts
 from .forms import UserCreateForm, UserEditForm
 from .services import (
     create_user,
+    delete_user,
     validate_last_admin,
+    validate_status_change,
     can_toggle_user_status,
     toggle_user_status,
     activate_login_for_managed_user,
     activate_login_with_existing_password,
     can_change_password,
     set_user_password,
+    can_end_user_sessions,
+    end_user_sessions,
     get_users_list,
-    get_user_absence_count,
     get_user_or_404
 )
+from modules.absence.services import count_occurrences_by_user, default_list_range
 
 
 bp = Blueprint('users', __name__, url_prefix='/users')
@@ -72,9 +77,11 @@ def list_users():
     except ValueError:
         abort(400, 'Invalid filter parameter')
 
-    usernames = [u.username for u in users]
-    lockout_info = get_lockout_status_for_users(usernames)
-    failed_attempts = {k: v['attempt_count'] for k, v in lockout_info.items()}
+    lockouts = get_account_lockouts([u.username for u in users])
+    range_from, range_to = default_list_range()
+    absence_counts = count_occurrences_by_user(
+        range_from, range_to, [u.id for u in users]
+    )
 
     return render_template(
         'users/list.html',
@@ -82,7 +89,9 @@ def list_users():
         search=search,
         status_filter=status_filter,
         role_filter=role_filter,
-        failed_attempts=failed_attempts,
+        lockouts=lockouts,
+        absence_counts=absence_counts,
+        open_row=validate_int_param('open', min_value=1),
         UserRole=UserRole,
         UserStatus=UserStatus,
         pagination=pagination.to_dict()
@@ -91,6 +100,7 @@ def list_users():
 
 @bp.route('/create', methods=['GET', 'POST'])
 @manager_required
+@fresh_login_required
 def create():
     """Create a new user."""
     form = UserCreateForm()
@@ -144,28 +154,9 @@ def create():
                            single_user_mode=single_user_mode and current_user.is_admin)
 
 
-@bp.route('/<int:id>')
-@manager_required
-def detail(id):
-    """Display user details."""
-    user = get_user_or_404(id)
-
-    if not current_user.is_admin and user.role != UserRole.USER:
-        abort(403)
-
-    absence_count = get_user_absence_count(id)
-
-    return render_template(
-        'users/detail.html',
-        user=user,
-        absence_count=absence_count,
-        UserRole=UserRole,
-        UserStatus=UserStatus
-    )
-
-
 @bp.route('/<int:id>/edit', methods=['GET', 'POST'])
 @manager_required
+@fresh_login_required
 def edit(id):
     """Edit an existing user."""
     user = get_user_or_404(id)
@@ -189,7 +180,7 @@ def edit(id):
 
     if form.validate_on_submit():
         user.name = form.name.data.strip()
-        user.email = form.email.data.strip().lower() if form.email.data else None
+        user.email = normalize_email(form.email.data)
 
         if activate_login and user.status == UserStatus.MANAGED:
             if user.has_real_password:
@@ -207,43 +198,29 @@ def edit(id):
                         password_error='Passwort ist erforderlich um Login zu aktivieren.'
                     )
 
-                is_valid, error_msg = validate_password_strength(form.password.data)
-                if not is_valid:
-                    if is_ajax_request():
-                        return ajax_response(success=False, message=error_msg)
-                    return render_template(
-                        'users/edit.html', form=form, user=user,
-                        activate_login=True, password_required=True,
-                        show_password_field=True,
-                        password_error=error_msg
-                    )
-
                 message = activate_login_for_managed_user(user, form.password.data)
                 db.session.commit()
 
-            return_to = back_url('users.detail', id=user.id)
+            return_to = back_url_focused('users.list_users', user.id)
             if is_ajax_request():
                 return ajax_response(success=True, message=message, redirect=return_to)
             return redirect(return_to)
 
         if current_user.is_admin:
-            if hasattr(form, 'role'):
-                new_role = form.role.data
-                is_valid, error = validate_last_admin(user, new_role)
+            new_role = form.role.data
+            new_status = form.status.data
+            for is_valid, error in (
+                validate_last_admin(user, new_role),
+                validate_status_change(current_user, user, new_status, new_role),
+            ):
                 if not is_valid:
                     if is_ajax_request():
                         return ajax_response(success=False, message=error)
                     abort(400, error)
-                user.role = new_role
-
-            if hasattr(form, 'status'):
-                new_status = form.status.data
-                if new_status == UserStatus.MANAGED and user.role in [UserRole.ADMIN, UserRole.MANAGER]:
-                    message = 'Admin und Manager können nicht auf MANAGED gesetzt werden.'
-                    if is_ajax_request():
-                        return ajax_response(success=False, message=message)
-                    abort(400, message)
-                user.status = new_status
+            if user.status == UserStatus.LOCKED and new_status == UserStatus.ACTIVE:
+                clear_login_attempts_for_username(user.username)
+            user.role = new_role
+            user.status = new_status
 
         if form.password.data:
             can_change, error = can_change_password(current_user, user)
@@ -252,22 +229,12 @@ def edit(id):
                     return ajax_response(success=False, message=error)
                 abort(400, error)
 
-            is_valid, error_msg = validate_password_strength(form.password.data)
-            if not is_valid:
-                if is_ajax_request():
-                    return ajax_response(success=False, message=error_msg)
-                return render_template(
-                    'users/edit.html', form=form, user=user,
-                    activate_login=False, password_required=False,
-                    show_password_field=True, password_error=error_msg
-                )
-
-            set_user_password(user, form.password.data, by_admin=(user.id != current_user.id))
+            set_user_password(user, form.password.data, require_change=True)
 
         db.session.commit()
 
         message = f'Benutzer "{user.name}" wurde aktualisiert.'
-        return_to = back_url('users.detail', id=user.id)
+        return_to = back_url_focused('users.list_users', user.id)
         if is_ajax_request():
             return ajax_response(success=True, message=message, redirect=return_to)
         return redirect(return_to)
@@ -280,7 +247,7 @@ def edit(id):
         return ajax_response(success=False, message=first_error, errors=errors)
 
     operation_mode = settings_manager.get('operation_mode')
-    show_password_field = (
+    show_password_field = user.id != current_user.id and (
         activate_login
         or user.status != UserStatus.MANAGED
         or current_user.is_admin
@@ -305,8 +272,9 @@ def edit(id):
 
 @bp.route('/<int:id>/toggle-status', methods=['POST'])
 @manager_required
+@fresh_login_required
 def toggle_status(id):
-    """Toggle user status between ACTIVE and DISABLED."""
+    """Toggle a user's status; MANAGED users are sent to login activation."""
     user = get_user_or_404(id)
 
     can_toggle, error = can_toggle_user_status(current_user, user)
@@ -314,9 +282,6 @@ def toggle_status(id):
         if is_ajax_request():
             return ajax_response(success=False, message=error)
         return redirect(back_url('users.list_users'))
-
-    if not current_user.is_admin and user.role != UserRole.USER:
-        abort(403)
 
     if user.status == UserStatus.MANAGED:
         if not current_user.is_admin:
@@ -331,7 +296,7 @@ def toggle_status(id):
             abort(403)
 
     try:
-        new_status, message = toggle_user_status(user, current_user)
+        _, message = toggle_user_status(user)
     except ValueError as e:
         if is_ajax_request():
             return ajax_response(success=False, message=str(e))
@@ -339,7 +304,51 @@ def toggle_status(id):
 
     db.session.commit()
 
-    return_to = back_url('users.list_users')
+    return_to = back_url_focused('users.list_users', user.id)
+
+    if is_ajax_request():
+        return ajax_response(success=True, message=message, redirect=return_to)
+
+    return redirect(return_to)
+
+
+@bp.route('/<int:id>/end-sessions', methods=['POST'])
+@manager_required
+@fresh_login_required
+def end_sessions(id):
+    """End all sessions of a user without changing the password."""
+    user = get_user_or_404(id)
+
+    allowed, error = can_end_user_sessions(current_user, user)
+    if not allowed:
+        if is_ajax_request():
+            return ajax_response(success=False, message=error)
+        return redirect(back_url('users.list_users'))
+
+    end_user_sessions(user)
+    db.session.commit()
+
+    message = f'Alle Sitzungen von {user.name} wurden beendet.'
+    return_to = back_url_focused('users.list_users', user.id)
+
+    if is_ajax_request():
+        return ajax_response(success=True, message=message, redirect=return_to)
+
+    return redirect(return_to)
+
+
+@bp.route('/<int:id>/lift-lockout', methods=['POST'])
+@admin_required
+@fresh_login_required
+def lift_lockout(id):
+    """Lift the automatic login lock of an account (Admin only)."""
+    user = get_user_or_404(id)
+
+    clear_login_attempts_for_username(user.username)
+    db.session.commit()
+
+    message = f'Anmeldesperre von "{user.name}" wurde aufgehoben.'
+    return_to = back_url_focused('users.list_users', user.id)
 
     if is_ajax_request():
         return ajax_response(success=True, message=message, redirect=return_to)
@@ -349,6 +358,7 @@ def toggle_status(id):
 
 @bp.route('/<int:id>/delete', methods=['POST'])
 @admin_required
+@fresh_login_required
 def delete(id):
     """Delete a user (Admin only)."""
     user = get_user_or_404(id)
@@ -360,8 +370,7 @@ def delete(id):
         return redirect(back_url('users.list_users'))
 
     user_name = user.name
-    db.session.delete(user)
-    db.session.commit()
+    delete_user(user)
 
     message = f'Benutzer "{user_name}" wurde gelöscht.'
     return_to = back_url('users.list_users')

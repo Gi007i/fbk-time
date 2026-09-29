@@ -20,17 +20,25 @@ def read_pagination_choice_labels() -> str:
     return ', '.join(labels)
 
 
-def read_sort_order_bounds() -> tuple[int, int] | None:
+def read_sort_order_bounds() -> tuple[int, int]:
     """Return (min, max) of the category sort_order NumberRange validator.
 
-    Returns None if no NumberRange validator is configured.
+    Raises:
+        RuntimeError: If no NumberRange validator is configured; without
+            bounds the handbook would silently render a sentence with gaps.
     """
     from modules.category.forms import CategoryForm
     validators = CategoryForm.sort_order.kwargs.get('validators', [])
     for validator in validators:
         if isinstance(validator, NumberRange):
             return validator.min, validator.max
-    return None
+    raise RuntimeError('CategoryForm.sort_order has no NumberRange validator')
+
+
+def read_date_format_examples() -> tuple[str, str]:
+    """Return (german, iso) date examples shown in the settings form."""
+    from modules.settings.services import get_date_format_examples
+    return get_date_format_examples()
 
 
 def read_half_day_time_ranges() -> tuple[str, str]:

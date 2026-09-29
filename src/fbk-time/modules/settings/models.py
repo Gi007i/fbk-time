@@ -5,8 +5,12 @@ Provides the Setting model for runtime-configurable system settings.
 
 import enum
 from datetime import datetime, timezone
+from typing import Optional
 
-from core.extensions import db
+from sqlalchemy import Enum, String, Text
+from sqlalchemy.orm import Mapped, mapped_column
+
+from core.db import Base
 
 
 def _utc_now():
@@ -22,7 +26,7 @@ class SettingDataType(enum.Enum):
     BOOLEAN = "boolean"
 
 
-class Setting(db.Model):
+class Setting(Base):
     """System setting stored in database.
 
     Attributes:
@@ -35,11 +39,11 @@ class Setting(db.Model):
 
     __tablename__ = 'settings'
 
-    key = db.Column(db.String(100), primary_key=True)
-    value = db.Column(db.Text, nullable=False)
-    data_type = db.Column(db.Enum(SettingDataType), nullable=False)
-    category = db.Column(db.String(50), nullable=False, index=True)
-    updated_at = db.Column(db.DateTime, default=_utc_now, onupdate=_utc_now)
+    key: Mapped[str] = mapped_column(String(100), primary_key=True)
+    value: Mapped[str] = mapped_column(Text)
+    data_type: Mapped[SettingDataType] = mapped_column(Enum(SettingDataType))
+    category: Mapped[str] = mapped_column(String(50), index=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(default=_utc_now, onupdate=_utc_now)
 
     def get_typed_value(self):
         """Return value converted to its declared type.

@@ -31,10 +31,29 @@ def register(application) -> None:
         }
         return labels.get(role_value, role_value)
 
+    @application.template_filter('status_label')
+    def status_label(value):
+        """Return the German label for a UserStatus enum or its string value."""
+        from modules.auth.models import UserStatus
+
+        if value is None:
+            return ''
+
+        status_value = value.value if isinstance(value, UserStatus) else value
+
+        labels = {
+            UserStatus.PENDING.value: 'Ausstehend',
+            UserStatus.ACTIVE.value: 'Aktiv',
+            UserStatus.LOCKED.value: 'Gesperrt',
+            UserStatus.DISABLED.value: 'Deaktiviert',
+            UserStatus.MANAGED.value: 'Verwaltet',
+        }
+        return labels.get(status_value, status_value)
+
     @application.template_filter('format_date')
     def format_date(value, short=False, include_time=False):
         """Format date according to user setting, converting UTC to local time."""
-        from flask_login import current_user
+        from core.auth import current_user
 
         if value is None:
             return ''
@@ -58,6 +77,13 @@ def register(application) -> None:
             fmt += ' %H:%M'
 
         return value.strftime(fmt)
+
+    @application.template_filter('twemoji_stem')
+    def twemoji_stem(icon):
+        """Return the bundled Twemoji asset stem for a category icon."""
+        from modules.category.helpers import twemoji_stem as resolve_stem
+
+        return resolve_stem(icon)
 
     @application.template_filter('field_range')
     def field_range(field):

@@ -1,14 +1,12 @@
-"""Dashboard services.
-
-Provides business logic for dashboard statistics, warnings,
-and team overview data preparation.
-"""
+"""Dashboard statistics, warnings and team overview data."""
 
 from datetime import date, timedelta
 from typing import Optional
 
-from sqlalchemy import or_
+from sqlalchemy import or_, select
+from sqlalchemy.orm import selectinload
 
+from core.db import db
 from modules.absence.models import Absence
 from modules.absence.recurrence import recurrence_service
 from modules.absence.services import filter_occurrences
@@ -18,36 +16,37 @@ from modules.category.models import Category
 from modules.holidays.services import is_holiday
 
 
-# SQLAlchemy expression: users whose status allows dashboard visibility.
-# MANAGED users are included because an admin may track their absences
-# even though they cannot log in themselves.
+# MANAGED users are included: an admin tracks their absences although they
+# cannot log in themselves.
 _ACTIVE_USER_STATUS_FILTER = User.status.in_(
     [UserStatus.ACTIVE, UserStatus.MANAGED]
+)
+
+# Every occurrence dict reads user, category and substitute; without these
+# each absence would trigger three lazy loads while rendering.
+_OCCURRENCE_LOADERS = (
+    selectinload(Absence.user),
+    selectinload(Absence.category),
+    selectinload(Absence.substitute),
 )
 
 
 def get_today_absences() -> tuple[list[dict], list[dict]]:
     """Get today's expanded occurrences split by presence status.
 
-    Uses recurrence_service to correctly resolve recurring absences.
-
     Returns:
         Tuple of (absent_occurrences, present_occurrences).
     """
     today = date.today()
 
-    absences = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        _ACTIVE_USER_STATUS_FILTER,
-        User.role == UserRole.USER,
-        Category.active == True,
-        or_(
-            (Absence.is_recurring == False) & (Absence.start_date <= today) & (Absence.end_date >= today),
-            (Absence.is_recurring == True) & (Absence.start_date <= today) & (
-                (Absence.recurrence_end_date >= today) | (Absence.recurrence_end_date.is_(None))
-            )
-        )
+    absences = db.session.scalars(
+        select(Absence).join(
+            User, Absence.user_id == User.id
+        ).where(
+            _ACTIVE_USER_STATUS_FILTER,
+            User.role == UserRole.USER,
+            Absence.overlaps(today, today)
+        ).options(*_OCCURRENCE_LOADERS)
     ).all()
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
@@ -91,9 +90,8 @@ def get_occurrence_categories(occurrences: list[dict]) -> list[dict]:
 def get_week_overview() -> dict:
     """Get current week's occurrences grouped by day for the dashboard.
 
-    Expands multi-day and recurring absences into individual daily entries
-    and groups them per calendar day so the dashboard can render a compact,
-    filterable view instead of a flat, paginated list.
+    Grouping per day lets the dashboard render a compact, filterable view
+    instead of a flat, paginated list.
 
     Returns:
         Dict with grouped days, available filter categories, total count
@@ -103,18 +101,14 @@ def get_week_overview() -> dict:
     week_start = today - timedelta(days=today.weekday())
     week_end = week_start + timedelta(days=6)
 
-    absences = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        _ACTIVE_USER_STATUS_FILTER,
-        User.role == UserRole.USER,
-        Category.active == True,
-        or_(
-            (Absence.is_recurring == False) & (Absence.start_date <= week_end) & (Absence.end_date >= week_start),
-            (Absence.is_recurring == True) & (Absence.start_date <= week_end) & (
-                (Absence.recurrence_end_date >= week_start) | (Absence.recurrence_end_date.is_(None))
-            )
-        )
+    absences = db.session.scalars(
+        select(Absence).join(
+            User, Absence.user_id == User.id
+        ).where(
+            _ACTIVE_USER_STATUS_FILTER,
+            User.role == UserRole.USER,
+            Absence.overlaps(week_start, week_end)
+        ).options(*_OCCURRENCE_LOADERS)
     ).all()
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
@@ -161,6 +155,7 @@ def _warn_missing_substitute(
             warnings.append({
                 'type': 'missing_substitute',
                 'user': occ['user'].name,
+                'user_id': occ['user_id'],
                 'category': category.name,
                 'absence_id': absence.id
             })
@@ -170,8 +165,7 @@ def _warn_substitute_conflict(
     occ, absence, sub_id, substitute_name,
     user_absence_slots, conflict_warnings, warnings
 ):
-    """Emit or aggregate a warning when the substitute is absent in an
-    overlapping slot on the same date.
+    """Warn when the substitute is absent in an overlapping slot.
 
     A morning-only coverage need does not conflict with an afternoon-only
     absence of the substitute. Extra conflict dates for the same (absence,
@@ -186,6 +180,7 @@ def _warn_substitute_conflict(
             warning = {
                 'type': 'substitute_conflict',
                 'user': occ['user'].name,
+                'user_id': occ['user_id'],
                 'substitute': substitute_name,
                 'conflict_dates': [occ['date']],
                 'conflict_count': 1,
@@ -203,8 +198,7 @@ def _warn_double_assignment(
     occ, absence, sub_id, substitute_name,
     substitute_assignments, reported_doubles, warnings
 ):
-    """Emit a warning when the same substitute covers another person in an
-    overlapping slot that date."""
+    """Warn when the substitute already covers another person that date."""
     for assignment in substitute_assignments.get(sub_id, []):
         if assignment['absence_id'] == absence.id:
             continue
@@ -219,6 +213,7 @@ def _warn_double_assignment(
         warnings.append({
             'type': 'substitute_double_assignment',
             'user': occ['user'].name,
+            'user_id': occ['user_id'],
             'substitute': substitute_name,
             'other_user': assignment['user_name'],
             'conflict_date': occ['date'],
@@ -250,6 +245,7 @@ def _warn_cross_substitution(
             warning = {
                 'type': 'cross_substitution',
                 'user': occ['user'].name,
+                'user_id': occ['user_id'],
                 'substitute': substitute_name,
                 'overlap_dates': [occ['date']],
                 'overlap_count': 1,
@@ -267,9 +263,8 @@ def _warn_cross_substitution(
 def get_dashboard_warnings() -> list[dict]:
     """Generate warning messages for dashboard.
 
-    Operates entirely on expanded occurrences (effective, exception-merged
-    state) so that modified occurrences of recurring series are evaluated
-    correctly.
+    Works on expanded occurrences so modified occurrences of a series are
+    evaluated by their effective state.
 
     Checks for:
     - Missing substitutes for occurrences whose effective category requires one
@@ -291,13 +286,14 @@ def get_dashboard_warnings() -> list[dict]:
         )
     )
 
-    all_absences = Absence.query.join(
-        User, Absence.user_id == User.id
-    ).join(Category).filter(
-        _ACTIVE_USER_STATUS_FILTER,
-        User.role == UserRole.USER,
-        Category.active == True,
-        future_filter
+    all_absences = db.session.scalars(
+        select(Absence).join(
+            User, Absence.user_id == User.id
+        ).where(
+            _ACTIVE_USER_STATUS_FILTER,
+            User.role == UserRole.USER,
+            future_filter
+        ).options(*_OCCURRENCE_LOADERS)
     ).all()
 
     all_occurrences = recurrence_service.get_all_occurrences_for_range(
@@ -465,11 +461,12 @@ def get_team_overview_data(
         month: Month for month view.
         week_start: Start of week for week view.
         week_end: End of week for week view.
-        filters: Optional subject filters (user_id, category_id,
+        filters: Optional subject filters (user_ids, category_ids,
             has_substitute) shared with the calendar and list views.
 
     Returns:
-        Dict with users, categories, absences, matrix.
+        Dict with users, all_users, categories, matrix, month_start and
+        month_end.
     """
     filters = filters or {}
     user_ids = filters.get('user_ids')
@@ -484,43 +481,47 @@ def get_team_overview_data(
 
     # Full active user list for the filter dropdown (independent of the person
     # filter), plus the possibly narrowed list that drives the matrix rows.
-    all_users = User.query.filter(
-        _ACTIVE_USER_STATUS_FILTER,
-        User.role == UserRole.USER
-    ).order_by(User.name).all()
+    all_users = db.session.scalars(
+        select(User).where(
+            _ACTIVE_USER_STATUS_FILTER,
+            User.role == UserRole.USER
+        ).order_by(User.name)
+    ).all()
     if user_ids:
         users = [user for user in all_users if user.id in user_ids]
     else:
         users = all_users
 
-    categories = Category.query.filter(
-        Category.active == True
-    ).order_by(Category.sort_order).all()
+    categories = db.session.scalars(
+        select(Category)
+        .where(Category.active == True)
+        .order_by(Category.sort_order)
+    ).all()
 
     range_start = min(week_start, month_start)
     range_end = max(week_end, month_end)
 
-    absence_query = Absence.query.join(
+    absence_query = select(Absence).join(
         User, Absence.user_id == User.id
-    ).join(Category).filter(
+    ).where(
         _ACTIVE_USER_STATUS_FILTER,
         User.role == UserRole.USER,
-        Category.active == True,
-        or_(
-            (Absence.is_recurring == False) & (Absence.start_date <= range_end) & (Absence.end_date >= range_start),
-            (Absence.is_recurring == True) & (Absence.start_date <= range_end) & (
-                (Absence.recurrence_end_date >= range_start) | (Absence.recurrence_end_date.is_(None))
-            )
-        )
-    )
+        Absence.overlaps(range_start, range_end)
+    ).options(*_OCCURRENCE_LOADERS)
     if user_ids:
-        absence_query = absence_query.filter(Absence.user_id.in_(user_ids))
-    absences = absence_query.all()
+        absence_query = absence_query.where(Absence.user_id.in_(user_ids))
+    absences = db.session.scalars(absence_query).all()
 
     matrix = build_team_matrix(
         users, absences, range_start, range_end,
         category_ids=category_ids, has_substitute=has_substitute
     )
+
+    # These filters narrow occurrences, not people; drop rows without a match
+    # so the matrix mirrors the other views.
+    if category_ids or has_substitute:
+        matched_user_ids = {user_id for user_id, _ in matrix}
+        users = [user for user in users if user.id in matched_user_ids]
 
     return {
         'users': users,

@@ -1,19 +1,18 @@
-"""Export views.
-
-Provides PDF and iCal export endpoints.
-"""
+"""PDF and iCal export views."""
 
 import unicodedata
 from datetime import date, timedelta
 from typing import Optional
 
 from flask import Blueprint, send_file, request, redirect, url_for, abort, flash
-from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 
+from core.auth import login_required, current_user
 from utils.navigation import is_safe_redirect_url
-from utils.request_validators import validate_int_list_param, validate_date_param, validate_year_param
-from .pdf import export_absences_pdf, export_user_absences_pdf
+from utils.request_validators import (
+    validate_int_list_param, validate_date_param, validate_date_range
+)
+from .pdf import export_absences_pdf
 from .ical import export_absences_ical
 from .matrix import export_team_matrix_pdf
 from .services import (
@@ -28,24 +27,11 @@ from modules.user.services import get_user_or_404
 bp = Blueprint('export', __name__, url_prefix='/export')
 
 
-_MAX_EXPORT_RANGE_DAYS = 1830  # ~5 years
-
-
-def _validate_export_range(from_date: date, to_date: date) -> None:
-    """Reject unreasonable export ranges (Fail-Fast)."""
-    if to_date < from_date:
-        abort(400, 'Invalid date range: end before start')
-    if (to_date - from_date).days > _MAX_EXPORT_RANGE_DAYS:
-        abort(400, 'Date range too large')
-
-
 def _safe_filename_segment(value: str) -> str:
     """Return a filesystem-safe segment for Content-Disposition.
 
-    Transliterates Unicode characters (umlauts, accents) to their
-    ASCII equivalent before applying werkzeug's secure_filename so
-    that names like 'Jörg' survive as 'Jorg' instead of being
-    stripped entirely.
+    Transliterates to ASCII first, so 'Jörg' becomes 'Jorg' instead of
+    being stripped by secure_filename.
     """
     normalized = unicodedata.normalize('NFKD', value)
     ascii_value = normalized.encode('ascii', 'ignore').decode('ascii')
@@ -53,21 +39,17 @@ def _safe_filename_segment(value: str) -> str:
     return cleaned or 'export'
 
 
-def _resolve_date_range(default_if_empty: bool = True) -> tuple:
+def _resolve_date_range() -> tuple:
     """Resolve date_from/date_to query parameters.
 
     Rejects the request if exactly one of the two is supplied to avoid
-    silent snapping. If both are omitted and ``default_if_empty`` is
-    True, falls back to the current month; otherwise returns
-    ``(None, None)``.
+    silent snapping. If both are omitted, defaults to the current month.
     """
     from_date = validate_date_param('date_from')
     to_date = validate_date_param('date_to')
 
     if from_date is None and to_date is None:
-        if default_if_empty:
-            return get_default_date_range()
-        return None, None
+        return get_default_date_range()
 
     if from_date is None or to_date is None:
         abort(400, 'date_from and date_to must be provided together')
@@ -128,18 +110,16 @@ def export_pdf():
     user_ids = validate_int_list_param('user_id', min_value=1)
     category_ids = validate_int_list_param('category_id', min_value=1)
     has_substitute = _parse_has_substitute()
-    include_notes = request.args.get('include_notes', 'false') == 'true'
 
     from_date, to_date = _resolve_date_range()
-    _validate_export_range(from_date, to_date)
+    validate_date_range(from_date, to_date)
 
     occurrences = build_export_occurrences(
         from_date=from_date,
         to_date=to_date,
         user_ids=user_ids,
         category_ids=category_ids,
-        has_substitute=has_substitute,
-        order_desc=False
+        has_substitute=has_substitute
     )
 
     if not occurrences:
@@ -151,7 +131,6 @@ def export_pdf():
     pdf_buffer = export_absences_pdf(
         occurrences,
         title=title,
-        include_notes=include_notes,
         date_from=from_date,
         date_to=to_date,
         date_format=current_user.date_format,
@@ -178,15 +157,14 @@ def export_ical():
     has_substitute = _parse_has_substitute()
 
     from_date, to_date = _resolve_date_range()
-    _validate_export_range(from_date, to_date)
+    validate_date_range(from_date, to_date)
 
     occurrences = build_export_occurrences(
         from_date=from_date,
         to_date=to_date,
         user_ids=user_ids,
         category_ids=category_ids,
-        has_substitute=has_substitute,
-        order_desc=False
+        has_substitute=has_substitute
     )
 
     if not occurrences:
@@ -215,44 +193,36 @@ def export_user_pdf(user_id):
     category_ids = validate_int_list_param('category_id', min_value=1)
     has_substitute = _parse_has_substitute()
 
-    from_date, to_date = _resolve_date_range(default_if_empty=False)
+    from_date, to_date = _resolve_date_range()
+    validate_date_range(from_date, to_date)
 
-    safe_name = _safe_filename_segment(user.name.lower().replace(' ', '_'))
+    occurrences = build_export_occurrences(
+        from_date=from_date,
+        to_date=to_date,
+        user_ids=[user_id],
+        category_ids=category_ids,
+        has_substitute=has_substitute
+    )
 
-    if from_date is None and to_date is None:
-        year = validate_year_param()
-        pdf_buffer = export_user_absences_pdf(
-            user, year, date_format=current_user.date_format
-        )
-        filename = f'abwesenheiten_{safe_name}_{year}.pdf'
-    else:
-        _validate_export_range(from_date, to_date)
-        occurrences = build_export_occurrences(
-            from_date=from_date,
-            to_date=to_date,
-            user_ids=[user_id],
+    if not occurrences:
+        return _redirect_empty_export()
+
+    pdf_buffer = export_absences_pdf(
+        occurrences,
+        title=f'Abwesenheiten {user.name}',
+        include_notes=True,
+        date_from=from_date,
+        date_to=to_date,
+        date_format=current_user.date_format,
+        filter_summary=build_filter_summary(
             category_ids=category_ids,
             has_substitute=has_substitute,
-            order_desc=False
+            include_persons=False
         )
+    )
 
-        if not occurrences:
-            return _redirect_empty_export()
-
-        pdf_buffer = export_absences_pdf(
-            occurrences,
-            title=f'Abwesenheiten {user.name}',
-            include_notes=True,
-            date_from=from_date,
-            date_to=to_date,
-            date_format=current_user.date_format,
-            filter_summary=build_filter_summary(
-                category_ids=category_ids,
-                has_substitute=has_substitute,
-                include_persons=False
-            )
-        )
-        filename = f'abwesenheiten_{safe_name}_{date.today().strftime("%Y%m%d")}.pdf'
+    safe_name = _safe_filename_segment(user.name.lower().replace(' ', '_'))
+    filename = f'abwesenheiten_{safe_name}_{date.today().strftime("%Y%m%d")}.pdf'
 
     return send_file(
         pdf_buffer,
@@ -273,15 +243,14 @@ def export_user_ical(user_id):
     has_substitute = _parse_has_substitute()
 
     from_date, to_date = _resolve_date_range()
-    _validate_export_range(from_date, to_date)
+    validate_date_range(from_date, to_date)
 
     occurrences = build_export_occurrences(
         from_date=from_date,
         to_date=to_date,
         user_ids=[user_id],
         category_ids=category_ids,
-        has_substitute=has_substitute,
-        order_desc=False
+        has_substitute=has_substitute
     )
 
     if not occurrences:
@@ -314,7 +283,7 @@ def export_user_matrix(user_id):
     has_substitute = _parse_has_substitute()
 
     week_start, week_end = _resolve_matrix_range()
-    _validate_export_range(week_start, week_end)
+    validate_date_range(week_start, week_end)
 
     pdf_buffer = export_team_matrix_pdf(
         week_start, week_end, users=[user],
@@ -351,7 +320,7 @@ def export_team_matrix():
     has_substitute = _parse_has_substitute()
 
     week_start, week_end = _resolve_matrix_range()
-    _validate_export_range(week_start, week_end)
+    validate_date_range(week_start, week_end)
 
     pdf_buffer = export_team_matrix_pdf(
         week_start, week_end,

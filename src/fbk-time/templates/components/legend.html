@@ -1,0 +1,17 @@
+{% from "components/category_icon.html" import category_icon %}
+
+{% macro render(categories) %}
+<article class="legend">
+    <strong>Legende:</strong>
+    {% for category in categories %}
+    <span class="category-badge category-{{ category.id }}">
+        {% if category.icon %}{{ category_icon(category.icon) }} {% endif %}{{ category.name }}
+        {% if category.is_present %}A<span class="visually-hidden">nwesend</span>{% else %}X<span class="visually-hidden">, abwesend</span>{% endif %}
+    </span>
+    {% endfor %}
+    <mark>Feiertag</mark>
+    <span class="legend-divider" aria-hidden="true"></span>
+    <strong>A</strong> = Anwesend
+    <strong>X</strong> = Abwesend
+</article>
+{% endmacro %}

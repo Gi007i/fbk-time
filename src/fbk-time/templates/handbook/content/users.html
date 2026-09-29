@@ -1,59 +1,94 @@
 <h1>Mitarbeitende verwalten</h1>
 
-<p>Dieses Kapitel richtet sich an Manager und Admins. Für Mitarbeitende ohne Verwaltungsrechte ist der Menüpunkt <strong>Mitarbeitende</strong> nicht erreichbar.</p>
+<p>Nur Manager und Admins sehen den Menüpunkt <strong>Mitarbeitende</strong>. Dort legen Sie Konten an, bearbeiten sie und steuern Rollen und Status.</p>
 
-<h2>Übersicht</h2>
+<p>Manager und Admin haben dabei nicht denselben Zugriff. Als Manager betreuen Sie ausschließlich Konten mit der Rolle <strong>Benutzer</strong>: Sie legen sie an, ändern Anzeigename, E-Mail-Adresse und Passwort und können sie deaktivieren oder wieder aktivieren.</p>
 
-<p>Unter <strong>Mitarbeitende</strong> sehen Sie alle im System hinterlegten Personen. Die Liste enthält Benutzername, Anzeigename, E-Mail-Adresse, Rolle, Status und das Datum der letzten Anmeldung. Filtern und Sortieren funktionieren wie in der Abwesenheitsliste.</p>
+<p>Nur ein Admin darf:</p>
 
-<h2>Neu anlegen</h2>
+<ul>
+<li>Rolle und Status ändern</li>
+<li>Konten entsperren</li>
+<li>Anmeldesperren aufheben</li>
+<li>Ausstehende Konten freischalten</li>
+<li>Verwalteten Konten ein Login geben</li>
+<li>Konten löschen</li>
+</ul>
 
-<p>Über die Schaltfläche <strong>Neu</strong> in der Listenansicht legen Sie ein Konto an. Pflichtfelder sind Benutzername, Anzeigename und ein Startpasswort.</p>
+<p>Liegt Ihre letzte Passworteingabe länger als 15 Minuten zurück oder hat <strong>Angemeldet bleiben</strong> Sie angemeldet, fragt die Anwendung Ihr Passwort ab, bevor Sie ein Konto anlegen, bearbeiten oder eine der Schaltflächen in der aufgeklappten Zeile nutzen. Mehr dazu steht im Kapitel <strong>Anmeldung und Passwort</strong>.</p>
 
-<p>Das Startpasswort vergeben Sie als Manager und übermitteln es der Person über einen geeigneten Kanal. Beim ersten Login muss sie es ändern; das Startpasswort verliert damit seine Gültigkeit.</p>
+<h2>Konten finden und filtern</h2>
 
-<p>Neu angelegte Konten haben standardmäßig den Status <strong>Aktiv</strong> und sind sofort einsatzbereit. Der erzwungene Passwortwechsel beim Erstlogin gilt unabhängig davon.</p>
+<p>Unter <strong>Mitarbeitende</strong> sehen Sie die hinterlegten Personen, sortiert nach Anzeigename. Voreingestellt zeigt die Übersicht nur Konten mit dem Status <strong>Aktiv</strong> oder <strong>Verwaltet</strong>. Stellen Sie den Statusfilter auf <strong>Alle</strong>, erscheinen auch deaktivierte, gesperrte und ausstehende Konten.</p>
 
-<p>Im Single-User-Modus wird ein Konto mit Rolle <strong>Benutzer</strong> automatisch als <strong>Verwaltet</strong> angelegt – ein Passwort ist dann nicht nötig.</p>
+<p>Im Bereich <strong>Filter</strong> grenzen Sie die Übersicht außerdem nach <strong>Suche</strong> und <strong>Rolle</strong> ein.</p>
 
-<h2>Rollen</h2>
+<p>Ein Klick auf eine Zeile klappt sie auf und zeigt die Einzelheiten: <strong>Benutzername</strong>, <strong>Rolle</strong>, <strong>Status</strong> sowie die Zahl unter <strong>Abwesenheiten im laufenden Monat</strong>. Bei Konten, die Sie verwalten dürfen, und bei Ihrem eigenen zeigt die Anwendung zusätzlich <strong>E-Mail</strong> und <strong>Erstellt</strong>. Bei Ihrem eigenen Konto zeigt sie außerdem <strong>Letzter Login</strong>, als Admin bei jedem Konto. Liegen offene Fehlversuche vor, weist die Zeile Sie als Admin zusätzlich darauf hin.</p>
+
+<h2>Konto anlegen</h2>
+
+<p>Ein neues Konto legen Sie über die Schaltfläche <strong>Neu</strong> in der Übersicht „Mitarbeitende“ an. Pflicht sind Benutzername, Anzeigename und ein Startpasswort. Eine <strong>E-Mail</strong>-Adresse können Sie angeben, müssen es aber nicht.</p>
+
+<p>Der Benutzername besteht aus 3 bis 80 Zeichen: Kleinbuchstaben a–z, Ziffern, Punkt, Unterstrich und Bindestrich. Am Anfang steht ein Buchstabe oder eine Ziffer. Großbuchstaben wandelt die Anwendung beim Speichern in Kleinbuchstaben um.</p>
+
+<p>Legen Sie im <strong>Einzelbenutzermodus</strong> ein Konto mit der Rolle <strong>Benutzer</strong> an, brauchen Sie kein Passwort. Sind die Pflichtfelder ausgefüllt, lässt sich das Konto bereits speichern.</p>
+
+<p>Das Startpasswort vergeben Sie als Manager und übermitteln es der Person über einen geeigneten Kanal.{% if cfg.password_force_change_on_first_login %} Bei der ersten Anmeldung muss sie es ändern; das Startpasswort verliert damit seine Gültigkeit.{% else %} Ein Wechsel bei der ersten Anmeldung ist derzeit nicht erzwungen; diese Vorgabe stellt ein Admin in den Systemeinstellungen unter <strong>Passwort-Richtlinie</strong> um.{% endif %}</p>
+
+<p>Neu angelegte Konten haben standardmäßig den Status <strong>Aktiv</strong> und sind sofort einsatzbereit. Legen Sie im <strong>Einzelbenutzermodus</strong> ein Konto mit der Rolle <strong>Benutzer</strong> an, erhält es stattdessen automatisch den Status <strong>Verwaltet</strong>.</p>
+
+<h2>Was die drei Rollen dürfen</h2>
 
 <p>Die Anwendung unterscheidet drei Rollen:</p>
 
 <ul>
-<li><strong>Benutzer.</strong> Pflegt eigene Abwesenheiten und kann die Einträge anderer einsehen. Keine Verwaltungsrechte.</li>
-<li><strong>Manager.</strong> Alles, was Benutzer dürfen, plus Verwaltung von Mitarbeitenden und Kategorien.</li>
-<li><strong>Admin.</strong> Alles, was Manager dürfen, plus Zugriff auf die Systemeinstellungen.</li>
+<li><strong>Benutzer.</strong> Pflegt eigene Abwesenheiten und sieht die Einträge anderer. Verwaltungsrechte hat diese Rolle nicht.</li>
+<li><strong>Manager.</strong> Verwaltet Mitarbeitende und Kategorien und pflegt fremde Abwesenheiten.</li>
+<li><strong>Admin.</strong> Darf alles, was ein Manager darf, und öffnet zusätzlich <strong>Systemeinstellungen</strong> und <strong>Datensicherung</strong>.</li>
 </ul>
 
-<p>Die Rolle ändern Sie in der Detailansicht des Mitarbeitenden. Der letzte aktive Admin kann seine eigene Rolle nicht ändern – so bleibt mindestens ein Admin-Konto erhalten.</p>
+<p>Manager- und Admin-Konten sind reine Verwaltungskonten. Sie führen keine eigenen Abwesenheiten und erscheinen deshalb weder in Kalender, Team-Übersicht und Listenansicht noch in der Auswahl der Vertretungen. Wer eigene Abwesenheiten führen und zugleich verwalten will, benötigt ein zweites Konto mit der Rolle <strong>Benutzer</strong>.</p>
 
-<h2>Status</h2>
+<p>Die Rolle ändert ein Admin über <strong>Bearbeiten</strong> in der aufgeklappten Zeile. Ist nur noch ein Admin-Konto aktiv, lässt sich diesem die Rolle nicht entziehen – so bleibt immer mindestens ein Admin übrig. Den eigenen Status kann niemand ändern.</p>
+
+<h2>Was die fünf Kontostatus bedeuten</h2>
 
 <ul>
-<li><strong>Aktiv.</strong> Regulärer Zustand – die Person kann sich anmelden.</li>
-<li><strong>Ausstehend.</strong> Übergangszustand bei der Selbstregistrierung (sofern aktiviert). Bei regulärer Neuanlage durch einen Manager kommt dieser Status nicht vor.</li>
-<li><strong>Gesperrt.</strong> Folge zu vieler Fehlanmeldungen oder manuelle Sperrung durch einen Admin. Entsperrt wird per Klick in der Detailansicht.</li>
-<li><strong>Deaktiviert.</strong> Konto vorübergehend stillgelegt, z.B. bei Elternzeit oder Sabbatical. Die Daten bleiben erhalten, eine Anmeldung ist nicht möglich.</li>
-<li><strong>Verwaltet.</strong> Nur im Single-User-Betrieb relevant – einer Betriebsart, in der sich nur der Admin anmeldet und alle anderen Konten stellvertretend pflegt. Das Konto hat kein eigenes Login. Eine spätere Umwandlung in ein Login-Konto ist möglich.</li>
+<li><strong>Aktiv.</strong> Der Regelfall – die Person kann sich anmelden.</li>
+<li><strong>Ausstehend.</strong> Ein Übergangszustand bei der Selbstregistrierung, sofern diese aktiviert ist. Legt ein Manager ein Konto regulär an, kommt dieser Status nicht vor.</li>
+<li><strong>Gesperrt.</strong> Dieser Status entsteht nicht von selbst: Ein Admin setzt ihn im Bearbeitungsformular von Hand, und nur ein Admin hebt ihn über die Schaltfläche <strong>Entsperren</strong> in der aufgeklappten Zeile wieder auf.</li>
+<li><strong>Deaktiviert.</strong> Das Konto ruht vorübergehend, etwa bei Elternzeit oder Sabbatical. Die Daten bleiben erhalten, anmelden kann sich die Person nicht.</li>
+<li><strong>Verwaltet.</strong> Dieser Status betrifft nur den <strong>Einzelbenutzermodus</strong> und nur Konten mit der Rolle <strong>Benutzer</strong>. Das Konto hat kein eigenes Login; über die Schaltfläche <strong>Login aktivieren</strong> gibt ein Admin ihm später eines.</li>
 </ul>
 
-<p>Konten ohne Aktivität wechseln nach der in den Systemeinstellungen eingestellten Frist automatisch in den Status <strong>Deaktiviert</strong>. Ein unerwartet deaktiviertes Konto nach längerer Pause hat meist diesen Hintergrund. Admin-Konten sind von der Automatik ausgenommen.</p>
+<p>Verwechseln Sie <strong>Gesperrt</strong> nicht mit der befristeten Anmeldesperre nach zu vielen Fehlversuchen: Die lässt den Status auf <strong>Aktiv</strong> und endet von selbst. Vorzeitig heben Sie sie als Admin über <strong>Anmeldesperre aufheben</strong> in der aufgeklappten Zeile auf; die Person kann sich danach sofort wieder anmelden.</p>
+
+<p>Bleibt ein Konto über die in den Systemeinstellungen festgelegte Frist ohne Aktivität, deaktiviert die Anwendung es automatisch. Ein unerwartet deaktiviertes Konto nach längerer Pause hat meist diesen Hintergrund. Admin-Konten lässt die Automatik unangetastet.</p>
+
+<p>Der <strong>Einzelbenutzermodus</strong> ist die Betriebsart, in der sich ausschließlich Manager und Admins anmelden und die übrigen Konten stellvertretend pflegen.</p>
 
 <h2>Passwort zurücksetzen</h2>
 
-<p>Hat ein Mitarbeitender sein Passwort verloren, öffnen Sie das Bearbeitungsformular und tragen im Feld <strong>Neues Passwort</strong> ein neues Startpasswort ein. Sie übermitteln es der Person über einen geeigneten Kanal. Beim nächsten Login muss sie es durch ein eigenes Passwort ersetzen.</p>
+<p>Hat jemand das eigene Passwort verloren, öffnen Sie das Bearbeitungsformular und tragen im Feld <strong>Neues Passwort</strong> ein neues Startpasswort ein. Übermitteln Sie es der Person über einen geeigneten Kanal. Bei der nächsten Anmeldung muss sie es durch ein eigenes Passwort ersetzen.</p>
 
-<p>Mit dem Zurücksetzen werden alle bestehenden Sitzungen dieser Person beendet.</p>
+<p>Mit dem Zurücksetzen beendet die Anwendung alle bestehenden Sitzungen dieser Person.</p>
+
+<p>Ihr eigenes Passwort ändern Sie nicht hier, sondern unter <strong>Mein Profil</strong>. Im Bearbeitungsformular Ihres eigenen Kontos zeigt die Anwendung das Feld <strong>Neues Passwort</strong> deshalb nicht an.</p>
+
+<h2>Sitzungen beenden</h2>
+
+<p>Meldet jemand ein verlorenes Gerät oder eine vergessene Anmeldung an einem fremden Rechner, beenden Sie über <strong>Sitzungen beenden</strong> in der aufgeklappten Zeile alle Sitzungen dieser Person, ohne das Passwort zu ändern. Die Person meldet sich danach überall neu an, mit dem bisherigen Passwort. Bei aktiven Konten zeigt die Zeile die Schaltfläche; als Manager sehen Sie sie nur bei Konten mit der Rolle <strong>Benutzer</strong>.</p>
+
+<p>Ihre eigenen Sitzungen beenden Sie nicht hier, sondern unter <strong>Mein Profil</strong>.</p>
 
 <h2>Konto löschen</h2>
 
-<p>Beim Löschen werden das Konto sowie <strong>alle zugehörigen Abwesenheiten</strong> und die Änderungshistorie entfernt. Das lässt sich nicht rückgängig machen.</p>
+<p>Nur ein Admin kann ein Konto löschen. Dabei entfernt die Anwendung das Konto sowie <strong>alle zugehörigen Abwesenheiten</strong> und die Änderungshistorie. Das lässt sich nicht rückgängig machen.</p>
 
-<p>Ist die Person als Vertretung in fremden Abwesenheiten eingetragen, wird dort das Vertretungs-Feld geleert. Die übrigen Daten dieser Abwesenheiten bleiben erhalten.</p>
+<p>War die Person als Vertretung in fremden Abwesenheiten eingetragen, leert die Anwendung dort das Feld <strong>Vertretung</strong>; die übrigen Daten dieser Einträge bleiben erhalten. Verlangt die Kategorie eines solchen Eintrags eine Vertretung, fehlt anschließend die eigentlich erforderliche Angabe. Der Eintrag erscheint dann im Bereich <strong>Konflikte &amp; Warnungen</strong> des Dashboards.</p>
 
-<p>Beim Ausscheiden aus dem Unternehmen ist meist die Deaktivierung sinnvoller – so bleiben Einträge für historische Auswertungen erhalten. Eine Löschung ist nur bei Fehlanlagen oder einem DSGVO-Löschungsanspruch angebracht.</p>
+<p>Beim Ausscheiden aus dem Unternehmen ist die Deaktivierung meist die bessere Wahl, denn so bleiben die Einträge für historische Auswertungen erhalten. Löschen Sie nur bei Fehlanlagen oder bei einem Löschungsanspruch nach DSGVO.</p>
 
-<h2>Änderungshistorie</h2>
+<h2>Änderungen nachvollziehen</h2>
 
-<p>Jede Änderung an einer Abwesenheit wird protokolliert: Zeitpunkt, betroffenes Feld sowie alter und neuer Wert. Die Historie finden Sie in der Detailansicht der Abwesenheit – sie macht Terminverschiebungen nachvollziehbar.</p>
+<p>Jede Änderung an einer Abwesenheit protokolliert die Anwendung mit Zeitpunkt, betroffenem Feld sowie altem und neuem Wert. Die Historie finden Sie in der Detailansicht der Abwesenheit; sie macht Terminverschiebungen nachvollziehbar.</p>

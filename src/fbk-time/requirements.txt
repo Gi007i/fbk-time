@@ -3,28 +3,23 @@
 
 # Core Framework
 Flask==3.1.3
-Flask-SQLAlchemy==3.1.1
-Flask-Login==0.6.3
 Flask-WTF==1.3.0
 
 # Template Engine
 Jinja2==3.1.6
 
 # Database
-SQLAlchemy==2.0.51
+SQLAlchemy==2.0.54
 
 # Security - Argon2id password hashing (RFC 9106 LOW_MEMORY profile)
 argon2-cffi==25.1.0
 
 # German Holidays (offline-capable)
-holidays==0.94
+holidays==0.105
 
 # Export
-reportlab==4.4.10
-icalendar==7.2.0
+reportlab==5.0.1
+icalendar==7.3.0
 
 # Production WSGI Server
-gunicorn==25.3.0
-
-# License Management
-pip-licenses==5.5.5
+gunicorn==26.2.0

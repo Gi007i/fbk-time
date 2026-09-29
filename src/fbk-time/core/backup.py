@@ -16,6 +16,8 @@ import hashlib
 import io
 import json
 import os
+import re
+import secrets
 import shutil
 import sqlite3
 import tarfile
@@ -25,6 +27,8 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Tuple
+
+from sqlalchemy import select
 
 from core.version import APP_VERSION
 
@@ -54,20 +58,47 @@ def _checksum(path: Path) -> str:
     return f'sha256:{h.hexdigest()}'
 
 
-def _restrict_file(path: Path) -> None:
-    """Set 0o600 on a file. Best-effort on POSIX, no-op elsewhere."""
+def _parse_manifest_timestamp(value) -> Optional[datetime]:
+    """Parse a manifest ``created_at`` into naive UTC.
+
+    Accepts only the timezone-aware ISO 8601 form the archive writer
+    produces.
+
+    Returns:
+        Naive UTC datetime, or None if the value is not such a timestamp.
+    """
+    if not isinstance(value, str):
+        return None
     try:
-        os.chmod(path, 0o600)
-    except OSError:
-        pass
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed.astimezone(timezone.utc).replace(tzinfo=None)
+
+
+def version_mismatch_message(archive_version: str) -> str:
+    """Explain why an archive of another application version is refused.
+
+    Args:
+        archive_version: ``app_version`` recorded in the archive manifest.
+    """
+    return (
+        f'Die Sicherung stammt aus Version {archive_version}, installiert ist '
+        f'Version {APP_VERSION}. Datenbank und settings.json passen nur zu ihrer '
+        f'eigenen Version. Version {archive_version} installieren und die '
+        f'Sicherung dort wiederherstellen; ist sie älter, die Datenbank danach '
+        f'mit den Upgrade-Skripten unter upgrades/ auf Version {APP_VERSION} '
+        f'bringen.'
+    )
 
 
 class BackupManager:
     """Manages creation, verification, and restore of application backups.
 
-    Each backup archive contains the database, static configuration, and the
-    environment file so that a full restore requires only the archive.
-    Backup directory is read from app.config['BACKUP_DIR'] (settings.json).
+    Each archive contains the database, static configuration and the
+    environment file, so a full restore requires only the archive.
     """
 
     _ENTRY_DB = 'database/fbk-time.db'
@@ -83,6 +114,14 @@ class BackupManager:
     _MAX_CONFIG_ENTRY_BYTES = 4 * 1024 * 1024
     _MAX_DB_ENTRY_BYTES = 2 * 1024 * 1024 * 1024
 
+    # The random suffix is absent in archives written before v2.0.0.
+    _ARCHIVE_NAME_PATTERN = re.compile(
+        r'backup_\d{8}_\d{6}_(manual|scheduled|pre_restore)(?:_[0-9a-f]{6})?\.tar\.gz'
+    )
+    _PARTIAL_NAME_PATTERN = re.compile(
+        r'\.backup_\d{8}_\d{6}_(?:manual|scheduled|pre_restore)_[0-9a-f]{6}\.tar\.gz\.partial'
+    )
+
     @classmethod
     def _required_entries(cls) -> Tuple[str, ...]:
         return (cls._ENTRY_DB, cls._ENTRY_SETTINGS, cls._ENTRY_ENV)
@@ -91,13 +130,16 @@ class BackupManager:
         self.app = app
         self._db_path: Optional[Path] = None
         self._app_root: Path = Path(__file__).resolve().parent.parent
+        self._operation_rlock = threading.RLock()
+        self._operation_depth = 0
+        self._operation_fd = None
 
         if app is not None:
             self.init_app(app)
 
     def init_app(self, app) -> None:
         self.app = app
-        uri: str = app.config['SQLALCHEMY_DATABASE_URI']
+        uri: str = app.config['DATABASE_URI']
         self._db_path = Path(uri.replace('sqlite:///', ''))
 
     def _backup_dir(self) -> Path:
@@ -107,40 +149,54 @@ class BackupManager:
     def _operation_lock(self, blocking: bool = True):
         """Serialize backup write operations across processes.
 
-        Uses POSIX ``fcntl.lockf`` (advisory record lock) instead of
-        ``flock`` so that the lock is bound to the process — not to the
-        open file description — and is therefore **not inherited across
-        ``fork``**. With ``preload_app=True`` Gunicorn forks workers
-        from the master after ``start_auto_discovery`` has already
-        opened the lock; with ``flock`` every worker would have kept a
-        reference to the master's locked OFD, making it impossible for
-        any worker to acquire the lock until the OS released the last
-        reference.
+        ``lockf`` instead of ``flock``: a record lock is not inherited across
+        the Gunicorn fork, but it gives no exclusion between threads and is
+        dropped by closing any descriptor, hence the RLock and a single
+        descriptor held by the outermost acquisition.
 
         Args:
-            blocking: When True (default), wait for the lock — used by
-                interactive endpoints and the scheduler. When False,
-                raise ``BlockingIOError`` immediately if another process
-                holds the lock — used by the auto-discovery background
-                thread so it never delays a worker request.
+            blocking: When False, raise ``BlockingIOError`` immediately if
+                the lock is held (auto-discovery must never delay a request).
         """
-        lock_path = Path(self.app.config['RUNTIME_DIR']) / 'backup-operation.lock'
-        fd = open(lock_path, 'w')
-        flags = fcntl.LOCK_EX
-        if not blocking:
-            flags |= fcntl.LOCK_NB
+        if not self._operation_rlock.acquire(blocking=blocking):
+            raise BlockingIOError('Sicherungsvorgang läuft bereits.')
+
         try:
-            fcntl.lockf(fd, flags)
+            if self._operation_depth == 0:
+                lock_path = Path(self.app.config['RUNTIME_DIR']) / 'backup-operation.lock'
+                # O_NOFOLLOW: a planted symlink must not redirect the open.
+                fd = os.open(lock_path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+                flags = fcntl.LOCK_EX
+                if not blocking:
+                    flags |= fcntl.LOCK_NB
+                try:
+                    fcntl.lockf(fd, flags)
+                except BaseException:
+                    os.close(fd)
+                    raise
+                self._operation_fd = fd
+            self._operation_depth += 1
+        except BaseException:
+            self._operation_rlock.release()
+            raise
+
+        try:
             yield
         finally:
-            fd.close()
+            self._operation_depth -= 1
+            if self._operation_depth == 0:
+                os.close(self._operation_fd)
+                self._operation_fd = None
+            self._operation_rlock.release()
 
-    def _safe_archive_path(self, path_str: str) -> Optional[Path]:
+    def safe_archive_path(self, path_str: str) -> Optional[Path]:
         """Resolve a stored archive path and ensure it stays within BACKUP_DIR.
 
-        Returns None when the path resolves outside the backup directory or
-        cannot be resolved at all. Used before any unlink operation so a
-        tampered ``file_path`` cannot remove files outside ``BACKUP_DIR``.
+        Guards every unlink, so a tampered ``file_path`` cannot remove files
+        elsewhere.
+
+        Returns:
+            Resolved path, or None if it lies outside or cannot be resolved.
         """
         try:
             backup_dir = self._backup_dir().resolve()
@@ -151,15 +207,15 @@ class BackupManager:
             return None
 
     def _archive_name(self, backup_type: str) -> str:
+        # The suffix keeps two same-type backups of one second on separate
+        # files, so deleting one cannot take the other's archive with it.
         ts = _utc_now().strftime('%Y%m%d_%H%M%S')
-        return f'backup_{ts}_{backup_type}.tar.gz'
+        return f'backup_{ts}_{backup_type}_{secrets.token_hex(3)}.tar.gz'
 
     def _remove_orphan_archive(self, archive_path: Path) -> None:
-        """Delete a partial archive left behind by a failed creation step.
+        """Delete an archive left behind by a failed creation step.
 
-        Called from the error path of ``create_backup`` and
-        ``_create_pre_restore_archive`` so a half-written ``.tar.gz`` does
-        not stay on disk without a matching record.
+        Keeps an archive from staying on disk without a matching record.
         """
         if not archive_path.exists():
             return
@@ -174,11 +230,8 @@ class BackupManager:
     def _snapshot_db(self, dest_path: Path) -> None:
         """Create a WAL-safe copy of the live database.
 
-        sqlite3.backup() reads committed WAL frames and produces a clean,
-        WAL-free database file — safe while the application is running. A
-        busy timeout lets the snapshot wait for concurrent writers to
-        release their locks instead of failing immediately with
-        SQLITE_BUSY under WAL load.
+        sqlite3.backup() includes committed WAL frames and is safe while the
+        app runs; the busy timeout waits for writers instead of SQLITE_BUSY.
         """
         timeout_s = self._SNAPSHOT_BUSY_TIMEOUT_MS / 1000
         src = sqlite3.connect(str(self._db_path), timeout=timeout_s)
@@ -201,8 +254,8 @@ class BackupManager:
                         description: Optional[str] = None) -> None:
         """Build the tar.gz archive. Raises if any required source file is missing.
 
-        The description is embedded in the manifest so it survives a DB
-        wipe and can be recovered by ``sync_filesystem`` after a restore.
+        The description goes into the manifest so ``sync_filesystem`` can
+        recover it after a restore.
         """
         settings_path = self._app_root / 'settings.json'
         env_path = self._app_root / '.env'
@@ -218,27 +271,36 @@ class BackupManager:
             self._ENTRY_ENV: _checksum(env_path),
         }
 
-        # Open with 0o600 up front so the archive is never briefly world-
-        # readable during writing (it carries .env/SECRET_KEY and hashes).
-        fd = os.open(str(archive_path), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, 'wb') as raw, \
-                tarfile.open(fileobj=raw, mode='w:gz', compresslevel=6) as tar:
-            tar.add(str(db_snapshot), arcname=self._ENTRY_DB)
-            tar.add(str(settings_path), arcname=self._ENTRY_SETTINGS)
-            tar.add(str(env_path), arcname=self._ENTRY_ENV)
+        # A partial name the sync ignores, renamed once complete, so a crash
+        # never leaves a truncated archive. 0o600 up front since it carries
+        # SECRET_KEY and hashes; O_EXCL refuses a planted file or symlink.
+        partial_path = archive_path.with_name(f'.{archive_path.name}.partial')
+        fd = os.open(str(partial_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, 'wb') as raw:
+                with tarfile.open(fileobj=raw, mode='w:gz', compresslevel=6) as tar:
+                    tar.add(str(db_snapshot), arcname=self._ENTRY_DB)
+                    tar.add(str(settings_path), arcname=self._ENTRY_SETTINGS)
+                    tar.add(str(env_path), arcname=self._ENTRY_ENV)
 
-            manifest = {
-                'schema_version': '1.0',
-                'created_at': _utc_now_str(),
-                'app_version': APP_VERSION,
-                'description': description,
-                'checksums': checksums,
-            }
-            self._add_bytes(
-                tar,
-                json.dumps(manifest, indent=2, ensure_ascii=False).encode(),
-                self._ENTRY_MANIFEST
-            )
+                    manifest = {
+                        'schema_version': self._MANIFEST_SCHEMA_VERSION,
+                        'created_at': _utc_now_str(),
+                        'app_version': APP_VERSION,
+                        'description': description,
+                        'checksums': checksums,
+                    }
+                    self._add_bytes(
+                        tar,
+                        json.dumps(manifest, indent=2, ensure_ascii=False).encode(),
+                        self._ENTRY_MANIFEST
+                    )
+                raw.flush()
+                os.fsync(raw.fileno())
+            os.replace(partial_path, archive_path)
+        except BaseException:
+            partial_path.unlink(missing_ok=True)
+            raise
 
     def _read_manifest(self, archive_path: Path) -> Optional[dict]:
         try:
@@ -261,26 +323,31 @@ class BackupManager:
                 )
         return None
 
+    def archive_app_version(self, archive_path: Path) -> Optional[str]:
+        """Return the application version recorded in an archive manifest.
+
+        Lets the restore CLI refuse a version mismatch before it stops the
+        service; ``restore_from_archive`` enforces the same rule again.
+
+        Returns:
+            The ``app_version`` string, or None if the manifest is unreadable
+            or lacks it.
+        """
+        manifest = self._read_manifest(archive_path)
+        if not isinstance(manifest, dict):
+            return None
+        version = manifest.get('app_version')
+        return version if isinstance(version, str) else None
+
     def _validate_archive(
         self, archive_path: Path
     ) -> Tuple[Optional[dict], Optional[str]]:
         """Strictly validate a tar.gz as a genuine application backup.
 
-        Rejects any archive whose manifest is missing, malformed, declares
-        a different schema version, omits a required entry, lists a
-        checksum that does not match the actual archive content, or whose
-        description exceeds the configured cap. Used by sync_filesystem
-        before registering filesystem-discovered archives so a foreign
-        tar.gz dropped into the backup directory cannot become a
-        restorable BackupRecord. Also used by restore_from_archive to
-        consolidate manifest + checksum verification in one place.
-
-        The SHA-256 checksums establish integrity only — they detect
-        accidental corruption, not deliberate tampering. An attacker with
-        write access to the archive can recompute both the content and the
-        manifest checksum, so this is not an authenticity guarantee. Adding
-        an HMAC is deliberately avoided because it would invalidate every
-        existing backup archive.
+        Keeps a foreign tar.gz in the backup directory from becoming a
+        restorable record. Checksums prove integrity only; authenticity comes
+        from BackupRecord.checksum outside the archive (no HMAC, which would
+        invalidate every existing archive).
 
         Args:
             archive_path: Archive to validate.
@@ -301,7 +368,7 @@ class BackupManager:
                 f'{manifest.get("schema_version")!r}'
             )
 
-        if not isinstance(manifest.get('created_at'), str):
+        if _parse_manifest_timestamp(manifest.get('created_at')) is None:
             return None, 'Manifest-Feld created_at fehlt oder ungültig'
 
         if not isinstance(manifest.get('app_version'), str):
@@ -312,6 +379,10 @@ class BackupManager:
             return None, 'Manifest-Feld description hat unerwarteten Typ'
         if isinstance(description, str) and len(description) > self._MAX_DESCRIPTION_LEN:
             return None, 'Manifest-Feld description überschreitet Längenlimit'
+        # The CLI prints this straight to an escape-interpreting terminal, so
+        # control characters could overdraw earlier lines of the listing.
+        if isinstance(description, str) and any(ord(c) < 0x20 for c in description):
+            return None, 'Manifest-Feld description enthält Steuerzeichen'
 
         checksums = manifest.get('checksums')
         if not isinstance(checksums, dict) or not checksums:
@@ -330,6 +401,11 @@ class BackupManager:
                         member = tar.getmember(entry)
                     except KeyError:
                         return None, f'Archiveintrag fehlt: {entry}'
+                    # A link member would send extractfile chasing its target
+                    # inside the archive, which raises KeyError when that
+                    # target is absent. The required entries are plain files.
+                    if not member.isreg():
+                        return None, f'Archiveintrag ist keine reguläre Datei: {entry}'
                     cap = (self._MAX_DB_ENTRY_BYTES if entry == self._ENTRY_DB
                            else self._MAX_CONFIG_ENTRY_BYTES)
                     if member.size > cap:
@@ -337,16 +413,14 @@ class BackupManager:
                     f = tar.extractfile(member)
                     if not f:
                         return None, f'Archiveintrag nicht lesbar: {entry}'
-                    # Read in fixed-size blocks instead of a single f.read()
-                    # so a maliciously crafted archive entry cannot exhaust
-                    # memory (decompression bomb) during validation.
+                    # Block-wise read: a decompression bomb cannot exhaust memory.
                     h = hashlib.sha256()
                     for chunk in iter(lambda: f.read(65536), b''):
                         h.update(chunk)
                     actual = f'sha256:{h.hexdigest()}'
                     if actual != expected_cs:
                         return None, f'Prüfsumme abweichend: {entry}'
-        except (tarfile.TarError, OSError) as e:
+        except (tarfile.TarError, OSError, KeyError, RecursionError) as e:
             return None, f'Archiv nicht lesbar: {e}'
 
         return manifest, None
@@ -356,8 +430,7 @@ class BackupManager:
                       created_by_id: Optional[int] = None) -> Optional[object]:
         """Create a compressed backup archive.
 
-        Each created archive is verified immediately so the caller knows
-        the backup is restorable before the call returns.
+        The archive is verified before returning, so success means restorable.
 
         Args:
             description: Optional human-readable note.
@@ -368,7 +441,7 @@ class BackupManager:
             BackupRecord instance on success, None on failure.
         """
         from modules.backup.models import BackupRecord, BackupStatus, BackupType
-        from core.extensions import db
+        from core.db import db
 
         backup_dir = self._backup_dir()
         archive_path = backup_dir / self._archive_name(backup_type)
@@ -380,7 +453,6 @@ class BackupManager:
                     self._snapshot_db(db_snapshot)
                     self._create_archive(archive_path, db_snapshot, description=description)
 
-                _restrict_file(archive_path)
                 file_size = archive_path.stat().st_size
                 archive_checksum = _checksum(archive_path)
 
@@ -396,7 +468,16 @@ class BackupManager:
                 db.session.add(record)
                 db.session.commit()
 
-                self._verify_record(record)
+                verified, verify_error = self._verify_record(record)
+
+            if not verified:
+                # The record stays visible as CORRUPTED; success would claim a
+                # restorable backup.
+                if self.app:
+                    self.app.logger.error(
+                        f"Backup #{record.id} failed verification: {verify_error}"
+                    )
+                return None
 
             return record
 
@@ -417,7 +498,7 @@ class BackupManager:
             Tuple of (success, error_message).
         """
         from modules.backup.models import BackupRecord
-        from core.extensions import db
+        from core.db import db
 
         record = db.session.get(BackupRecord, record_id)
         if not record:
@@ -427,7 +508,7 @@ class BackupManager:
 
     def _verify_record(self, record) -> Tuple[bool, Optional[str]]:
         from modules.backup.models import BackupStatus
-        from core.extensions import db
+        from core.db import db
 
         archive_path = Path(record.file_path)
         error: Optional[str] = None
@@ -454,9 +535,9 @@ class BackupManager:
     def verify_all(self) -> Tuple[int, int]:
         """Verify all backups. Returns (verified_count, corrupted_count)."""
         from modules.backup.models import BackupRecord
-        from core.extensions import db
+        from core.db import db
 
-        records = db.session.execute(db.select(BackupRecord)).scalars().all()
+        records = db.session.execute(select(BackupRecord)).scalars().all()
         verified = corrupted = 0
         for record in records:
             ok, _ = self._verify_record(record)
@@ -469,28 +550,26 @@ class BackupManager:
     def cleanup_old_backups(self) -> int:
         """Remove backups exceeding the configured retention count.
 
-        Keeps the newest ``backup_retention_count`` archives and removes
-        the rest. Sorting is by creation timestamp descending, so the
-        most recent backups always survive.
+        Keeps the newest ``backup_retention_count`` archives.
 
         Returns:
             Number of backups removed.
         """
         from modules.backup.models import BackupRecord
-        from core.extensions import db
+        from core.db import db
         from core.settings_manager import settings_manager
 
         keep_count = max(1, int(settings_manager.get('backup_retention_count')))
 
         with self._operation_lock():
             all_records = db.session.execute(
-                db.select(BackupRecord).order_by(BackupRecord.created_at.desc())
+                select(BackupRecord).order_by(BackupRecord.created_at.desc())
             ).scalars().all()
 
             removed = 0
             for record in all_records[keep_count:]:
                 try:
-                    path = self._safe_archive_path(record.file_path)
+                    path = self.safe_archive_path(record.file_path)
                     if path is None:
                         if self.app:
                             self.app.logger.error(
@@ -520,7 +599,7 @@ class BackupManager:
             Tuple of (success, error_message).
         """
         from modules.backup.models import BackupRecord
-        from core.extensions import db
+        from core.db import db
 
         with self._operation_lock():
             record = db.session.get(BackupRecord, record_id)
@@ -528,7 +607,7 @@ class BackupManager:
                 return False, 'Sicherung nicht gefunden'
 
             try:
-                path = self._safe_archive_path(record.file_path)
+                path = self.safe_archive_path(record.file_path)
                 if path is None:
                     return False, 'Archivpfad liegt außerhalb des Sicherungs-Verzeichnisses'
                 if path.exists():
@@ -543,40 +622,20 @@ class BackupManager:
     def sync_filesystem(self, blocking: bool = True) -> Tuple[int, int, int, list]:
         """Reconcile the backup directory with BackupRecord entries.
 
-        Compares the contents of ``BACKUP_DIR`` with the database and
-        repairs three forms of drift:
-
-        * Archive on disk without record  → register with status CREATED.
-        * Record with archive at a different path but matching filename
-          → update ``file_path`` to the current location (covers the
-          case where a database backup was restored on a host with a
-          different ``BACKUP_DIR``).
-        * Record without archive on disk  → delete record.
-
-        Sync is intentionally **integrity-agnostic**: it never reads
-        archive contents and never recomputes checksums. Verification
-        is a separate concern triggered by the per-record
-        "Verifizieren" action so that sync stays a fast O(filename)
-        operation even with hundreds of archives — well under the
-        gunicorn worker timeout. Newly registered records show status
-        ``CREATED`` until the operator verifies them.
-
-        The match key is the archive filename; archive timestamps are
-        unique, so two records cannot collide on the same file.
+        Matched by filename: an unknown archive is registered after full
+        validation (foreign or truncated files are refused), a moved one gets
+        its new path (restore on a host with another ``BACKUP_DIR``), and a
+        record without archive is deleted.
 
         Args:
-            blocking: When True (default), wait for the operation lock.
-                The auto-discovery thread passes False so it skips
-                silently if a user-triggered sync, backup, or delete is
-                already in progress.
+            blocking: When False, skip if another backup operation runs.
 
         Returns:
-            Tuple of (added, updated, removed, errors). When the lock is
-            unavailable in non-blocking mode all counters are zero and a
-            single explanatory entry is appended to errors.
+            Tuple of (added, updated, removed, errors). A skipped run returns
+            zero counters and one explanatory error.
         """
         from modules.backup.models import BackupRecord, BackupStatus
-        from core.extensions import db
+        from core.db import db
 
         backup_dir = self._backup_dir()
         errors: list = []
@@ -589,29 +648,44 @@ class BackupManager:
 
         try:
             with self._operation_lock(blocking=blocking):
+                self._remove_stale_partials(backup_dir)
+
                 filesystem_files = {
                     entry.name: entry
                     for entry in backup_dir.iterdir()
                     if entry.is_file() and entry.name.endswith('.tar.gz')
                 }
 
-                db_records = db.session.execute(db.select(BackupRecord)).scalars().all()
+                db_records = db.session.execute(select(BackupRecord)).scalars().all()
                 db_records_by_name = {Path(rec.file_path).name: rec for rec in db_records}
+
+                # An empty directory with existing records signals an unmounted
+                # volume; dropping the records would lose created_by_id, which
+                # no manifest can restore.
+                if not filesystem_files and db_records_by_name:
+                    return 0, 0, 0, [
+                        f'Sicherungs-Verzeichnis {backup_dir} ist leer, es sind aber '
+                        f'{len(db_records_by_name)} Sicherungen registriert. Abgleich '
+                        f'abgebrochen, damit kein Datenbestand verworfen wird. '
+                        f'Einbindung des Verzeichnisses prüfen.'
+                    ]
 
                 for filename, archive in filesystem_files.items():
                     if filename in db_records_by_name:
+                        continue
+                    name_match = self._ARCHIVE_NAME_PATTERN.fullmatch(filename)
+                    if name_match is None:
+                        errors.append(f'{filename}: Dateiname entspricht keinem Sicherungsarchiv')
                         continue
                     manifest, error = self._validate_archive(archive)
                     if error is not None:
                         errors.append(f'{filename}: {error}')
                         continue
                     try:
-                        backup_type, created_at, description = self._metadata_from_manifest(
-                            archive.name, manifest
-                        )
+                        created_at, description = self._metadata_from_manifest(manifest)
                         record = self.register_archive(
                             archive,
-                            backup_type=backup_type.value,
+                            backup_type=name_match.group(1),
                             description=description,
                             created_at=created_at
                         )
@@ -654,43 +728,46 @@ class BackupManager:
 
         return added, updated, removed, errors
 
-    def _metadata_from_manifest(
-        self, archive_name: str, manifest: dict
-    ) -> Tuple['BackupType', Optional[datetime], Optional[str]]:
-        """Derive backup type, creation time, and description from a manifest.
+    def _remove_stale_partials(self, backup_dir: Path) -> None:
+        """Delete partial archives left behind by a process that died mid-write.
 
-        Filename pattern ``backup_YYYYMMDD_HHMMSS_<type>.tar.gz`` provides
-        the backup type. Manifest provides created_at and description.
-        Manifest is assumed to be validated by ``_validate_archive``.
+        Must run under ``_operation_lock``: every writer holds it, so a
+        partial file present while the lock is held has no live writer.
         """
-        from modules.backup.models import BackupType
-
-        backup_type = BackupType.MANUAL
-        parts = archive_name[:-len('.tar.gz')].split('_')
-        if len(parts) >= 4 and parts[0] == 'backup':
+        for entry in backup_dir.iterdir():
+            if not self._PARTIAL_NAME_PATTERN.fullmatch(entry.name):
+                continue
+            if entry.is_symlink() or not entry.is_file():
+                continue
+            if self.safe_archive_path(str(entry)) is None:
+                continue
             try:
-                backup_type = BackupType(parts[3])
-            except ValueError:
-                pass
+                entry.unlink()
+            except OSError as exc:
+                if self.app:
+                    self.app.logger.error(f"Failed to remove stale partial archive {entry}: {exc}")
+                continue
+            if self.app:
+                self.app.logger.warning(f"Removed stale partial archive {entry}")
 
-        created_at: Optional[datetime] = None
-        iso = manifest['created_at']
-        if iso.endswith('Z'):
-            iso = iso[:-1] + '+00:00'
-        try:
-            dt = datetime.fromisoformat(iso)
-            if dt.tzinfo is not None:
-                dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
-            created_at = dt
-        except ValueError:
-            pass
+    @staticmethod
+    def _metadata_from_manifest(manifest: dict) -> Tuple[datetime, Optional[str]]:
+        """Derive creation time and description from a manifest.
+
+        The manifest must have passed ``_validate_archive``, which
+        guarantees a parseable ``created_at``.
+
+        Returns:
+            Tuple of (created_at as naive UTC, description or None).
+        """
+        created_at = _parse_manifest_timestamp(manifest['created_at'])
 
         raw_description = manifest.get('description')
         description: Optional[str] = None
         if isinstance(raw_description, str) and raw_description.strip():
             description = raw_description
 
-        return backup_type, created_at, description
+        return created_at, description
 
     def register_archive(self, archive_path: Path,
                          backup_type: str = 'manual',
@@ -698,11 +775,6 @@ class BackupManager:
                          created_by_id: Optional[int] = None,
                          created_at: Optional[datetime] = None) -> Optional[object]:
         """Register an existing archive file as a BackupRecord.
-
-        Used after restore to re-attach the pre-restore safety archive whose
-        original record was wiped when the live DB was overwritten, and by
-        ``sync_filesystem`` to register archives discovered in the backup
-        directory.
 
         Args:
             archive_path: Existing tar.gz archive to register.
@@ -716,7 +788,7 @@ class BackupManager:
             BackupRecord on success, None on failure.
         """
         from modules.backup.models import BackupRecord, BackupStatus, BackupType
-        from core.extensions import db
+        from core.db import db
 
         try:
             if not archive_path.exists():
@@ -745,9 +817,8 @@ class BackupManager:
     def _create_pre_restore_archive(self) -> Optional[Path]:
         """Snapshot the live DB into a tar.gz archive without DB record.
 
-        Used during restore: the DB is about to be overwritten, so writing a
-        BackupRecord first would be wiped. The archive lives on disk and is
-        re-registered after the restore completes.
+        A record would be wiped by the restore, so the archive is registered
+        only after the restore completes.
 
         Returns:
             Path to the archive on success, None on failure.
@@ -762,7 +833,6 @@ class BackupManager:
                     db_snapshot,
                     description='Automatischer Snapshot vor Wiederherstellung'
                 )
-            _restrict_file(archive_path)
             return archive_path
         except Exception as e:
             self._remove_orphan_archive(archive_path)
@@ -771,33 +841,24 @@ class BackupManager:
             return None
 
     def restore_from_archive(self, archive_path: Path,
-                              pre_restore: bool = True) -> Tuple[bool, str]:
+                              pre_restore: bool = True,
+                              allow_version_mismatch: bool = False) -> Tuple[bool, str]:
         """Restore database and configuration from a backup archive.
 
-        Intended for CLI use only — the application service should be
-        stopped before calling this method. The full body runs under
-        ``_operation_lock`` so that, even if a worker is mistakenly left
-        running, no concurrent ``create_backup``/``sync_filesystem``/
-        ``cleanup_old_backups``/``delete_backup`` can interleave with the
-        pre-restore snapshot or the file swap.
-
-        Restores in order:
-            1. database/fbk-time.db  → original DB path (WAL files removed first)
-            2. config/settings.json  → app root/settings.json
-            3. config/.env           → app root/.env
-
-        All three entries must be present in the archive. Checksums are verified
-        before any file is written to disk. The SQLAlchemy engine is disposed
-        before the DB file is replaced so no stale handles survive the swap.
+        CLI only, with the service stopped; the operation lock still guards
+        against a worker left running. An archive of another application
+        version is refused unless allowed, since its schema need not match.
 
         Args:
             archive_path: Path to the tar.gz archive.
             pre_restore: Whether to create a pre-restore backup first.
+            allow_version_mismatch: Restore even if the manifest records a
+                different application version.
 
         Returns:
             Tuple of (success, message).
         """
-        from core.extensions import db
+        from core.db import db
 
         if not archive_path.exists():
             return False, f'Archiv nicht gefunden: {archive_path}'
@@ -806,6 +867,9 @@ class BackupManager:
             manifest, validation_error = self._validate_archive(archive_path)
             if validation_error is not None:
                 return False, f'Validierung fehlgeschlagen: {validation_error}'
+
+            if manifest['app_version'] != APP_VERSION and not allow_version_mismatch:
+                return False, version_mismatch_message(manifest['app_version'])
 
             pre_restore_archive: Optional[Path] = None
             db_swapped = False
@@ -816,6 +880,10 @@ class BackupManager:
                     return False, 'Snapshot vor Wiederherstellung fehlgeschlagen'
 
             try:
+                # Release the session's checked-out connection first:
+                # dispose() only closes pooled connections, and the open
+                # transaction would block the WAL checkpoint below.
+                db.session.remove()
                 db.engine.dispose()
                 _remove_wal_files(self._db_path)
 
@@ -853,14 +921,13 @@ class BackupManager:
                             replaced.append(target)
                             if target == self._db_path:
                                 db_swapped = True
-                    except Exception:
-                        for target in reversed(replaced):
-                            staged, restrict = rollback.get(target, (None, False))
-                            if staged is not None:
-                                try:
-                                    _atomic_replace(staged, target, restrict=restrict)
-                                except Exception:
-                                    pass
+                    except Exception as swap_error:
+                        rollback_errors = self._roll_back_swaps(replaced, rollback)
+                        if rollback_errors:
+                            raise RuntimeError(
+                                f'{swap_error}; Zurücksetzen fehlgeschlagen für '
+                                f'{"; ".join(rollback_errors)}'
+                            ) from swap_error
                         raise
 
                 warning = ''
@@ -891,23 +958,45 @@ class BackupManager:
                 return False, f'Restore fehlgeschlagen: {e}'
 
             finally:
-                # Pre-DB-swap failure: snapshot has no purpose (live DB is
-                # untouched) and must not linger as an orphan archive.
-                # Post-DB-swap failure: snapshot is the only recovery path
-                # and is retained.
+                # Before the DB swap the snapshot is an orphan; after it, the
+                # only recovery path.
                 if pre_restore_archive is not None and not db_swapped:
                     self._remove_orphan_archive(pre_restore_archive)
+
+    def _roll_back_swaps(self, replaced: list, rollback: dict) -> list:
+        """Return already-replaced restore targets to their pre-restore state.
+
+        A target without a staged copy did not exist before the restore and
+        is removed again.
+
+        Args:
+            replaced: Targets swapped so far, in swap order.
+            rollback: Target -> (staged copy, restrict flag).
+
+        Returns:
+            One message per target that could not be rolled back.
+        """
+        errors = []
+        for target in reversed(replaced):
+            staged, restrict = rollback.get(target, (None, False))
+            try:
+                if staged is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    _atomic_replace(staged, target, restrict=restrict)
+            except Exception as exc:
+                errors.append(f'{target}: {exc}')
+        for message in errors:
+            if self.app:
+                self.app.logger.error(f"Restore rollback failed: {message}")
+        return errors
 
 
 def _remove_wal_files(db_path: Path) -> None:
     """Checkpoint pending WAL frames into the DB, then remove the sidecars.
 
-    The restore swaps the .db wholesale, so a stale WAL/SHM sidecar would
-    replay old frames onto the restored file and corrupt it. A TRUNCATE
-    checkpoint folds committed frames in first. wal_checkpoint does NOT raise
-    on a busy reader — it returns busy=1 and folds nothing, so a busy result
-    aborts before any unlink instead of dropping those frames. Non-WAL
-    databases return busy=0 (no-op).
+    A stale sidecar would replay old frames onto the restored file. A busy
+    checkpoint returns busy=1 instead of raising, so it aborts before unlink.
     """
     if db_path.exists():
         conn = sqlite3.connect(str(db_path), timeout=30)
@@ -930,26 +1019,24 @@ def _remove_wal_files(db_path: Path) -> None:
 def _atomic_replace(source: Path, target: Path, restrict: bool = False) -> None:
     """Replace target with source atomically, preserving source permissions.
 
-    Stages the file as ``<target>.restore_tmp`` in the target's directory so
-    that the final ``os.replace`` happens within a single filesystem (a
-    cross-device rename would raise ``OSError``). On both POSIX and Windows
-    ``os.replace`` is atomic — if the process is killed before this call,
-    the previous target file remains intact.
+    Stages next to the target, since ``os.replace`` cannot cross filesystems.
 
     Args:
         source: File to move into place.
         target: Destination path.
-        restrict: When True, tighten permissions to 0o600 after the swap.
-            Used for sensitive targets (database, .env with SECRET_KEY) so a
-            restored file never inherits world-readable permissions.
+        restrict: Keep the staging file's 0o600 instead of the source mode
+            (database, .env).
     """
     target.parent.mkdir(parents=True, exist_ok=True)
     staging = target.with_name(target.name + '.restore_tmp')
-    shutil.copy2(str(source), str(staging))
-    # Tighten before the swap so the live target is never briefly readable
-    # with the archived member's (possibly 0o644) mode.
-    if restrict:
-        _restrict_file(staging)
+    # 0o600 before the first byte lands; copy2 would expose the data under the
+    # umask during the copy. O_EXCL refuses a planted file or symlink.
+    staging.unlink(missing_ok=True)
+    fd = os.open(str(staging), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, 'wb') as destination, open(source, 'rb') as origin:
+        shutil.copyfileobj(origin, destination)
+    if not restrict:
+        shutil.copystat(str(source), str(staging))
     os.replace(str(staging), str(target))
 
 
@@ -959,15 +1046,8 @@ backup_manager = BackupManager()
 def start_auto_discovery(app) -> None:
     """Trigger an asynchronous backup directory sync after app start.
 
-    Reconciles BackupRecord rows with the archive files on disk so that
-    backups present after a database restore (or files copied in
-    out-of-band) become visible without requiring a manual sync click.
-    Runs in a daemon thread so the application start is not delayed.
-
-    The thread acquires the operation lock **non-blocking** — if a
-    worker is already mid-operation (manual sync, delete, scheduled
-    backup), auto-discovery skips silently rather than holding the lock
-    and starving worker requests until the gunicorn timeout kills them.
+    Makes archives present after a restore or copied in visible without a
+    manual sync. Non-blocking, so it never starves worker requests.
     """
     def _run():
         with app.app_context():

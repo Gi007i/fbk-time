@@ -4,8 +4,14 @@ Provides the Category model for absence categories.
 """
 
 from datetime import datetime, timezone
+from typing import Optional
 
-from core.extensions import db
+from sqlalchemy import String
+from sqlalchemy.orm import Mapped, WriteOnlyMapped, mapped_column, relationship
+
+from core.db import Base
+
+from . import helpers
 
 
 def _utc_now():
@@ -13,7 +19,7 @@ def _utc_now():
     return datetime.now(timezone.utc)
 
 
-class Category(db.Model):
+class Category(Base):
     """Absence category with visual styling and substitute requirement.
 
     Deletion is restricted if absences exist (handled in application logic).
@@ -21,23 +27,33 @@ class Category(db.Model):
 
     __tablename__ = 'categories'
 
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
-    color = db.Column(db.String(7), nullable=False)  # e.g., "#FF5733"
-    text_color = db.Column(db.String(7), nullable=False, default='#FFFFFF')
-    icon = db.Column(db.String(50), nullable=True)
-    requires_substitute = db.Column(db.Boolean, default=False, nullable=False)
-    is_present = db.Column(db.Boolean, default=False, nullable=False)  # True = working remotely, False = absent
-    sort_order = db.Column(db.Integer, default=0)
-    active = db.Column(db.Boolean, default=True, nullable=False, index=True)
-    created_at = db.Column(db.DateTime, default=_utc_now)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(50), unique=True)
+    color: Mapped[str] = mapped_column(String(7))  # e.g., "#FF5733"
+    text_color: Mapped[str] = mapped_column(String(7), default='#FFFFFF')
+    icon: Mapped[Optional[str]] = mapped_column(String(50))
+    requires_substitute: Mapped[bool] = mapped_column(default=False)
+    is_present: Mapped[bool] = mapped_column(default=False)  # True = working remotely, False = absent
+    sort_order: Mapped[Optional[int]] = mapped_column(default=0)
+    active: Mapped[bool] = mapped_column(default=True, index=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(default=_utc_now)
 
-    # RESTRICT delete behavior handled in application
-    absences = db.relationship(
-        'Absence',
-        backref='category',
-        lazy='dynamic'
+    # Deletion is guarded in application code; passive_deletes leaves the
+    # FK RESTRICT backstop entirely to the database.
+    absences: WriteOnlyMapped['Absence'] = relationship(
+        back_populates='category', passive_deletes='all'
     )
+
+    @property
+    def contrast_ratio(self) -> Optional[float]:
+        """Contrast ratio of the label text on the category colour."""
+        return helpers.contrast_ratio(self.text_color, self.color)
+
+    @property
+    def has_low_contrast(self) -> bool:
+        """Whether the colour pair stays below the readable minimum."""
+        ratio = self.contrast_ratio
+        return ratio is not None and ratio < helpers.MIN_CONTRAST_RATIO
 
     def __repr__(self):
         return f'<Category {self.name}>'

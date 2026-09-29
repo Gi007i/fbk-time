@@ -1,40 +1,84 @@
 {% extends "base.html" %}
+{% from "components/category_icon.html" import category_icon %}
 
 {% block title %}Kategorien - FBK-Time{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Kategorien</h1>
-    <nav><ul><li><a href="{{ origin_url('categories.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav aria-label="Seitenaktionen"><ul><li><a href="{{ origin_url('categories.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
-<article>
+<details id="filter-panel">
+    <summary><strong>Filter</strong></summary>
     <form method="GET">
-        <label>
-            <input type="checkbox" role="switch" name="show_inactive" value="true" {% if show_inactive %}checked{% endif %} data-autosubmit>
-            Inaktive anzeigen
-        </label>
+        <fieldset class="grid">
+            <label>
+                Status
+                <select name="status">
+                    <option value="all" {% if status_filter == 'all' %}selected{% endif %}>Alle</option>
+                    <option value="active" {% if status_filter == 'active' %}selected{% endif %}>Aktiv</option>
+                    <option value="inactive" {% if status_filter == 'inactive' %}selected{% endif %}>Inaktiv</option>
+                </select>
+            </label>
+            <div></div>
+            <div></div>
+        </fieldset>
+        <div class="grid">
+            <button type="submit" class="outline">Filtern</button>
+            <button type="button" data-href="{{ url_for('categories.list_categories') }}" class="outline secondary">Zurücksetzen</button>
+            <div></div>
+        </div>
     </form>
-</article>
+</details>
 
 {% if categories %}
 {% for category in categories %}
-<details>
+{% set contrast = category.contrast_ratio %}
+{% set contrast_label = '%.1f'|format((contrast * 10)|int / 10)|replace('.', ',') if contrast else '' %}
+<details id="row-{{ category.id }}"{% if open_row == category.id %} open{% endif %}>
     <summary>
-        <span class="category-badge category-{{ category.id }}">{% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}</span>
-        {% if category.active %}<ins>Aktiv</ins>{% else %}<del>Inaktiv</del>{% endif %}
+        <span class="category-badge category-{{ category.id }}">{% if category.icon %}{{ category_icon(category.icon) }} {% endif %}{{ category.name }}</span>
+        {% if category.active %}<small>Aktiv</small>{% else %}<span class="status-off">Inaktiv</span>{% endif %}
     </summary>
 
     <figure>
-        <table>
+        <table class="detail-table">
             <tbody>
                 <tr>
-                    <th>Typ</th>
+                    <th scope="row">Typ</th>
                     <td>{% if category.is_present %}<span class="text-positive">Anwesend</span>{% else %}<span class="text-negative">Abwesend</span>{% endif %}</td>
                 </tr>
                 <tr>
-                    <th>Vertretung</th>
+                    <th scope="row">Vertretung</th>
                     <td>{{ 'Erforderlich' if category.requires_substitute else 'Nicht erforderlich' }}</td>
+                </tr>
+                {% if contrast %}
+                <tr>
+                    <th scope="row">Kontrast</th>
+                    <td>{{ contrast_label }}:1</td>
+                </tr>
+                {% if category.has_low_contrast %}
+                <tr>
+                    <th scope="row">Kontrastempfehlung</th>
+                    <td>Mindestens 4,5:1 für gute Lesbarkeit</td>
+                </tr>
+                {% endif %}
+                {% endif %}
+                <tr>
+                    <th scope="row">Sortierung</th>
+                    <td>{{ category.sort_order }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Abwesenheiten im laufenden Monat</th>
+                    <td>
+                        {% set absence_total = absence_counts.get(category.id, 0) %}
+                        {% if absence_total %}
+                        <a href="{{ url_for('absences.list_absences', category_id=category.id, filtered=1) }}">{{ absence_total }}<span class="visually-hidden"> Abwesenheiten der Kategorie {{ category.name }} anzeigen</span></a>
+                        {% else %}
+                        0
+                        {% endif %}
+                    </td>
                 </tr>
                 <tr>
                     <td colspan="2">
@@ -65,23 +109,23 @@
 {% if pagination.total_pages > 1 %}
 <nav class="pagination" aria-label="Seitennavigation">
     {% if pagination.has_prev %}
-    <a href="{{ url_for('categories.list_categories', page=pagination.page-1, show_inactive='true' if show_inactive else '') }}">&laquo; Zurück</a>
+    <a href="{{ url_for('categories.list_categories', page=pagination.page-1, status=status_filter) }}">&laquo; Zurück</a>
     {% else %}
     <span>&laquo; Zurück</span>
     {% endif %}
 
     {% for p in range(1, pagination.total_pages + 1) %}
         {% if p == pagination.page %}
-        <span class="current">{{ p }}</span>
+        <span class="current" aria-current="page">{{ p }}</span>
         {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
-        <a href="{{ url_for('categories.list_categories', page=p, show_inactive='true' if show_inactive else '') }}">{{ p }}</a>
+        <a href="{{ url_for('categories.list_categories', page=p, status=status_filter) }}"><span class="visually-hidden">Seite </span>{{ p }}</a>
         {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
         <span>...</span>
         {% endif %}
     {% endfor %}
 
     {% if pagination.has_next %}
-    <a href="{{ url_for('categories.list_categories', page=pagination.page+1, show_inactive='true' if show_inactive else '') }}">Weiter &raquo;</a>
+    <a href="{{ url_for('categories.list_categories', page=pagination.page+1, status=status_filter) }}">Weiter &raquo;</a>
     {% else %}
     <span>Weiter &raquo;</span>
     {% endif %}
@@ -89,6 +133,6 @@
 <p class="center"><small>Seite {{ pagination.page }} von {{ pagination.total_pages }} ({{ pagination.total }} Einträge gesamt)</small></p>
 {% endif %}
 {% else %}
-<p><small>Noch keine Kategorien vorhanden.</small></p>
+<p><small>Keine Kategorien gefunden.</small></p>
 {% endif %}
 {% endblock %}

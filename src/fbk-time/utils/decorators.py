@@ -4,11 +4,13 @@ Provides authentication and access control decorators for RBAC.
 """
 
 from functools import wraps
+from urllib.parse import urlsplit, urlunsplit
 
-from flask import abort, redirect, url_for
-from flask_login import current_user
+from flask import abort, redirect, request, url_for
 
-from utils.response_helpers import api_error
+from core.auth import current_user, login_is_fresh
+from utils.navigation import is_safe_redirect_url
+from utils.response_helpers import api_error, is_ajax_request
 
 
 def login_required_api(f):
@@ -48,31 +50,38 @@ def manager_required(f):
     return decorated_function
 
 
-def admin_required_api(f):
-    """API decorator requiring ADMIN role.
+def reauthentication_response():
+    """Send the user to the re-authentication page and back afterwards.
 
-    Returns JSON 401/403 response for unauthorized requests.
+    A GET returns to the requested page itself. Any other method returns to
+    the page the action was triggered from, because the action cannot be
+    replayed after the detour.
+    """
+    if request.method == 'GET':
+        target = request.full_path.rstrip('?')
+    elif is_safe_redirect_url(request.referrer):
+        referrer = urlsplit(request.referrer)
+        target = urlunsplit(('', '', referrer.path, referrer.query, ''))
+    else:
+        target = None
+    reauth_url = url_for('auth.reauthenticate', next=target)
+    if '/api/' in request.path or is_ajax_request():
+        return api_error(
+            'Bitte bestätigen Sie Ihr Passwort.', status_code=401,
+            redirect=reauth_url
+        )
+    return redirect(reauth_url)
+
+
+def fresh_login_required(f):
+    """Decorator requiring a recent password entry for sensitive actions.
+
+    Sessions without one, including those restored from a remember cookie,
+    are sent through the re-authentication page first.
     """
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return api_error('Anmeldung erforderlich.', status_code=401)
-        if not current_user.is_admin:
-            return api_error('Admin-Rechte erforderlich.', status_code=403)
-        return f(*args, **kwargs)
-    return decorated_function
-
-
-def manager_required_api(f):
-    """API decorator requiring ADMIN or MANAGER role.
-
-    Returns JSON 401/403 response for unauthorized requests.
-    """
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated:
-            return api_error('Anmeldung erforderlich.', status_code=401)
-        if not current_user.is_manager:
-            return api_error('Manager-Rechte erforderlich.', status_code=403)
+        if not login_is_fresh():
+            return reauthentication_response()
         return f(*args, **kwargs)
     return decorated_function

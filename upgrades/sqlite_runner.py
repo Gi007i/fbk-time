@@ -50,8 +50,6 @@ _PLATFORM_MAP = {
 _STDERR_SETTLE_SECONDS = 0.01
 
 
-# --- Platform detection ---------------------------------------------------
-
 def detect_platform() -> str | None:
     """Return the platform directory name or *None* if unsupported."""
     key = (platform.system().lower(), platform.machine().lower())
@@ -68,8 +66,6 @@ def find_bundled_binary() -> Path | None:
         return binary
     return None
 
-
-# --- Version helpers -------------------------------------------------------
 
 def get_system_version() -> tuple[int, ...]:
     """Return the SQLite version tuple from Python's built-in module."""
@@ -99,8 +95,6 @@ def _format_version(v: tuple[int, ...]) -> str:
         return 'unknown'
     return '.'.join(map(str, v))
 
-
-# --- Binary resolution -----------------------------------------------------
 
 def resolve_binary(
     required: tuple[int, ...],
@@ -192,8 +186,6 @@ def _validate_binary(
     return binary
 
 
-# --- Path validation -------------------------------------------------------
-
 def _validate_path_for_cli(path: str) -> None:
     """Reject paths that contain characters unsafe for CLI dot-commands.
 
@@ -207,8 +199,6 @@ def _validate_path_for_cli(path: str) -> None:
             f'(newline, NUL or semicolon): {path!r}'
         )
 
-
-# --- CLI-backed connection -------------------------------------------------
 
 class CLICursor:
     """Minimal cursor returned by :meth:`CLIConnection.execute`.
@@ -281,8 +271,6 @@ class CLIConnection:
         self._raw('.separator "\\x1f"')
         self._raw(f'.nullvalue {self._null_marker}')
 
-    # --- internal helpers --------------------------------------------------
-
     def _drain_stderr(self) -> None:
         """Continuously read stderr in a background thread."""
         for line in self._proc.stderr:
@@ -302,13 +290,9 @@ class CLIConnection:
         Only called with hardcoded SQL or dot-commands from the upgrade
         scripts. Never receives external user input.
 
-        After the sentinel arrives on stdout, a short settle period
-        (``_STDERR_SETTLE_SECONDS``) lets the stderr drain thread
-        catch up. This is a best-effort heuristic — there is no
-        reliable cross-pipe synchronisation primitive short of
-        terminating the process. In practice the settle time is
-        sufficient because the sqlite3 process writes stderr before
-        advancing to the next command on stdin.
+        After the sentinel arrives, a short settle period
+        (``_STDERR_SETTLE_SECONDS``) lets the stderr drain thread catch up —
+        best-effort, as the two pipes cannot be synchronised.
         """
         if self._closed:
             raise sqlite3.ProgrammingError(
@@ -414,8 +398,6 @@ class CLIConnection:
 
         return ''.join(parts)
 
-    # --- public interface (sqlite3.Connection subset) ----------------------
-
     def execute(
         self, sql: str, params: Sequence[Any] | None = None
     ) -> CLICursor:
@@ -477,8 +459,6 @@ class CLIConnection:
         self.close()
 
 
-# --- Factory ---------------------------------------------------------------
-
 def connect(
     db_path: Path,
     binary: Path | None = None,
@@ -492,8 +472,6 @@ def connect(
         return sqlite3.connect(str(db_path))
     return CLIConnection(binary, db_path)
 
-
-# --- Backup / Restore helpers ---------------------------------------------
 
 def create_backup(
     source_path: Path,
@@ -513,37 +491,45 @@ def create_backup(
         ValueError: When a path contains characters that are unsafe
             for CLI dot-commands.
     """
-    if binary:
-        _validate_path_for_cli(str(source_path))
-        dest_str = str(dest_path)
-        _validate_path_for_cli(dest_str)
-        escaped = dest_str.replace("'", "''")
-        result = subprocess.run(
-            [str(binary), str(source_path)],
-            input=f".backup '{escaped}'\n",
-            capture_output=True, text=True, timeout=300,
-        )
-        error_output = (result.stderr or '').strip()
-        if result.returncode != 0 or error_output:
-            raise sqlite3.OperationalError(
-                f'Backup failed: '
-                f'{error_output or "exit code " + str(result.returncode)}'
+    # The destination is a full database copy (Argon2id hashes, session
+    # state). Tighten the umask so it is created 0600 from the start; without
+    # this it would be briefly world/group-readable between creation and the
+    # caller's chmod, exposing the hashes to other local accounts.
+    previous_umask = os.umask(0o077)
+    try:
+        if binary:
+            _validate_path_for_cli(str(source_path))
+            dest_str = str(dest_path)
+            _validate_path_for_cli(dest_str)
+            escaped = dest_str.replace("'", "''")
+            result = subprocess.run(
+                [str(binary), str(source_path)],
+                input=f".backup '{escaped}'\n",
+                capture_output=True, text=True, timeout=300,
             )
-        if not dest_path.exists() or dest_path.stat().st_size == 0:
-            raise sqlite3.OperationalError(
-                f'Backup file not created or empty: {dest_path}'
-            )
-    else:
-        source = sqlite3.connect(str(source_path))
-        try:
-            dest = sqlite3.connect(str(dest_path))
+            error_output = (result.stderr or '').strip()
+            if result.returncode != 0 or error_output:
+                raise sqlite3.OperationalError(
+                    f'Backup failed: '
+                    f'{error_output or "exit code " + str(result.returncode)}'
+                )
+            if not dest_path.exists() or dest_path.stat().st_size == 0:
+                raise sqlite3.OperationalError(
+                    f'Backup file not created or empty: {dest_path}'
+                )
+        else:
+            source = sqlite3.connect(str(source_path))
             try:
-                source.backup(dest)
+                dest = sqlite3.connect(str(dest_path))
+                try:
+                    source.backup(dest)
+                finally:
+                    dest.close()
             finally:
-                dest.close()
-        finally:
-            source.close()
-        if not dest_path.exists() or dest_path.stat().st_size == 0:
-            raise sqlite3.OperationalError(
-                f'Backup file not created or empty: {dest_path}'
-            )
+                source.close()
+            if not dest_path.exists() or dest_path.stat().st_size == 0:
+                raise sqlite3.OperationalError(
+                    f'Backup file not created or empty: {dest_path}'
+                )
+    finally:
+        os.umask(previous_umask)

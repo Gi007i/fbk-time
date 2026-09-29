@@ -5,7 +5,7 @@
 {% block content %}
 <div class="grid page-header">
     <h1>Mitarbeitende</h1>
-    <nav><ul><li><a href="{{ origin_url('users.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav aria-label="Seitenaktionen"><ul><li><a href="{{ origin_url('users.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
 <details id="filter-panel">
@@ -46,59 +46,92 @@
 
 {% if users %}
 {% for user in users %}
-<details>
+{% set may_see_personal_data = current_user.is_admin or user.role == UserRole.USER or user.id == current_user.id %}
+<details id="row-{{ user.id }}"{% if open_row == user.id %} open{% endif %}>
     <summary>
         <strong>{{ user.name }}</strong>
         <small>({{ user.username }})</small>
-        {% if user.role == UserRole.ADMIN or user.role == UserRole.MANAGER %}<kbd>{{ user.role|role_label }}</kbd>{% endif %}
-        {% if user.status == UserStatus.DISABLED %}<del>Deaktiviert</del>{% elif user.status == UserStatus.LOCKED %}<mark>Gesperrt</mark>{% elif user.status == UserStatus.PENDING %}<mark>Ausstehend</mark>{% elif user.status == UserStatus.MANAGED %}<ins>Verwaltet</ins>{% endif %}
+        {% if user.role == UserRole.ADMIN or user.role == UserRole.MANAGER %}<span class="status-role">{{ user.role|role_label }}</span>{% endif %}
+        {% if user.status == UserStatus.DISABLED %}<span class="status-off">{{ user.status|status_label }}</span>{% elif user.status in (UserStatus.LOCKED, UserStatus.PENDING) %}<mark>{{ user.status|status_label }}</mark>{% else %}<small>{{ user.status|status_label }}</small>{% endif %}
     </summary>
 
     <figure>
-        <table>
+        <table class="detail-table">
             <tbody>
                 <tr>
-                    <th>Benutzername</th>
+                    <th scope="row">Benutzername</th>
                     <td>{{ user.username }}</td>
                 </tr>
+                {% if may_see_personal_data %}
                 <tr>
-                    <th>E-Mail</th>
+                    <th scope="row">E-Mail</th>
                     <td>{{ user.email or '-' }}</td>
                 </tr>
+                {% endif %}
                 <tr>
-                    <th>Rolle</th>
+                    <th scope="row">Rolle</th>
                     <td>{{ user.role|role_label }}</td>
                 </tr>
                 <tr>
-                    <th>Status</th>
-                    <td>{{ user.status.value | capitalize }}</td>
+                    <th scope="row">Status</th>
+                    <td>{{ user.status|status_label }}</td>
                 </tr>
+                {% if may_see_personal_data %}
                 <tr>
-                    <th>Erstellt</th>
+                    <th scope="row">Erstellt</th>
                     <td>{{ user.created_at|format_date(include_time=True) if user.created_at else '-' }}</td>
                 </tr>
+                {% endif %}
                 {% if current_user.is_admin or current_user.id == user.id %}
                 <tr>
-                    <th>Letzter Login</th>
+                    <th scope="row">Letzter Login</th>
                     <td>{{ user.previous_login_at|format_date(include_time=True) if user.previous_login_at else '-' }}</td>
                 </tr>
                 {% endif %}
-                {% if current_user.is_admin and user.status != UserStatus.MANAGED and failed_attempts.get(user.username, 0) > 0 %}
+                {% set lockout = lockouts.get(user.username) %}
+                {% if current_user.is_admin and user.status != UserStatus.MANAGED and lockout %}
                 <tr>
-                    <th>Fehlversuche</th>
-                    <td><mark>{{ failed_attempts[user.username] }}</mark></td>
+                    <th scope="row">Fehlversuche</th>
+                    <td><mark>{{ lockout.count }}</mark></td>
+                </tr>
+                {% if lockout.locked %}
+                <tr>
+                    <th scope="row">Anmeldesperre</th>
+                    <td>
+                        <button type="button"
+                                class="outline"
+                                data-action="confirm"
+                                data-url="{{ origin_url('users.lift_lockout', id=user.id) }}"
+                                data-confirm="Anmeldesperre von {{ user.name }} aufheben? Die Person kann sich sofort wieder anmelden."
+                                data-confirm-label="Aufheben">
+                            Anmeldesperre aufheben<span class="visually-hidden">: {{ user.name }}</span>
+                        </button>
+                    </td>
                 </tr>
                 {% endif %}
+                {% endif %}
+                <tr>
+                    <th scope="row">Abwesenheiten im laufenden Monat</th>
+                    <td>
+                        {% set absence_total = absence_counts.get(user.id, 0) %}
+                        {% if absence_total %}
+                        <a href="{{ url_for('absences.list_absences', user_id=user.id, filtered=1) }}">{{ absence_total }}<span class="visually-hidden"> Abwesenheiten von {{ user.name }} anzeigen</span></a>
+                        {% else %}
+                        0
+                        {% endif %}
+                    </td>
+                </tr>
                 <tr>
                     <td colspan="2">
                         <div class="grid">
+                            {% set actions = namespace(count=0) %}
                             {% if current_user.is_admin or user.role == UserRole.USER %}
-                            <a href="{{ origin_url('users.edit', id=user.id) }}" role="button" class="outline secondary">Bearbeiten</a>
-                            {% else %}
-                            <div></div>
+                            {% set actions.count = actions.count + 1 %}
+                            <a href="{{ origin_url('users.edit', id=user.id) }}" role="button" class="outline secondary">Bearbeiten<span class="visually-hidden">: {{ user.name }}</span></a>
                             {% endif %}
                             {% if user.id != current_user.id %}
                             {% if user.status == UserStatus.ACTIVE and (current_user.is_admin or user.role == UserRole.USER) %}
+                            {% set actions.count = actions.count + 1 %}
                             <button type="button"
                                     class="outline contrast"
                                     data-action="toggle"
@@ -106,6 +139,7 @@
                                 Deaktivieren
                             </button>
                             {% elif user.status == UserStatus.DISABLED and (current_user.is_admin or user.role == UserRole.USER) %}
+                            {% set actions.count = actions.count + 1 %}
                             <button type="button"
                                     class="outline"
                                     data-action="toggle"
@@ -113,6 +147,7 @@
                                 Aktivieren
                             </button>
                             {% elif user.status == UserStatus.LOCKED and current_user.is_admin %}
+                            {% set actions.count = actions.count + 1 %}
                             <button type="button"
                                     class="outline"
                                     data-action="toggle"
@@ -120,6 +155,7 @@
                                 Entsperren
                             </button>
                             {% elif user.status == UserStatus.PENDING and current_user.is_admin %}
+                            {% set actions.count = actions.count + 1 %}
                             <button type="button"
                                     class="outline"
                                     data-action="toggle"
@@ -127,27 +163,38 @@
                                 Aktivieren
                             </button>
                             {% elif user.status == UserStatus.MANAGED and current_user.is_admin %}
+                            {% set actions.count = actions.count + 1 %}
                             <a href="{{ origin_url('users.edit', id=user.id, activate_login=1) }}"
                                role="button"
                                class="outline">
-                                Login aktivieren
+                                Login aktivieren<span class="visually-hidden">: {{ user.name }}</span>
                             </a>
                             {% endif %}
+                            {% if user.status == UserStatus.ACTIVE and (current_user.is_admin or user.role == UserRole.USER) %}
+                            {% set actions.count = actions.count + 1 %}
+                            <button type="button"
+                                    class="outline contrast"
+                                    data-action="confirm"
+                                    data-url="{{ origin_url('users.end_sessions', id=user.id) }}"
+                                    data-confirm="Alle Sitzungen von {{ user.name }} beenden? Die Person muss sich überall neu anmelden."
+                                    data-confirm-label="Beenden">
+                                Sitzungen beenden<span class="visually-hidden">: {{ user.name }}</span>
+                            </button>
+                            {% endif %}
                             {% if current_user.is_admin %}
+                            {% set actions.count = actions.count + 1 %}
                             <button type="button"
                                     class="outline contrast"
                                     data-action="delete"
                                     data-url="{{ origin_url('users.delete', id=user.id) }}"
-                                    data-confirm="Benutzer wirklich löschen? Alle Abwesenheiten werden ebenfalls gelöscht!">
+                                    data-confirm="Konto wirklich löschen? Alle Abwesenheiten werden ebenfalls gelöscht!">
                                 Löschen
                             </button>
-                            {% else %}
-                            <div></div>
                             {% endif %}
-                            {% else %}
-                            <div></div>
-                            <div></div>
                             {% endif %}
+                            {% for _ in range(4 - actions.count) %}
+                            <div></div>
+                            {% endfor %}
                         </div>
                     </td>
                 </tr>
@@ -167,9 +214,9 @@
 
     {% for p in range(1, pagination.total_pages + 1) %}
         {% if p == pagination.page %}
-        <span class="current">{{ p }}</span>
+        <span class="current" aria-current="page">{{ p }}</span>
         {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
-        <a href="{{ url_for('users.list_users', page=p, search=search, status=status_filter, role=role_filter) }}">{{ p }}</a>
+        <a href="{{ url_for('users.list_users', page=p, search=search, status=status_filter, role=role_filter) }}"><span class="visually-hidden">Seite </span>{{ p }}</a>
         {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
         <span>...</span>
         {% endif %}

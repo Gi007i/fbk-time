@@ -6,10 +6,17 @@ Provides business logic for user and system settings updates.
 from datetime import date
 from typing import Optional
 
-from flask_login import current_user
+from sqlalchemy import update
 
-from core.extensions import db
+from core.auth import current_user
+from core.db import db
 from core.settings_manager import settings_manager
+
+
+def get_date_format_examples() -> tuple[str, str]:
+    """Return the same example date as (german, iso) using the current year."""
+    year = date.today().year
+    return f'25.12.{year}', f'{year}-12-25'
 
 
 def get_date_format_choices() -> list[tuple[str, str]]:
@@ -18,10 +25,10 @@ def get_date_format_choices() -> list[tuple[str, str]]:
     Returns:
         List of (value, label) tuples for date format options.
     """
-    year = date.today().year
+    german, iso = get_date_format_examples()
     return [
-        ('DD.MM.YYYY', f'DD.MM.YYYY (z.B. 25.12.{year})'),
-        ('YYYY-MM-DD', f'YYYY-MM-DD (z.B. {year}-12-25)')
+        ('DD.MM.YYYY', f'DD.MM.YYYY (z.B. {german})'),
+        ('YYYY-MM-DD', f'YYYY-MM-DD (z.B. {iso})')
     ]
 
 
@@ -30,7 +37,9 @@ def update_user_settings(
     theme: str,
     date_format: str,
     pagination: int,
-    default_text_color: str
+    default_text_color: Optional[str],
+    start_page: str,
+    view_scope: str
 ) -> None:
     """Update current user's personal settings.
 
@@ -39,13 +48,19 @@ def update_user_settings(
         theme: Theme preference (light/dark/auto).
         date_format: Date format preference.
         pagination: Items per page (0 = show all).
-        default_text_color: Default text color for new categories.
+        default_text_color: Default category color, or None to leave it
+            unchanged (regular users do not manage categories).
+        start_page: Landing page after login.
+        view_scope: Default person scope for the overviews ('all' or 'mine').
     """
     current_user.holiday_region = holiday_region
     current_user.theme = theme
     current_user.date_format = date_format
     current_user.items_per_page = pagination
-    current_user.default_text_color = default_text_color.upper()
+    if default_text_color is not None:
+        current_user.default_text_color = default_text_color.upper()
+    current_user.start_page = start_page
+    current_user.view_scope = view_scope
 
     db.session.commit()
 
@@ -76,6 +91,8 @@ def update_system_settings(
     user_default_items_per_page: int,
     user_default_holiday_region: str,
     user_default_text_color: str,
+    user_default_start_page: str,
+    user_default_view_scope: str,
     limits_max_future_months: int,
     limits_bulk_delete_items: int,
     backup_scheduled_enabled: bool,
@@ -110,7 +127,10 @@ def update_system_settings(
         user_default_items_per_page: Default pagination for new users.
         user_default_holiday_region: Default holiday region for new users.
         user_default_text_color: Default text color for new users.
-        limits_max_future_months: Max days for absences and recurring series.
+        user_default_start_page: Default landing page for new users.
+        user_default_view_scope: Default overview scope for new users.
+        limits_max_future_months: Planning horizon in months from today for
+            absences and recurring series.
         limits_bulk_delete_items: Max items allowed per bulk delete call.
         backup_scheduled_enabled: Whether the scheduler creates automatic backups.
         backup_time: HH:MM (local time) at which the daily backup runs.
@@ -147,6 +167,8 @@ def update_system_settings(
     settings_manager.set('user_default_items_per_page', user_default_items_per_page)
     settings_manager.set('user_default_holiday_region', user_default_holiday_region)
     settings_manager.set('user_default_text_color', user_default_text_color.upper())
+    settings_manager.set('user_default_start_page', user_default_start_page)
+    settings_manager.set('user_default_view_scope', user_default_view_scope)
 
     settings_manager.set('limits_max_future_months', limits_max_future_months)
     settings_manager.set('limits_bulk_delete_items', limits_bulk_delete_items)
@@ -165,6 +187,9 @@ def _handle_operation_mode_change(new_mode: str) -> None:
     - Invalidates all USER sessions
     - Sets all active USER accounts to MANAGED
 
+    Leaves the commit to the caller's settings flush, so the account change
+    and the new mode persist together or not at all.
+
     Args:
         new_mode: New operation mode.
     """
@@ -180,28 +205,14 @@ def _handle_operation_mode_change(new_mode: str) -> None:
         settings_manager.set('user_session_version', current_version + 1)
 
         from modules.auth.models import User, UserRole, UserStatus
-        User.query.filter(
-            User.role == UserRole.USER,
-            User.status == UserStatus.ACTIVE
-        ).update({User.status: UserStatus.MANAGED})
-        db.session.commit()
-
-
-def set_user_theme(theme: str) -> Optional[str]:
-    """Set current user's theme.
-
-    Args:
-        theme: Theme value (light/dark/auto).
-
-    Returns:
-        Error message if invalid, None on success.
-    """
-    if theme not in ('light', 'dark', 'auto'):
-        return 'Invalid theme'
-
-    current_user.theme = theme
-    db.session.commit()
-    return None
+        db.session.execute(
+            update(User)
+            .where(
+                User.role == UserRole.USER,
+                User.status == UserStatus.ACTIVE
+            )
+            .values(status=UserStatus.MANAGED)
+        )
 
 
 def get_current_settings() -> dict:

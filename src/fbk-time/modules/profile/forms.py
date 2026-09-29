@@ -4,9 +4,10 @@ Provides forms for self-service profile edits (name, email).
 """
 
 from flask_wtf import FlaskForm
-from flask_login import current_user
 from wtforms import StringField
 from wtforms.validators import DataRequired, Length, Optional, ValidationError
+
+from core.auth import current_user
 
 from utils.validators import EmailFormat, SafeText
 from modules.user.services import email_exists

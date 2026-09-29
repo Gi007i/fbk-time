@@ -9,6 +9,7 @@ Usage:
     python cli/setup.py verify    # Verify installation
 """
 
+import errno
 import os
 import sys
 import secrets
@@ -69,8 +70,8 @@ class FBKSetup:
 
         self.logger.info(f"Application directory: {self.app_dir}")
 
-        if sys.version_info < (3, 8):
-            self.logger.error("Python 3.8+ required")
+        if sys.version_info < (3, 11, 4):
+            self.logger.error("Python 3.11.4+ required")
             return False
 
         if not self._create_directories():
@@ -156,7 +157,10 @@ class FBKSetup:
     def _is_writable(self, path):
         try:
             test_file = path / '.write_test'
-            test_file.touch()
+            # O_EXCL|O_NOFOLLOW: a planted symlink must not make a root run
+            # create or touch a file elsewhere.
+            fd = os.open(test_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            os.close(fd)
             test_file.unlink()
             return True
         except Exception:
@@ -199,25 +203,28 @@ class FBKSetup:
 # DO NOT COMMIT THIS FILE TO VERSION CONTROL
 
 SECRET_KEY={secret_key}
-FLASK_ENV=production
 """
 
         try:
-            with open(env_path, 'w') as f:
+            # Mode 0600 at creation keeps the SECRET_KEY out of umask reach;
+            # fchmod tightens an existing file (--force), where the mode is ignored.
+            # O_NOFOLLOW: a symlinked .env must not redirect a root run's write.
+            fd = os.open(env_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | os.O_NOFOLLOW, 0o600)
+            with os.fdopen(fd, 'w') as f:
+                os.fchmod(f.fileno(), 0o600)
                 f.write(env_content)
 
-            # Set secure permissions (Unix only)
-            try:
-                os.chmod(env_path, 0o600)
-                self.logger.success(f"Created {env_path} with secure permissions (600)")
-            except (OSError, AttributeError):
-                self.logger.success(f"Created {env_path}")
-                self.logger.warning("Set file permissions manually on this system")
-
+            self.logger.success(f"Created {env_path} with secure permissions (600)")
             return True
 
-        except Exception as e:
-            self.logger.error(f"Failed to create .env: {e}")
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                self.logger.error(
+                    f"Refusing to write .env: {env_path} is a symbolic link. "
+                    "Remove the link and run the command again."
+                )
+            else:
+                self.logger.error(f"Failed to create .env: {e}")
             return False
 
     def _display_next_steps(self):

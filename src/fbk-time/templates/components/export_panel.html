@@ -1,0 +1,15 @@
+{% macro render(button_id='export-btn', order=['pdf-list', 'pdf-matrix', 'ical']) %}
+{% set labels = {'pdf-list': 'PDF - Tabelle', 'pdf-matrix': 'PDF - Kalender-Matrix', 'ical': 'iCal-Datei'} %}
+<article>
+    <strong>Export-Format</strong>
+    <div class="grid">
+        <select id="export-type" aria-label="Export-Format">
+            {% for value in order %}
+            <option value="{{ value }}">{{ labels[value] }}</option>
+            {% endfor %}
+        </select>
+        <button type="button" id="{{ button_id }}" class="outline">Exportieren</button>
+        <div></div>
+    </div>
+</article>
+{% endmacro %}

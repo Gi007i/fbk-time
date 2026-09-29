@@ -5,8 +5,8 @@ This approach is CSP-compliant as it avoids inline styles.
 """
 
 from flask import Blueprint, make_response
-from flask_login import login_required
 
+from core.auth import login_required
 from .services import generate_category_css
 
 bp = Blueprint('css', __name__, url_prefix='/css')

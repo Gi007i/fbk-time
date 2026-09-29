@@ -1,0 +1,1 @@
+{% macro category_icon(icon, label='') %}{% set stem = icon|twemoji_stem %}{% if stem %}<span class="category-icon"><img src="{{ url_for('static', filename='img/twemoji/svg/' ~ stem ~ '.svg') }}" alt="{{ label }}"></span>{% endif %}{% endmacro %}

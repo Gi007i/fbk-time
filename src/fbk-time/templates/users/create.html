@@ -15,7 +15,7 @@
         {{ form.hidden_tag() }}
 
         <label for="username">
-            Benutzername <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Mit diesem Namen meldet sich die Person später an, {{ form.username | field_range }} Zeichen. Eindeutig im System – wählen Sie ihn sorgfältig.">&#x24D8;</span></span>
+            Benutzername <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Mit diesem Namen meldet sich die Person später an, {{ form.username | field_range }} Zeichen aus Kleinbuchstaben a–z, Ziffern, Punkt, Unterstrich und Bindestrich. Eindeutig im System – wählen Sie ihn sorgfältig.">&#x24D8;</span></span>
             {{ form.username(id="username", placeholder="z.B. mmustermann",
                **{'aria-invalid': 'true' if form.username.errors else none}) }}
             {% if form.username.errors %}
@@ -78,8 +78,8 @@
 </article>
 {% endblock %}
 
-{% if single_user_mode %}
 {% block scripts %}
+{% if single_user_mode %}
 <script src="{{ url_for('static', filename='js/user-form.js') }}"></script>
-{% endblock %}
 {% endif %}
+{% endblock %}

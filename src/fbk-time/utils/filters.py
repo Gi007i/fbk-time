@@ -11,8 +11,9 @@ is never propagated to the other views.
 from calendar import monthrange
 from datetime import date
 
-from flask import abort, request, url_for
+from flask import abort, redirect, request, url_for
 
+from core.auth import current_user
 from utils.request_validators import validate_int_list_param
 
 
@@ -43,7 +44,10 @@ def active_filter_args() -> dict:
     """Return the non-empty subject filters from the current request.
 
     Person and category values are carried forward as lists so url_for
-    re-expands them into repeated query parameters.
+    re-expands them into repeated query parameters. The ``filtered`` marker is
+    forwarded too so an intentional empty person filter ('show all') set by the
+    user survives paging and view switches instead of being re-seeded with the
+    personal default scope.
     """
     args = {}
     for key in ('user_id', 'category_id'):
@@ -53,7 +57,35 @@ def active_filter_args() -> dict:
     has_substitute = request.args.get('has_substitute')
     if has_substitute:
         args['has_substitute'] = has_substitute
+    if request.args.get('filtered'):
+        args['filtered'] = '1'
     return args
+
+
+def default_scope_redirect(endpoint: str):
+    """Seed a fresh overview entry with the user's preferred default scope.
+
+    Returns a redirect that pre-selects the current user when the account
+    prefers the personal scope and the request carries no filter state yet
+    (neither a subject filter nor the ``filtered`` marker), else None. A
+    deliberate 'show all' therefore survives instead of being re-seeded, and the
+    URL stays the single source that paging and view switches carry forward.
+    """
+    if current_user.view_scope != 'mine':
+        return None
+    if request.args.get('filtered'):
+        return None
+    if (request.args.getlist('user_id')
+            or request.args.getlist('category_id')
+            or request.args.get('has_substitute')):
+        return None
+
+    # Drop Flask's reserved url_for keys (_scheme, _external, _anchor, _method);
+    # forwarding them from the query string would raise inside url_for.
+    args = {k: v for k, v in request.args.to_dict(flat=False).items()
+            if not k.startswith('_')}
+    args['user_id'] = [str(current_user.id)]
+    return redirect(url_for(endpoint, **args))
 
 
 def filter_url(endpoint: str, **values) -> str:

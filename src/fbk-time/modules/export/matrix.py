@@ -1,28 +1,33 @@
-"""Team matrix PDF export service.
-
-Provides team overview matrix (users × days) as PDF.
-"""
+"""Team overview matrix (users × days) as PDF."""
 
 from calendar import monthrange
 from datetime import datetime, date, timedelta
+from functools import cache
 from io import BytesIO
+from pathlib import Path
 from typing import List, Optional
 from xml.sax.saxutils import escape
 
+from flask import current_app
 from reportlab.lib import colors
+from reportlab.lib.enums import TA_CENTER
 from reportlab.lib.pagesizes import A4, landscape
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak
+from reportlab.platypus import Image as PdfImage
+from sqlalchemy import select
 
+from core.db import db
 from core.timezone import get_app_timezone
 from modules.auth.models import User, UserRole, UserStatus
+from modules.category.helpers import twemoji_stem
 from modules.category.models import Category
 from modules.holidays.services import get_holidays_for_month
 from modules.absence.recurrence import recurrence_service
 from modules.absence.services import filter_occurrences
 from utils.helpers import format_date_for_user
-from .pdf import HalfDayCell
+from .pdf import HalfDayCell, ICON_MAX_SIDE
 from .services import build_absence_query
 
 
@@ -48,6 +53,26 @@ def _hex_to_color(hex_str: str) -> colors.Color:
         int(hex_value[2:4], 16) / 255.0,
         int(hex_value[4:6], 16) / 255.0
     )
+
+
+@cache
+def _icon_png_path(icon: Optional[str]) -> Optional[str]:
+    """Resolve a category icon to its bundled Twemoji PNG path.
+
+    Returns None when the icon has no bundled asset; those cells render
+    without artwork, mirroring the web views.
+
+    Args:
+        icon: Emoji string as stored on the category.
+
+    Returns:
+        Absolute path to the PNG asset, or None.
+    """
+    stem = twemoji_stem(icon)
+    if not stem:
+        return None
+    path = Path(current_app.static_folder) / 'img' / 'twemoji' / '72' / f'{stem}.png'
+    return str(path) if path.is_file() else None
 
 
 def _split_into_months(range_start, range_end):
@@ -132,15 +157,21 @@ def _build_matrix_page(
         for day_idx, current_date in enumerate(days_list):
             occ = matrix.get((user.id, current_date))
 
-            if occ:
-                category = occ['category']
-                if occ.get('is_combined_half_day'):
+            category = occ['category'] if occ else None
+
+            # An occurrence can lose its effective category when a series
+            # override outlives the category it pointed at. The cell still has
+            # to be emitted, otherwise the whole row shifts by one day.
+            if occ and category is not None:
+                if occ.get('is_combined_half_day') and occ.get('category_afternoon'):
                     color_m = _hex_to_color(category.color)
                     cat_a = occ['category_afternoon']
                     color_a = _hex_to_color(cat_a.color)
                     half_day_cell = HalfDayCell(
                         day_width, cell_height, color_m,
-                        color_afternoon=color_a
+                        color_afternoon=color_a,
+                        icon_path=_icon_png_path(category.icon),
+                        icon_path_afternoon=_icon_png_path(cat_a.icon)
                     )
                     row.append(half_day_cell)
                     row_idx = len(data)
@@ -149,13 +180,19 @@ def _build_matrix_page(
                     cell_color = _hex_to_color(category.color)
                     half_day_cell = HalfDayCell(
                         day_width, cell_height, cell_color,
-                        is_morning=occ['is_half_day_morning']
+                        is_morning=occ['is_half_day_morning'],
+                        icon_path=_icon_png_path(category.icon)
                     )
                     row.append(half_day_cell)
                     row_idx = len(data)
                     half_day_cells.add((row_idx, day_idx + 1))
                 else:
-                    row.append('•')
+                    icon_path = _icon_png_path(category.icon)
+                    if icon_path:
+                        icon_side = min(day_width * 0.75, ICON_MAX_SIDE)
+                        row.append(PdfImage(icon_path, width=icon_side, height=icon_side))
+                    else:
+                        row.append('•')
             else:
                 row.append('')
 
@@ -164,7 +201,7 @@ def _build_matrix_page(
     table = Table(data, colWidths=col_widths, repeatRows=1)
 
     style_commands = [
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82F6')),
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
         ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
         ('FONTSIZE', (0, 0), (-1, 0), 9),
@@ -191,9 +228,8 @@ def _build_matrix_page(
                 ('TEXTCOLOR', (col, 0), (col, 0), colors.HexColor('#92400E'))
             )
 
-    # Half-day cells must override the alternating row background so that
-    # the unfilled half of the HalfDayCell does not inherit the zebra
-    # stripe color. Force an explicit white background behind the flowable.
+    # Explicit white keeps the zebra stripe out of the unfilled half of a
+    # HalfDayCell.
     for (row_idx, col) in half_day_cells:
         style_commands.append(
             ('BACKGROUND', (col, row_idx), (col, row_idx), colors.white)
@@ -219,41 +255,98 @@ def _build_matrix_page(
     elements.append(table)
 
 
-def _build_legend(elements, styles):
+def _legend_categories(occurrences):
+    """Collect the categories to explain in the legend.
+
+    Inactive categories still appear in the matrix through existing
+    absences, so every category that occurs is listed next to the active ones.
+
+    Args:
+        occurrences: Rendered occurrence dicts.
+
+    Returns:
+        Categories without duplicates, ordered by sort order and name.
+    """
+    by_id = {
+        cat.id: cat
+        for cat in db.session.scalars(select(Category).filter_by(active=True)).all()
+    }
+    for occ in occurrences:
+        if occ['category'] is not None:
+            by_id[occ['category'].id] = occ['category']
+    return sorted(by_id.values(), key=lambda cat: (cat.sort_order, cat.name))
+
+
+def _build_legend(elements, styles, available_width, categories):
     """Build category legend and presence hint.
 
     Args:
         elements: List to append platypus elements to.
         styles: Base stylesheet.
+        available_width: Frame width; the legend wraps into as many rows as
+            needed to stay within it.
+        categories: Categories to list, in display order.
     """
     elements.append(Spacer(1, 5 * mm))
-    categories = Category.query.filter_by(active=True).order_by(Category.sort_order).all()
 
-    legend_data = [['Legende:']]
+    label_width = 25 * mm
+    entry_width = 35 * mm
+    per_row = max(1, int((available_width - label_width) // entry_width))
+
+    # The table TEXTCOLOR command does not reach into Paragraphs, hence the
+    # per-entry textColor style.
+    def entry_style(name, text_color):
+        return ParagraphStyle(
+            name,
+            parent=styles['Normal'],
+            fontSize=8,
+            alignment=TA_CENTER,
+            textColor=text_color
+        )
+
+    entries = []
     for cat in categories:
-        presence = '[A]' if cat.is_present else '[X]'
-        legend_data[0].append(f'{cat.name} {presence}')
+        presence = '(A)' if cat.is_present else '(X)'
+        icon_path = _icon_png_path(cat.icon)
+        icon_markup = (
+            f'<img src="{icon_path}" width="8" height="8" valign="-1"/> '
+            if icon_path else ''
+        )
+        entries.append((
+            Paragraph(
+                f'{icon_markup}{escape(cat.name)} {presence}',
+                entry_style(f'LegendCategory{cat.id}', _hex_to_color(cat.text_color))
+            ),
+            _hex_to_color(cat.color)
+        ))
+    entries.append((
+        Paragraph('Feiertag', entry_style('LegendHoliday', colors.black)),
+        colors.HexColor('#FEF3C7')
+    ))
 
-    legend_data[0].append('Feiertag')
+    label_style = ParagraphStyle(
+        'LegendLabel',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8
+    )
 
-    legend_table = Table(legend_data, colWidths=[25 * mm] + [35 * mm] * (len(categories) + 1))
-
+    legend_data = []
     legend_styles = [
-        ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
         ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
         ('TOPPADDING', (0, 0), (-1, -1), 4),
     ]
+    for row_idx, offset in enumerate(range(0, len(entries), per_row)):
+        chunk = entries[offset:offset + per_row]
+        row = [Paragraph('Legende:', label_style) if row_idx == 0 else '']
+        for col, (paragraph, background) in enumerate(chunk, start=1):
+            row.append(paragraph)
+            legend_styles.append(('BACKGROUND', (col, row_idx), (col, row_idx), background))
+        row.extend([''] * (per_row - len(chunk)))
+        legend_data.append(row)
 
-    for idx, cat in enumerate(categories, start=1):
-        legend_styles.append(('BACKGROUND', (idx, 0), (idx, 0), _hex_to_color(cat.color)))
-        legend_styles.append(('TEXTCOLOR', (idx, 0), (idx, 0), _hex_to_color(cat.text_color)))
-
-    holiday_col = len(categories) + 1
-    legend_styles.append(('BACKGROUND', (holiday_col, 0), (holiday_col, 0), colors.HexColor('#FEF3C7')))
-
+    legend_table = Table(legend_data, colWidths=[label_width] + [entry_width] * per_row)
     legend_table.setStyle(TableStyle(legend_styles))
     elements.append(legend_table)
 
@@ -264,7 +357,7 @@ def _build_legend(elements, styles):
         textColor=colors.grey
     )
     elements.append(Spacer(1, 2 * mm))
-    elements.append(Paragraph('[A] = Anwesend, [X] = Abwesend', presence_hint_style))
+    elements.append(Paragraph('(A) = Anwesend, (X) = Abwesend', presence_hint_style))
 
 
 def export_team_matrix_pdf(
@@ -278,8 +371,7 @@ def export_team_matrix_pdf(
 ) -> BytesIO:
     """Export team overview matrix (users × days) as PDF.
 
-    For ranges spanning multiple months, each month gets its own page.
-    For ranges within a single month, a single page is generated.
+    A range spanning several months gets one page per month.
 
     Args:
         week_start: Start date of the range.
@@ -322,13 +414,13 @@ def export_team_matrix_pdf(
     elements = []
 
     if users is None:
-        user_query = User.query.filter(
+        user_query = select(User).where(
             User.status.in_([UserStatus.ACTIVE, UserStatus.MANAGED]),
             User.role == UserRole.USER
         )
         if user_ids:
-            user_query = user_query.filter(User.id.in_(user_ids))
-        users = user_query.order_by(User.name).all()
+            user_query = user_query.where(User.id.in_(user_ids))
+        users = db.session.scalars(user_query.order_by(User.name)).all()
 
     if not users:
         elements.append(Paragraph('Keine Mitarbeitenden gefunden.', styles['Normal']))
@@ -346,14 +438,14 @@ def export_team_matrix_pdf(
         else:
             current_month_check = date(current_month_check.year, current_month_check.month + 1, 1)
 
-    # Restrict to the explicit user list so per-user matrix exports
-    # also include Admin/Manager rows that the default USER role filter
-    # would otherwise drop, and to avoid loading unrelated absences.
+    # Restrict to the rendered rows to avoid loading unrelated absences.
     user_ids = [u.id for u in users]
-    absences = build_absence_query(
-        from_date=week_start,
-        to_date=week_end,
-        user_ids=user_ids
+    absences = db.session.scalars(
+        build_absence_query(
+            from_date=week_start,
+            to_date=week_end,
+            user_ids=user_ids
+        )
     ).all()
 
     occurrences = recurrence_service.get_all_occurrences_for_range(
@@ -389,6 +481,7 @@ def export_team_matrix_pdf(
                 continue
         matrix[key] = occ
 
+    legend_categories = _legend_categories(occurrences)
     month_chunks = _split_into_months(week_start, week_end)
     use_monthly_pages = len(month_chunks) > 1
 
@@ -401,14 +494,14 @@ def export_team_matrix_pdf(
                 title_style, subtitle_style,
                 is_first_page=(chunk_idx == 0)
             )
-            _build_legend(elements, styles)
+            _build_legend(elements, styles, doc.width, legend_categories)
     else:
         _build_matrix_page(
             elements, users, week_start, week_end, holidays, matrix,
             title_style, subtitle_style,
             is_first_page=True
         )
-        _build_legend(elements, styles)
+        _build_legend(elements, styles, doc.width, legend_categories)
 
     present_count = sum(1 for occ in occurrences if occ['category'] and occ['category'].is_present)
     absent_count = len(occurrences) - present_count

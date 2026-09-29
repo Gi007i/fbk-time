@@ -132,6 +132,11 @@ def export_absences_ical(
 
         cal.add_component(event)
 
+    # Timed events carry TZID=<zone>; RFC 5545 §3.6 requires the matching
+    # VTIMEZONE in the same calendar object, otherwise a client has to guess
+    # the offset. Emits nothing when every event is all-day.
+    cal.add_missing_timezones()
+
     buffer = BytesIO()
     buffer.write(cal.to_ical())
     buffer.seek(0)

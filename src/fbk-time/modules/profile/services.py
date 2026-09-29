@@ -5,10 +5,10 @@ Provides business logic for user profile data retrieval and self-service updates
 
 from typing import Optional
 
-from flask_login import current_user
-
-from core.extensions import db
+from core.auth import current_user
+from core.db import db
 from modules.auth.models import User
+from utils.validators import normalize_email
 
 
 def get_profile_data() -> dict:
@@ -34,6 +34,19 @@ def get_profile_data() -> dict:
     }
 
 
+def changes_email(user: User, email: Optional[str]) -> bool:
+    """Report whether a submitted email differs from the stored one.
+
+    Args:
+        user: User whose profile is edited.
+        email: Submitted email address (None or empty = no email).
+
+    Returns:
+        True if saving would change the email address.
+    """
+    return normalize_email(email) != user.email
+
+
 def update_profile(user: User, name: str, email: Optional[str]) -> None:
     """Update the display name and email of a user.
 
@@ -43,6 +56,6 @@ def update_profile(user: User, name: str, email: Optional[str]) -> None:
         email: New email address (None or empty = clear email).
     """
     user.name = name.strip()
-    user.email = email.strip().lower() if email else None
+    user.email = normalize_email(email)
     db.session.commit()
 

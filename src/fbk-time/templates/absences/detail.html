@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/category_icon.html" import category_icon %}
 
 {% block title %}Abwesenheit Details - FBK-Time{% endblock %}
 
@@ -19,7 +20,7 @@
         <dd>
             {% if absence.category %}
             <span class="category-badge category-{{ absence.category.id }}">
-                {% if absence.category.icon %}<span class="category-icon">{{ absence.category.icon }}</span> {% endif %}{{ absence.category.name }}
+                {% if absence.category.icon %}{{ category_icon(absence.category.icon) }} {% endif %}{{ absence.category.name }}
             </span>
             {% else %}
             -
@@ -62,7 +63,7 @@
 
         {% if absence.is_recurring and recurrence_info %}
         <dt><strong>Serie</strong></dt>
-        <dd>🔁 {{ recurrence_info.description }}</dd>
+        <dd><span aria-hidden="true">🔁</span> {{ recurrence_info.description }}</dd>
 
         <dt><strong>Termine</strong></dt>
         <dd>
@@ -84,9 +85,9 @@
             <table class="striped">
                 <thead>
                     <tr>
-                        <th>Datum</th>
-                        <th>Kategorie</th>
-                        <th>Zeit</th>
+                        <th scope="col">Datum</th>
+                        <th scope="col">Kategorie</th>
+                        <th scope="col">Zeit</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -99,11 +100,11 @@
                         </td>
                         <td>
                             <span class="category-badge category-{{ occ.category.id }}">
-                                {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
+                                {% if occ.category.icon %}{{ category_icon(occ.category.icon) }} {% endif %}{{ occ.category.name }}
                             </span>
                         </td>
                         <td>
-                            {% if occ.is_half_day_morning %}Vormittag{% elif occ.is_half_day_afternoon %}Nachmittag{% else %}Ganztags{% endif %}
+                            {% if occ.is_half_day_morning %}Vormittag{% elif occ.is_half_day_afternoon %}Nachmittag{% elif occ.start_time and occ.end_time %}{{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }}{% else %}Ganztags{% endif %}
                         </td>
                     </tr>
                     {% endfor %}
@@ -120,14 +121,17 @@
             <table class="striped">
                 <thead>
                     <tr>
-                        <th>Datum</th>
-                        <th></th>
+                        <th scope="col">Datum</th>
+                        {% if can_modify %}
+                        <th scope="col"><span class="visually-hidden">Aktion</span></th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for occ in deleted_occurrences %}
                     <tr>
                         <td>{{ occ.date|format_date }}</td>
+                        {% if can_modify %}
                         <td>
                             <button type="button"
                                     class="outline secondary"
@@ -138,6 +142,7 @@
                                 Wiederherstellen
                             </button>
                         </td>
+                        {% endif %}
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -146,6 +151,7 @@
     </details>
     {% endif %}
 
+    {% if can_modify %}
     <hr>
 
     <div class="grid">
@@ -161,6 +167,7 @@
         </button>
         <div></div>
     </div>
+    {% endif %}
 </article>
 
 {% if history %}
@@ -169,7 +176,7 @@
     <ul>
         {% for entry in history %}
         <li>
-            <small><u>{{ entry.changed_at|format_date(include_time=True) }}</u>{% if current_user.is_admin and entry.changed_by %} ({{ entry.changed_by.name }}){% endif %}</small><br>
+            <small><u>{{ entry.changed_at|format_date(include_time=True) }}</u>{% if (current_user.is_admin or absence.user_id == current_user.id or entry.changed_by_id == current_user.id) and entry.changed_by %} ({{ entry.changed_by.name }}){% endif %}</small><br>
             <small>{{ entry.field_name }}: {% if entry.old_value %}{{ entry.old_value }} → {% endif %}{{ entry.new_value or '-' }}</small>
         </li>
         {% endfor %}

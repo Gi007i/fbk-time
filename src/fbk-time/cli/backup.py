@@ -18,24 +18,28 @@ Usage:
     python cli/backup.py verify --all
     python cli/backup.py delete <ID> [--yes]
     python cli/backup.py cleanup
-    python cli/backup.py restore <ID> [--yes] [--no-pre-restore]
+    python cli/backup.py restore <ID> [--yes] [--no-pre-restore] [--allow-version-mismatch]
 
-Restore accepts only registered backup IDs. To replay an external archive,
-copy it into BACKUP_DIR first — the next backup directory sync registers
-it (provided its manifest is valid) and assigns an ID.
-
-The service must be stopped before running restore. The tool attempts to stop
-the systemd service automatically; after restore the admin must restart it.
+Restore accepts only registered backup IDs; an external archive is registered
+by the next backup directory sync once copied into BACKUP_DIR. An archive from
+another application version is refused unless --allow-version-mismatch is set,
+since its schema and settings.json belong to that version. Restore stops the
+systemd service; the admin restarts it afterwards.
 """
 
 import argparse
 import subprocess
 import sys
+from datetime import timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from sqlalchemy import select
+
 from app import create_app
+from core.timezone import get_app_timezone
+from core.version import APP_VERSION
 
 
 class _Out:
@@ -117,33 +121,46 @@ def _stop_service() -> bool:
         return False
 
 
+def _format_local(dt) -> str:
+    """Format a stored UTC timestamp in the configured app timezone.
+
+    The CLI must match the web UI, which renders these timestamps in the
+    admin-selected timezone rather than raw UTC.
+    """
+    if not dt:
+        return '-'
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(get_app_timezone()).strftime('%d.%m.%Y %H:%M')
+
+
 def cmd_list(args, app) -> int:
     """List all backup records."""
     from modules.backup.models import BackupRecord
-    from core.extensions import db
+    from core.db import db
 
     with app.app_context():
         records = db.session.execute(
-            db.select(BackupRecord).order_by(BackupRecord.created_at.desc())
+            select(BackupRecord).order_by(BackupRecord.created_at.desc())
         ).scalars().all()
 
-    if not records:
-        _out.info('Keine Backups vorhanden.')
+        if not records:
+            _out.info('Keine Backups vorhanden.')
+            return 0
+
+        header = f'  {"ID":<5} {"Erstellt":<20} {"Typ":<12} {"Status":<12} {"Größe":>10}  Beschreibung'
+        print(header)
+        print('  ' + '-' * 78)
+
+        for r in records:
+            ts = _format_local(r.created_at)
+            size = f'{r.file_size_mb} MB'
+            desc = (r.description or '')[:30]
+            exists = '' if r.archive_exists else ' [fehlt]'
+            print(f'  {r.id:<5} {ts:<20} {r.backup_type.label:<12} {r.status.label:<12} {size:>10}  {desc}{exists}')
+
+        print(f'\n  Gesamt: {len(records)} Backup(s)')
         return 0
-
-    header = f'  {"ID":<5} {"Erstellt":<20} {"Typ":<12} {"Status":<12} {"Größe":>10}  Beschreibung'
-    print(header)
-    print('  ' + '-' * 78)
-
-    for r in records:
-        ts = r.created_at.strftime('%d.%m.%Y %H:%M') if r.created_at else '-'
-        size = f'{r.file_size_mb} MB'
-        desc = (r.description or '')[:30]
-        exists = '' if r.archive_exists else ' [fehlt]'
-        print(f'  {r.id:<5} {ts:<20} {r.backup_type.label:<12} {r.status.label:<12} {size:>10}  {desc}{exists}')
-
-    print(f'\n  Gesamt: {len(records)} Backup(s)')
-    return 0
 
 
 def cmd_create(args, app) -> int:
@@ -198,7 +215,7 @@ def cmd_delete(args, app) -> int:
     """Delete a backup record and its archive file."""
     with app.app_context():
         from modules.backup.models import BackupRecord
-        from core.extensions import db
+        from core.db import db
         from core.backup import backup_manager
 
         record = db.session.get(BackupRecord, args.id)
@@ -206,7 +223,7 @@ def cmd_delete(args, app) -> int:
             _out.err(f'Backup #{args.id} nicht gefunden.')
             return 1
 
-        ts = record.created_at.strftime('%d.%m.%Y %H:%M') if record.created_at else '-'
+        ts = _format_local(record.created_at)
         _out.row('Backup-ID:', str(record.id))
         _out.row('Erstellt:', ts)
         _out.row('Typ:', record.backup_type.label)
@@ -265,15 +282,15 @@ def cmd_restore(args, app) -> int:
 
     with app.app_context():
         from modules.backup.models import BackupRecord
-        from core.extensions import db
-        from core.backup import backup_manager
+        from core.db import db
+        from core.backup import backup_manager, version_mismatch_message
 
         record = db.session.get(BackupRecord, args.id)
         if not record:
             _out.err(f'Backup #{args.id} nicht gefunden.')
             return 1
 
-        archive_path = backup_manager._safe_archive_path(record.file_path)
+        archive_path = backup_manager.safe_archive_path(record.file_path)
         if archive_path is None:
             _out.err(
                 'Archivpfad liegt außerhalb des Sicherungs-Verzeichnisses '
@@ -284,7 +301,7 @@ def cmd_restore(args, app) -> int:
             _out.err(f'Archivdatei nicht gefunden: {archive_path}')
             return 1
 
-        ts = record.created_at.strftime('%d.%m.%Y %H:%M') if record.created_at else '-'
+        ts = _format_local(record.created_at)
         _out.row('Backup-ID:', str(record.id))
         _out.row('Erstellt:', ts)
         _out.row('Typ:', record.backup_type.label)
@@ -293,6 +310,29 @@ def cmd_restore(args, app) -> int:
         _out.row('Archiv:', str(archive_path))
         if record.description:
             _out.row('Beschreibung:', record.description)
+        print()
+
+        # The manifest only proves the archive is consistent with itself. The
+        # record checksum is the independent anchor that detects a swapped
+        # archive, so it has to hold before anything is written back.
+        integrity_ok, integrity_error = backup_manager.verify_backup(record.id)
+        if not integrity_ok:
+            _out.err(f'Integritätsprüfung fehlgeschlagen: {integrity_error}')
+            _out.info('Wiederherstellung abgebrochen, es wurde nichts verändert.')
+            return 1
+        _out.ok('Integritätsprüfung bestanden.')
+
+        archive_version = backup_manager.archive_app_version(archive_path)
+        if archive_version != APP_VERSION:
+            if not args.allow_version_mismatch:
+                _out.err(version_mismatch_message(archive_version))
+                _out.info('Wiederherstellung abgebrochen, es wurde nichts verändert.')
+                return 1
+            _out.warn(
+                f'Versionsprüfung übergangen: Sicherung aus Version {archive_version}, '
+                f'installiert ist Version {APP_VERSION}. Datenbankschema und '
+                f'settings.json passen womöglich nicht zur installierten Version.'
+            )
         print()
 
         try:
@@ -322,7 +362,8 @@ def cmd_restore(args, app) -> int:
 
         ok, message = backup_manager.restore_from_archive(
             archive_path=archive_path,
-            pre_restore=not args.no_pre_restore
+            pre_restore=not args.no_pre_restore,
+            allow_version_mismatch=args.allow_version_mismatch
         )
 
         if ok:
@@ -355,6 +396,7 @@ Examples:
     python cli/backup.py cleanup
     python cli/backup.py restore 5
     python cli/backup.py restore 5 --yes --no-pre-restore
+    python cli/backup.py restore 5 --allow-version-mismatch
         """
     )
 
@@ -387,6 +429,9 @@ Examples:
                            help='Ohne Bestätigung fortfahren')
     p_restore.add_argument('--no-pre-restore', action='store_true',
                            help='Keinen Snapshot vor Wiederherstellung erstellen')
+    p_restore.add_argument('--allow-version-mismatch', action='store_true',
+                           help='Sicherung einer anderen Anwendungsversion trotzdem '
+                                'wiederherstellen')
 
     return parser
 

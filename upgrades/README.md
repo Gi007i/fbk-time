@@ -16,7 +16,10 @@ upgrades/
 ├── v1.4.0/
 │   ├── upgrade.py
 │   └── README.md
-└── v1.6.0/
+├── v1.6.0/
+│   ├── upgrade.py
+│   └── README.md
+└── v2.0.0/
     ├── upgrade.py
     └── README.md
 ```

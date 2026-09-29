@@ -1,7 +1,4 @@
-"""PDF export service.
-
-Provides PDF export functionality for absences and reports.
-"""
+"""PDF export of absence lists and the half-day cell flowable."""
 
 from datetime import datetime, date
 from io import BytesIO
@@ -18,31 +15,55 @@ from core.timezone import get_app_timezone
 from utils.helpers import format_date_for_user
 
 
+# Cap category icons at roughly a 9pt text line so matrix rows keep a
+# uniform height and full-day and half-day icons render the same size.
+ICON_MAX_SIDE = 11
+
+
 class HalfDayCell(Flowable):
     """Custom Flowable for half-day visualization in PDF table cells."""
 
-    def __init__(self, width, height, color, is_morning=True, color_afternoon=None):
+    def __init__(self, width, height, color, is_morning=True, color_afternoon=None,
+                 icon_path=None, icon_path_afternoon=None):
         Flowable.__init__(self)
         self.width = width
         self.height = height
         self.color = color
         self.is_morning = is_morning
         self.color_afternoon = color_afternoon
+        self.icon_path = icon_path
+        self.icon_path_afternoon = icon_path_afternoon
+
+    def _draw_icon(self, icon_path, center_x):
+        """Draw a category icon centered on center_x within the cell height."""
+        side = min(min(self.width / 2, self.height) * 0.75, ICON_MAX_SIDE)
+        self.canv.drawImage(
+            icon_path, center_x - side / 2, (self.height - side) / 2,
+            side, side, mask='auto'
+        )
 
     def draw(self):
-        """Draw a half-colored rectangle (left for morning, right for afternoon)."""
+        """Draw half-colored rectangles (left morning, right afternoon) with icons."""
         self.canv.saveState()
         if self.color_afternoon:
             self.canv.setFillColor(self.color)
             self.canv.rect(0, 0, self.width / 2, self.height, fill=1, stroke=0)
             self.canv.setFillColor(self.color_afternoon)
             self.canv.rect(self.width / 2, 0, self.width / 2, self.height, fill=1, stroke=0)
+            if self.icon_path:
+                self._draw_icon(self.icon_path, self.width * 0.25)
+            if self.icon_path_afternoon:
+                self._draw_icon(self.icon_path_afternoon, self.width * 0.75)
         else:
             self.canv.setFillColor(self.color)
             if self.is_morning:
                 self.canv.rect(0, 0, self.width / 2, self.height, fill=1, stroke=0)
+                if self.icon_path:
+                    self._draw_icon(self.icon_path, self.width * 0.25)
             else:
                 self.canv.rect(self.width / 2, 0, self.width / 2, self.height, fill=1, stroke=0)
+                if self.icon_path:
+                    self._draw_icon(self.icon_path, self.width * 0.75)
         self.canv.restoreState()
 
 
@@ -57,9 +78,7 @@ def export_absences_pdf(
 ) -> BytesIO:
     """Export pre-expanded occurrences to PDF document.
 
-    The caller is responsible for loading absences, expanding them with
-    recurrence_service, and applying any category/substitute filters.
-    This function only renders.
+    Only renders; loading, expanding and filtering are left to the caller.
 
     Args:
         occurrences: Pre-expanded, pre-filtered occurrence dicts.
@@ -142,7 +161,7 @@ def export_absences_pdf(
         )
 
         table_style_commands = [
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#3B82F6')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2563EB')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 9),
@@ -237,44 +256,3 @@ def export_absences_pdf(
     doc.build(elements)
     buffer.seek(0)
     return buffer
-
-
-def export_user_absences_pdf(
-    user,
-    year: Optional[int] = None,
-    date_format: str = 'DD.MM.YYYY'
-) -> BytesIO:
-    """Export all occurrences for a specific user in a given year.
-
-    Args:
-        user: User to export absences for.
-        year: Optional year filter. Defaults to current year.
-        date_format: Date display format ('DD.MM.YYYY' or 'YYYY-MM-DD').
-
-    Returns:
-        BytesIO buffer containing PDF data.
-    """
-    from .services import build_export_occurrences
-
-    if year is None:
-        year = date.today().year
-
-    date_from = date(year, 1, 1)
-    date_to = date(year, 12, 31)
-
-    occurrences = build_export_occurrences(
-        from_date=date_from,
-        to_date=date_to,
-        user_ids=[user.id]
-    )
-
-    return export_absences_pdf(
-        occurrences,
-        title=f'Abwesenheiten {user.name} - {year}',
-        include_notes=True,
-        date_from=date_from,
-        date_to=date_to,
-        date_format=date_format
-    )
-
-

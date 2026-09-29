@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/category_icon.html" import category_icon %}
 
 {% block title %}Dashboard - FBK-Time{% endblock %}
 
@@ -14,8 +15,8 @@
     {% if today_absent or today_present %}
     <div class="grid dashboard-filter">
         <div class="search-wrapper">
-            <input type="search" id="today-search" placeholder="Name suchen…" aria-label="Mitarbeitende suchen">
-            <span class="search-clear" aria-label="Suche löschen">&#x2715;</span>
+            <input type="search" id="today-search" placeholder="Name suchen…" aria-label="Name suchen">
+            <button type="button" class="search-clear" aria-label="Suche löschen">&#x2715;</button>
         </div>
         <select id="today-category" aria-label="Nach Kategorie filtern">
             <option value="">Alle Kategorien</option>
@@ -26,29 +27,34 @@
     </div>
     {% endif %}
 
+    <p id="today-filter-status" class="visually-hidden" role="status"></p>
+
     <p><strong class="text-negative">Abwesend (<span id="today-absent-count">{{ today_absent|length }}</span>)</strong></p>
     {% if today_absent %}
     <ul id="today-absent-list">
         {% for occ in today_absent %}
-        <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
-            <span class="category-badge category-{{ occ.category.id }}">
-                {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
-            </span>
-            <strong>{{ occ.user.name }}</strong>
-            {% if occ.is_half_day_morning %}
-            <small>(Vormittag)</small>
-            {% elif occ.is_half_day_afternoon %}
-            <small>(Nachmittag)</small>
-            {% elif occ.start_time and occ.end_time %}
-            <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
-            {% endif %}
-            {% if occ.substitute %}
-            <small>Vertretung: {{ occ.substitute.name }}</small>
-            {% endif %}
+        {% set detail_url = origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) if occ.is_recurring else origin_url('absences.detail', id=occ.absence.id) %}
+        <li data-href="{{ detail_url }}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
+            <a class="row-link row-link-fill" href="{{ detail_url }}">
+                <span class="category-badge category-{{ occ.category.id }}">
+                    {% if occ.category.icon %}{{ category_icon(occ.category.icon) }} {% endif %}{{ occ.category.name }}
+                </span>
+                <strong>{{ occ.user.name }}</strong>
+                {% if occ.is_half_day_morning %}
+                <small>(Vormittag)</small>
+                {% elif occ.is_half_day_afternoon %}
+                <small>(Nachmittag)</small>
+                {% elif occ.start_time and occ.end_time %}
+                <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
+                {% endif %}
+                {% if occ.substitute %}
+                <small>Vertretung: {{ occ.substitute.name }}</small>
+                {% endif %}
+            </a>
         </li>
         {% endfor %}
     </ul>
-    <p id="today-absent-empty" class="hidden"><small>Keine Treffer</small></p>
+    <p id="today-absent-empty" class="hidden" role="status"><small>Keine Treffer</small></p>
     {% else %}
     <p><small>Niemand abwesend</small></p>
     {% endif %}
@@ -57,22 +63,25 @@
     {% if today_present %}
     <ul id="today-present-list">
         {% for occ in today_present %}
-        <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
-            <span class="category-badge category-{{ occ.category.id }}">
-                {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
-            </span>
-            <strong>{{ occ.user.name }}</strong>
-            {% if occ.is_half_day_morning %}
-            <small>(Vormittag)</small>
-            {% elif occ.is_half_day_afternoon %}
-            <small>(Nachmittag)</small>
-            {% elif occ.start_time and occ.end_time %}
-            <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
-            {% endif %}
+        {% set detail_url = origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) if occ.is_recurring else origin_url('absences.detail', id=occ.absence.id) %}
+        <li data-href="{{ detail_url }}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
+            <a class="row-link row-link-fill" href="{{ detail_url }}">
+                <span class="category-badge category-{{ occ.category.id }}">
+                    {% if occ.category.icon %}{{ category_icon(occ.category.icon) }} {% endif %}{{ occ.category.name }}
+                </span>
+                <strong>{{ occ.user.name }}</strong>
+                {% if occ.is_half_day_morning %}
+                <small>(Vormittag)</small>
+                {% elif occ.is_half_day_afternoon %}
+                <small>(Nachmittag)</small>
+                {% elif occ.start_time and occ.end_time %}
+                <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
+                {% endif %}
+            </a>
         </li>
         {% endfor %}
     </ul>
-    <p id="today-present-empty" class="hidden"><small>Keine Treffer</small></p>
+    <p id="today-present-empty" class="hidden" role="status"><small>Keine Treffer</small></p>
     {% else %}
     <p><small>Niemand anwesend</small></p>
     {% endif %}
@@ -85,8 +94,8 @@
     {% if week_days %}
     <div class="grid dashboard-filter">
         <div class="search-wrapper">
-            <input type="search" id="week-search" placeholder="Name suchen…" aria-label="Mitarbeitende suchen">
-            <span class="search-clear" aria-label="Suche löschen">&#x2715;</span>
+            <input type="search" id="week-search" placeholder="Name suchen…" aria-label="Name suchen">
+            <button type="button" class="search-clear" aria-label="Suche löschen">&#x2715;</button>
         </div>
         <select id="week-day" aria-label="Nach Wochentag filtern">
             <option value="">Alle Tage</option>
@@ -102,6 +111,8 @@
         </select>
     </div>
 
+    <p id="week-filter-status" class="visually-hidden" role="status"></p>
+
     {% for day in week_days %}
     <article class="week-day-group" data-date="{{ day.date.isoformat() }}">
         <strong>{{ weekday_names[day.weekday] }}, {{ day.date|format_date(short=True) }}</strong> <small>(<span class="week-group-count">{{ day.entries|length }}</span>)</small>
@@ -110,21 +121,24 @@
             <p><strong class="text-negative">Abwesend (<span class="status-count">{{ day.absent|length }}</span>)</strong></p>
             <ul>
                 {% for occ in day.absent %}
-                <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
-                    <span class="category-badge category-{{ occ.category.id }}">
-                        {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
-                    </span>
-                    <strong>{{ occ.user.name }}</strong>
-                    {% if occ.is_half_day_morning %}
-                    <small>(Vormittag)</small>
-                    {% elif occ.is_half_day_afternoon %}
-                    <small>(Nachmittag)</small>
-                    {% elif occ.start_time and occ.end_time %}
-                    <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
-                    {% endif %}
-                    {% if occ.substitute %}
-                    <small>Vertretung: {{ occ.substitute.name }}</small>
-                    {% endif %}
+                {% set detail_url = origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) if occ.is_recurring else origin_url('absences.detail', id=occ.absence.id) %}
+                <li data-href="{{ detail_url }}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
+                    <a class="row-link row-link-fill" href="{{ detail_url }}">
+                        <span class="category-badge category-{{ occ.category.id }}">
+                            {% if occ.category.icon %}{{ category_icon(occ.category.icon) }} {% endif %}{{ occ.category.name }}
+                        </span>
+                        <strong>{{ occ.user.name }}</strong>
+                        {% if occ.is_half_day_morning %}
+                        <small>(Vormittag)</small>
+                        {% elif occ.is_half_day_afternoon %}
+                        <small>(Nachmittag)</small>
+                        {% elif occ.start_time and occ.end_time %}
+                        <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
+                        {% endif %}
+                        {% if occ.substitute %}
+                        <small>Vertretung: {{ occ.substitute.name }}</small>
+                        {% endif %}
+                    </a>
                 </li>
                 {% endfor %}
             </ul>
@@ -135,18 +149,21 @@
             <p><strong class="text-positive">Anwesend (<span class="status-count">{{ day.present|length }}</span>)</strong></p>
             <ul>
                 {% for occ in day.present %}
-                <li data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
-                    <span class="category-badge category-{{ occ.category.id }}">
-                        {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
-                    </span>
-                    <strong>{{ occ.user.name }}</strong>
-                    {% if occ.is_half_day_morning %}
-                    <small>(Vormittag)</small>
-                    {% elif occ.is_half_day_afternoon %}
-                    <small>(Nachmittag)</small>
-                    {% elif occ.start_time and occ.end_time %}
-                    <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
-                    {% endif %}
+                {% set detail_url = origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) if occ.is_recurring else origin_url('absences.detail', id=occ.absence.id) %}
+                <li data-href="{{ detail_url }}" data-name="{{ occ.user.name|lower }}" data-category="{{ occ.category.id }}">
+                    <a class="row-link row-link-fill" href="{{ detail_url }}">
+                        <span class="category-badge category-{{ occ.category.id }}">
+                            {% if occ.category.icon %}{{ category_icon(occ.category.icon) }} {% endif %}{{ occ.category.name }}
+                        </span>
+                        <strong>{{ occ.user.name }}</strong>
+                        {% if occ.is_half_day_morning %}
+                        <small>(Vormittag)</small>
+                        {% elif occ.is_half_day_afternoon %}
+                        <small>(Nachmittag)</small>
+                        {% elif occ.start_time and occ.end_time %}
+                        <small>({{ occ.start_time.strftime('%H:%M') }} - {{ occ.end_time.strftime('%H:%M') }})</small>
+                        {% endif %}
+                    </a>
                 </li>
                 {% endfor %}
             </ul>
@@ -154,7 +171,7 @@
         {% endif %}
     </article>
     {% endfor %}
-    <p id="week-no-results" class="hidden"><small>Keine Treffer</small></p>
+    <p id="week-no-results" class="hidden" role="status"><small>Keine Treffer</small></p>
     {% else %}
     <p><small>Keine Einträge diese Woche</small></p>
     {% endif %}
@@ -185,7 +202,7 @@
                             {% endif %}
                         </small>
                     </td>
-                    <td><a href="{{ origin_url('absences.edit', id=warning.absence_id) }}">Bearbeiten</a></td>
+                    <td>{% if current_user.is_manager or warning.user_id == current_user.id %}<a href="{{ origin_url('absences.edit', id=warning.absence_id) }}">Bearbeiten<span class="visually-hidden">: {{ warning.user }}</span></a>{% endif %}</td>
                 </tr>
                 {% endfor %}
             </tbody>

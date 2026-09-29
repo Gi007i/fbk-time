@@ -3,12 +3,12 @@
 {% block title %}Zugriff verweigert - FBK-Time{% endblock %}
 
 {% block content %}
-<center>
+<div class="center">
     <article>
-        <h1 class="text-negative">🚫 403</h1>
+        <h1 class="text-negative"><span aria-hidden="true">🚫</span> 403<span class="visually-hidden"> – Zugriff verweigert</span></h1>
         <p><strong>Zugriff verweigert</strong></p>
         <small>Sie haben keine Berechtigung für diese Aktion.</small>
     </article>
-    <p><a href="{{ url_for('dashboard.index') }}" role="button">Zur Startseite</a></p>
-</center>
+    <p><a href="{{ url_for('dashboard.index') }}" role="button" class="outline">Zur Startseite</a></p>
+</div>
 {% endblock %}

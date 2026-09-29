@@ -5,6 +5,9 @@ Provides business logic for generating category CSS.
 
 import re
 
+from sqlalchemy import select
+
+from core.db import db
 from modules.category.models import Category
 
 
@@ -37,7 +40,7 @@ def generate_category_css() -> str:
     Returns:
         Generated CSS content string.
     """
-    categories = Category.query.all()
+    categories = db.session.scalars(select(Category)).all()
     valid_categories = [
         cat for cat in categories
         if is_valid_hex_color(cat.color) and is_valid_hex_color(cat.text_color)
@@ -64,10 +67,22 @@ def generate_category_css() -> str:
             f'}}'
         )
 
+        # Combined cells carry no .category-N class, so each half needs its
+        # own text colour; otherwise the fallback glyph inherits body text.
+        css_lines.append(
+            f'.combined-half-day.morning-{cat.id} .cell-split-half:first-child {{ '
+            f'color: {cat.text_color}; '
+            f'}}'
+        )
+
+        css_lines.append(
+            f'.combined-half-day.afternoon-{cat.id} .cell-split-half:last-child {{ '
+            f'color: {cat.text_color}; '
+            f'}}'
+        )
+
     for cat_m in valid_categories:
         for cat_a in valid_categories:
-            if cat_m.id == cat_a.id:
-                continue
             css_lines.append(
                 f'.combined-half-day.morning-{cat_m.id}.afternoon-{cat_a.id} {{ '
                 f'background: linear-gradient(to right, {cat_m.color} 50%, {cat_a.color} 50%); '

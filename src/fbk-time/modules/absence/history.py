@@ -1,15 +1,12 @@
-"""History tracking service for absence management.
-
-Tracks changes to absence records for audit purposes.
-"""
+"""Audit trail of changes to absence records."""
 
 from datetime import date, datetime, timezone
 from typing import Optional
 
-from flask_login import current_user
-
-from core.extensions import db
-from modules.absence.models import Absence, AbsenceHistory
+from core.auth import current_user
+from core.db import db
+from modules.absence.models import Absence, AbsenceHistory, RecurrenceException
+from modules.absence.recurrence import recurrence_service
 from utils.helpers import format_date_for_user
 
 
@@ -45,7 +42,10 @@ def track_absence_changes(absence: Absence, form_data: dict) -> list:
         'is_half_day_morning': ('Halbtags Vormittag', _format_bool),
         'is_half_day_afternoon': ('Halbtags Nachmittag', _format_bool),
         'substitute_id': ('Vertretung', _get_user_name),
-        'notes': ('Notizen', str)
+        'notes': ('Notizen', str),
+        'is_recurring': ('Serie', _format_bool),
+        'rrule': ('Serienmuster', recurrence_service.describe_pattern_safe),
+        'recurrence_end_date': ('Serienende', _format_date)
     }
 
     for field, (display_name, formatter) in field_mappings.items():
@@ -172,6 +172,31 @@ def track_occurrence_restoration(absence: Absence, occurrence_date: date) -> Abs
     return history
 
 
+def track_exception_pruned(
+    absence: Absence, exception: RecurrenceException
+) -> AbsenceHistory:
+    """Record an exception dropped because its date left the series.
+
+    Args:
+        absence: The parent absence after the series change.
+        exception: The exception being removed.
+
+    Returns:
+        Created AbsenceHistory record.
+    """
+    old_value = 'entfernt' if exception.exception_type == 'deleted' else 'geändert'
+    history = AbsenceHistory(
+        absence_id=absence.id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name=f'Termin {format_date_for_user(exception.exception_date)} - Ausnahme',
+        old_value=old_value,
+        new_value='verworfen (nicht mehr Teil der Serie)'
+    )
+    db.session.add(history)
+    return history
+
+
 def create_initial_history(absence: Absence) -> AbsenceHistory:
     """Create initial history entry when absence is created.
 
@@ -193,12 +218,82 @@ def create_initial_history(absence: Absence) -> AbsenceHistory:
     return history
 
 
+def track_substitute_cleared_on_user_delete(absence_id: int) -> AbsenceHistory:
+    """Record a substitute removed because the substitute account was deleted.
+
+    Omits the deleted person's name so a removed account is not
+    re-persisted in the audit trail.
+    """
+    history = AbsenceHistory(
+        absence_id=absence_id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name='Vertretung',
+        old_value='vorhanden',
+        new_value='entfernt (Benutzer gelöscht)'
+    )
+    db.session.add(history)
+    return history
+
+
+def track_occurrence_substitute_cleared(
+    absence_id: int, occurrence_date: date
+) -> AbsenceHistory:
+    """Record a per-occurrence substitute removed on account deletion."""
+    history = AbsenceHistory(
+        absence_id=absence_id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name=f'Termin {format_date_for_user(occurrence_date)} - Vertretung',
+        old_value='vorhanden',
+        new_value='entfernt (Benutzer gelöscht)'
+    )
+    db.session.add(history)
+    return history
+
+
+def track_category_transfer(
+    absence_id: int, old_category_name: str, new_category_name: str
+) -> AbsenceHistory:
+    """Record a category reassignment caused by deleting the old category."""
+    history = AbsenceHistory(
+        absence_id=absence_id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name='Kategorie',
+        old_value=_truncate(f'{old_category_name} (gelöscht)'),
+        new_value=_truncate(new_category_name)
+    )
+    db.session.add(history)
+    return history
+
+
+def track_occurrence_category_transfer(
+    absence_id: int,
+    occurrence_date: date,
+    old_category_name: str,
+    new_category_name: str
+) -> AbsenceHistory:
+    """Record a per-occurrence category reassignment on category deletion."""
+    history = AbsenceHistory(
+        absence_id=absence_id,
+        changed_by_id=_get_current_user_id(),
+        changed_at=datetime.now(timezone.utc),
+        field_name=f'Termin {format_date_for_user(occurrence_date)} - Kategorie',
+        old_value=_truncate(f'{old_category_name} (gelöscht)'),
+        new_value=_truncate(new_category_name)
+    )
+    db.session.add(history)
+    return history
+
+
 def _format_time_type(value) -> str:
     """Format the time_type enum for display."""
     return {
         'all_day': 'Ganztags',
         'morning': 'Halbtags Vormittag',
-        'afternoon': 'Halbtags Nachmittag'
+        'afternoon': 'Halbtags Nachmittag',
+        'custom_time': 'Uhrzeit der Serie'
     }.get(value, str(value))
 
 

@@ -1,23 +1,21 @@
-"""Absence views.
-
-Provides CRUD routes and occurrence management for absences.
-"""
+"""Absence CRUD and occurrence management views."""
 
 from datetime import date, timedelta
 from calendar import monthrange
 
 from flask import Blueprint, render_template, redirect, url_for, request, abort
-from flask_login import login_required, current_user
 
-from core.extensions import db
-from utils.navigation import back_url
-from utils.response_helpers import ajax_response, is_ajax_request
+from core.auth import login_required, current_user
+from core.db import db
+from utils.navigation import back_url, origin_link
+from utils.response_helpers import ajax_response, api_error, is_ajax_request
 from utils.request_validators import (
-    validate_date_param,
-    validate_year_param, validate_month_param, validate_date_string
+    validate_date_param, validate_date_range,
+    validate_year_param, validate_month_param, validate_date_string,
+    resolve_week_start
 )
 from utils.pagination import paginate_list
-from utils.filters import parse_absence_filters
+from utils.filters import parse_absence_filters, default_scope_redirect
 from .forms import AbsenceForm, OccurrenceEditForm
 from .recurrence import recurrence_service
 from .services import (
@@ -33,41 +31,62 @@ from .services import (
     get_active_categories,
     get_substitute_choices,
     get_absences_list,
+    default_list_range,
     filter_occurrences,
     get_absence_history,
     get_absence_or_404,
     get_absence_exception_counts,
-    get_exception_for_date,
-    get_deleted_occurrence_dates
+    is_editable_occurrence,
+    get_deleted_occurrence_dates,
+    time_flags_to_type
 )
 from modules.auth.models import UserRole
-from modules.holidays.services import get_holidays_for_month, count_working_days
+from modules.holidays.services import get_holidays_for_month
 
 bp = Blueprint('absences', __name__, url_prefix='/absences')
 
 
-@bp.before_request
 @login_required
+def _login_gate():
+    """Pass authenticated requests; redirect others to the login page."""
+    return None
+
+
+@bp.before_request
 def require_login():
-    """Require login for all absence routes."""
-    pass
+    """Require login for all absence routes.
+
+    API routes answer with JSON 401 instead, so the client can follow the
+    login redirect itself.
+    """
+    if not current_user.is_authenticated and request.path.startswith(
+        f'{bp.url_prefix}/api/'
+    ):
+        return api_error(
+            'Anmeldung erforderlich.', status_code=401,
+            redirect=url_for('auth.login')
+        )
+    return _login_gate()
 
 
 @bp.route('/')
 def list_absences():
     """Display expanded absence occurrences with filtering."""
+    scope_redirect = default_scope_redirect('absences.list_absences')
+    if scope_redirect:
+        return scope_redirect
+
     filters = parse_absence_filters()
 
-    today = date.today()
-    date_from = validate_date_param('date_from', default=today.replace(day=1))
+    default_from, _ = default_list_range()
+    date_from = validate_date_param('date_from', default=default_from)
 
     date_to = validate_date_param('date_to')
     if date_to is None:
         _, last_day = monthrange(date_from.year, date_from.month)
         date_to = date_from.replace(day=last_day)
 
-    if date_to < date_from:
-        abort(400, 'Invalid date range: end before start')
+    validate_date_range(date_from, date_to)
 
     absences = get_absences_list(date_from, date_to, filters['user_ids'])
 
@@ -110,16 +129,16 @@ def list_absences():
 @bp.route('/calendar')
 def calendar():
     """Display calendar view of absences."""
+    scope_redirect = default_scope_redirect('absences.calendar')
+    if scope_redirect:
+        return scope_redirect
+
     today = date.today()
 
     year = validate_year_param()
     month = validate_month_param()
 
-    week_start = validate_date_param('week_start')
-    if week_start:
-        week_start = week_start - timedelta(days=week_start.weekday())
-    else:
-        week_start = today - timedelta(days=today.weekday())
+    week_start = resolve_week_start(year, month)
 
     prev_week = week_start - timedelta(days=7)
     next_week = week_start + timedelta(days=7)
@@ -131,6 +150,7 @@ def calendar():
     week_end = week_start + timedelta(days=6)
     range_start = min(week_start, first_day)
     range_end = max(week_end, last_day)
+    validate_date_range(range_start, range_end)
 
     filters = parse_absence_filters()
 
@@ -164,6 +184,7 @@ def calendar():
         categories=categories,
         filters=filters,
         today=today,
+        week_start=week_start,
         prev_week=prev_week,
         next_week=next_week
     )
@@ -188,6 +209,27 @@ def create():
     form.substitute_id.choices = [('', '-- Keine Vertretung --')] + [
         (str(u.id), u.name) for u in users
     ]
+
+    if request.method == 'GET':
+        date_str = request.args.get('date')
+        if date_str is not None:
+            prefill_date = validate_date_string(date_str)
+            form.start_date.data = prefill_date
+            form.end_date.data = prefill_date
+
+        user_id_str = request.args.get('user_id')
+        if user_id_str is not None:
+            try:
+                prefill_user_id = int(user_id_str)
+            except ValueError:
+                abort(400, 'Invalid user_id')
+            # Prefill is convenience only; the submit-time gate stays authoritative.
+            if is_manager:
+                if prefill_user_id not in {u.id for u in users}:
+                    abort(400, 'Invalid user_id')
+                form.user_id.data = prefill_user_id
+            elif prefill_user_id != current_user.id:
+                abort(403)
 
     if form.validate_on_submit():
         if not is_manager and form.user_id.data != current_user.id:
@@ -253,17 +295,13 @@ def detail(id):
 
     history = get_absence_history(id)
 
-    working_days = count_working_days(absence.start_date, absence.end_date)
-
     recurrence_info = None
     occurrences = []
     if absence.is_recurring:
         occurrence_count = recurrence_service.count_occurrences(absence)
         exception_counts = get_absence_exception_counts(absence)
         recurrence_info = {
-            'description': recurrence_service.get_recurrence_description(
-                absence.rrule, absence.recurrence_end_date
-            ),
+            'description': recurrence_service.describe_series(absence),
             'occurrence_count': occurrence_count,
             'exception_count': exception_counts['exception_count'],
             'deleted_count': exception_counts['deleted_count'],
@@ -273,14 +311,18 @@ def detail(id):
         for occ_date, exception in recurrence_service.expand_occurrences(
             absence, absence.start_date, absence.recurrence_end_date
         ):
-            occ_data = recurrence_service.get_occurrence_data(absence, occ_date)
+            occ_data = recurrence_service.get_occurrence_data(
+                absence, occ_date, exception
+            )
             if occ_data:
                 occurrences.append({
                     'date': occ_date,
                     'is_exception': occ_data['is_exception'],
                     'category': occ_data['category'],
                     'is_half_day_morning': occ_data['is_half_day_morning'],
-                    'is_half_day_afternoon': occ_data['is_half_day_afternoon']
+                    'is_half_day_afternoon': occ_data['is_half_day_afternoon'],
+                    'start_time': occ_data['start_time'],
+                    'end_time': occ_data['end_time']
                 })
 
         deleted_occurrences = get_deleted_occurrence_dates(absence)
@@ -289,10 +331,10 @@ def detail(id):
         'absences/detail.html',
         absence=absence,
         history=history,
-        working_days=working_days,
         recurrence_info=recurrence_info,
         occurrences=occurrences,
-        deleted_occurrences=deleted_occurrences if absence.is_recurring else []
+        deleted_occurrences=deleted_occurrences if absence.is_recurring else [],
+        can_modify=can_modify_absence(absence)
     )
 
 
@@ -384,7 +426,7 @@ def edit(id):
 
         db.session.commit()
 
-        return_to = back_url('absences.detail', id=id)
+        return_to = origin_link('absences.detail', id=id)
         if is_ajax_request():
             warnings = conflicts.messages if conflicts and conflicts.messages else None
             return ajax_response(success=True, message=message, redirect=return_to, warnings=warnings)
@@ -400,7 +442,7 @@ def edit(id):
 
 @bp.route('/<int:id>/delete', methods=['POST'])
 def delete(id):
-    """Delete an absence record (CASCADE to history)."""
+    """Delete an absence record (cascades to history and exceptions)."""
     absence = get_absence_or_404(id)
 
     if not can_modify_absence(absence):
@@ -436,7 +478,8 @@ def occurrence_detail(id, date_str):
         'absences/occurrence_detail.html',
         absence=absence,
         occurrence=occurrence_data,
-        occurrence_date=occurrence_date
+        occurrence_date=occurrence_date,
+        can_modify=can_modify_absence(absence)
     )
 
 
@@ -453,13 +496,13 @@ def occurrence_edit(id, date_str):
 
     occurrence_date = validate_date_string(date_str)
 
-    existing_exception = get_exception_for_date(absence, occurrence_date)
-    if existing_exception is None and not recurrence_service.is_valid_occurrence_date(
-        absence, occurrence_date
-    ):
+    if not is_editable_occurrence(absence, occurrence_date):
         return redirect(url_for('absences.detail', id=id))
 
     form = OccurrenceEditForm()
+    has_series_time = recurrence_service.parent_time_type(absence) == 'custom_time'
+    if has_series_time:
+        form.allow_series_time()
 
     occurrence_data = recurrence_service.get_occurrence_data(absence, occurrence_date)
     if occurrence_data is None:
@@ -486,12 +529,11 @@ def occurrence_edit(id, date_str):
         form.substitute_id.data = occurrence_data['substitute_id']
         form.notes.data = occurrence_data['notes']
 
-        if occurrence_data['is_half_day_morning']:
-            form.time_type.data = 'half_day_morning'
-        elif occurrence_data['is_half_day_afternoon']:
-            form.time_type.data = 'half_day_afternoon'
-        else:
-            form.time_type.data = 'all_day'
+        occurrence_type = time_flags_to_type(occurrence_data)
+        form.time_type.data = {
+            'morning': 'half_day_morning',
+            'afternoon': 'half_day_afternoon',
+        }.get(occurrence_type, occurrence_type)
 
     if form.validate_on_submit():
         effective_state = form.get_effective_state()
@@ -505,11 +547,12 @@ def occurrence_edit(id, date_str):
                 'absences/occurrence_edit.html',
                 form=form,
                 absence=absence,
-                occurrence_date=occurrence_date
+                occurrence_date=occurrence_date,
+                has_series_time=has_series_time
             )
         db.session.commit()
 
-        return_to = back_url('absences.occurrence_detail', id=id, date_str=date_str)
+        return_to = origin_link('absences.occurrence_detail', id=id, date_str=date_str)
         if is_ajax_request():
             return ajax_response(
                 success=True, message=message, redirect=return_to,
@@ -526,7 +569,8 @@ def occurrence_edit(id, date_str):
         'absences/occurrence_edit.html',
         form=form,
         absence=absence,
-        occurrence_date=occurrence_date
+        occurrence_date=occurrence_date,
+        has_series_time=has_series_time
     )
 
 
@@ -565,7 +609,7 @@ def occurrence_delete(id, date_str):
 
 @bp.route('/<int:id>/occurrence/<date_str>/restore', methods=['POST'])
 def occurrence_restore(id, date_str):
-    """Restore a deleted occurrence of a recurring absence."""
+    """Restore a deleted or modified occurrence to its series defaults."""
     absence = get_absence_or_404(id)
 
     if not can_modify_absence(absence):
@@ -588,7 +632,7 @@ def occurrence_restore(id, date_str):
 
     db.session.commit()
 
-    return_to = back_url('absences.occurrence_detail', id=id, date_str=date_str)
+    return_to = origin_link('absences.detail', id=id)
 
     if is_ajax_request():
         return ajax_response(

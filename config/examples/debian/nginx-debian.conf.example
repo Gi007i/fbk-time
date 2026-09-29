@@ -70,4 +70,5 @@ http {
 
     # Include site configurations
     include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
 }

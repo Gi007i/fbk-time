@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "components/category_icon.html" import category_icon %}
 
 {% block title %}Termin Details - FBK-Time{% endblock %}
 
@@ -24,7 +25,7 @@
         <dt><strong>Kategorie</strong></dt>
         <dd>
             <span class="category-badge category-{{ occurrence.category.id }}">
-                {% if occurrence.category.icon %}<span class="category-icon">{{ occurrence.category.icon }}</span> {% endif %}{{ occurrence.category.name }}
+                {% if occurrence.category.icon %}{{ category_icon(occurrence.category.icon) }} {% endif %}{{ occurrence.category.name }}
             </span>
         </dd>
 
@@ -44,6 +45,8 @@
             <small>(Vormittag)</small>
             {% elif occurrence.is_half_day_afternoon %}
             <small>(Nachmittag)</small>
+            {% elif occurrence.start_time and occurrence.end_time %}
+            <small>({{ occurrence.start_time.strftime('%H:%M') }} - {{ occurrence.end_time.strftime('%H:%M') }})</small>
             {% endif %}
         </dd>
 
@@ -55,10 +58,11 @@
 
         <dt><strong>Serie</strong></dt>
         <dd>
-            🔁 <a href="{{ origin_url('absences.detail', id=absence.id) }}">Zur Serien-Übersicht</a>
+            <span aria-hidden="true">🔁</span> <a href="{{ origin_url('absences.detail', id=absence.id) }}">Zur Serien-Übersicht</a>
         </dd>
     </dl>
 
+    {% if can_modify %}
     <hr>
 
     <div class="grid">
@@ -71,8 +75,8 @@
                 data-action="delete"
                 data-url="{{ origin_url('absences.occurrence_restore', id=absence.id, date_str=occurrence_date.strftime('%Y-%m-%d')) }}"
                 data-confirm="Serienelement wiederherstellen?"
-                data-confirm-label="Zurücksetzen">
-            Zurücksetzen
+                data-confirm-label="Wiederherstellen">
+            Wiederherstellen
         </button>
         {% else %}
         <button type="button" data-href="{{ origin_url('absences.edit', id=absence.id) }}" class="outline secondary">
@@ -87,5 +91,6 @@
             Termin löschen
         </button>
     </div>
+    {% endif %}
 </article>
 {% endblock %}

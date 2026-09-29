@@ -5,8 +5,8 @@ under ``templates/handbook/content/`` and are included at render time.
 """
 
 from flask import Blueprint, abort, redirect, render_template, url_for
-from flask_login import login_required
 
+from core.auth import login_required
 from .services import (
     find_chapter,
     get_adjacent_chapters,

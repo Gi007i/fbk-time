@@ -64,7 +64,7 @@
 
         <label for="name">
             Anzeigename <span class="nowrap">* <span class="info-tip" data-placement="right" data-tooltip="Wie soll Ihr Name in Listen, Kalender und Team-Übersicht angezeigt werden? Z.B. „Max Mustermann“.">&#x24D8;</span></span>
-            {{ form.name(id="name", placeholder="z.B. Max Mustermann",
+            {{ form.name(id="name", placeholder="z.B. Max Mustermann", autocomplete="name",
                **{'aria-invalid': 'true' if form.name.errors else none}) }}
             {% if form.name.errors %}
             <small>{{ form.name.errors[0] }}</small>
@@ -73,7 +73,7 @@
 
         <label for="email">
             E-Mail-Adresse <span class="info-tip" data-placement="right" data-tooltip="Optional. Falls eingegeben, muss die Adresse eindeutig sein. Wird derzeit nur zur Information gespeichert und nicht für Benachrichtigungen verwendet.">&#x24D8;</span>
-            {{ form.email(id="email", type="email", placeholder="z.B. max.mustermann@firma.de",
+            {{ form.email(id="email", type="email", placeholder="z.B. max.mustermann@firma.de", autocomplete="email",
                **{'aria-invalid': 'true' if form.email.errors else none}) }}
             {% if form.email.errors %}
             <small>{{ form.email.errors[0] }}</small>
@@ -93,6 +93,15 @@
         <h2>Sicherheit</h2>
     </header>
     <p>Ändern Sie hier Ihr Passwort, um die Sicherheit Ihres Kontos zu gewährleisten.</p>
-    <a href="{{ url_for('auth.change_password') }}" role="button" class="outline">Passwort ändern</a>
+    <p><a href="{{ url_for('auth.change_password') }}" role="button" class="outline">Passwort ändern</a></p>
+    <p>Haben Sie sich an einem fremden Gerät angemeldet oder ein Gerät verloren, beenden Sie hier alle Sitzungen Ihres Kontos außer dieser. Ein gewähltes „Angemeldet bleiben“ gilt danach auch auf diesem Gerät nicht mehr.</p>
+    <form method="POST" action="{{ url_for('profile.end_sessions') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="grid">
+            <button type="submit" class="outline contrast" data-confirm="Alle anderen Sitzungen wirklich beenden?" data-confirm-label="Beenden">Alle anderen Sitzungen beenden</button>
+            <div></div>
+            <div></div>
+        </div>
+    </form>
 </article>
 {% endblock %}

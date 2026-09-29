@@ -12,7 +12,7 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           token: ${{ secrets.RELEASE_TOKEN }}
@@ -23,7 +23,17 @@ jobs:
         run: |
           GITLAB_URL="https://oauth2:${GITLAB_TOKEN}@gitlab.com/Gi007i/fbk-time.git"
           git remote add gitlab "${GITLAB_URL}"
-          git fetch gitlab main --tags || { echo "WARNING: GitLab unreachable"; exit 0; }
+          # A rejected token fails the run; an unreachable GitLab only warns, the next run catches up.
+          if ! FETCH_LOG=$(git fetch gitlab main --tags 2>&1); then
+            echo "${FETCH_LOG}"
+            if echo "${FETCH_LOG}" | grep -qiE 'authentication failed|access denied|not found|returned error: 40[13]'; then
+              echo "::error::GitLab rejected GITLAB_TOKEN (expired, revoked or without access)"
+              exit 1
+            fi
+            echo "::warning::GitLab unreachable, sync skipped"
+            exit 0
+          fi
+          echo "${FETCH_LOG}"
 
           # Fast-forward main if behind
           git checkout main
@@ -44,7 +54,7 @@ jobs:
           ORIGIN_TAGS=$(git ls-remote --tags origin | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' || true)
           for tag in $(git tag -l 'v*'); do
             if ! echo "$ORIGIN_TAGS" | grep -qx "$tag"; then
-              git push origin "$tag" && echo "Synced tag $tag" || echo "WARNING: Failed to push tag $tag"
+              git push origin "$tag" && echo "Synced tag $tag" || echo "::warning::Failed to push tag $tag"
             fi
           done
           echo "Sync complete"

@@ -5,8 +5,13 @@ Provides the BackupRecord model for tracking database backup history.
 
 import enum
 from datetime import datetime, timezone
+from typing import Optional
 
-from core.extensions import db
+from sqlalchemy import Enum, ForeignKey, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from core.db import Base
+from modules.auth.models import User
 
 
 def _utc_now():
@@ -54,7 +59,7 @@ _BACKUP_STATUS_LABELS = {
 }
 
 
-class BackupRecord(db.Model):
+class BackupRecord(Base):
     """Backup archive metadata stored in the database.
 
     Attributes:
@@ -73,29 +78,26 @@ class BackupRecord(db.Model):
 
     __tablename__ = 'backup_records'
 
-    id = db.Column(db.Integer, primary_key=True)
-    backup_type = db.Column(db.Enum(BackupType), nullable=False)
-    file_path = db.Column(db.String(500), nullable=False)
-    file_size = db.Column(db.Integer, nullable=False)
-    checksum = db.Column(db.String(71), nullable=False)
-    status = db.Column(
-        db.Enum(BackupStatus),
-        nullable=False,
+    id: Mapped[int] = mapped_column(primary_key=True)
+    backup_type: Mapped[BackupType] = mapped_column(Enum(BackupType))
+    file_path: Mapped[str] = mapped_column(String(500))
+    file_size: Mapped[int]
+    checksum: Mapped[str] = mapped_column(String(71))
+    status: Mapped[BackupStatus] = mapped_column(
+        Enum(BackupStatus),
         default=BackupStatus.CREATED,
         index=True
     )
-    description = db.Column(db.String(255), nullable=True)
-    verified_at = db.Column(db.DateTime, nullable=True)
-    verification_error = db.Column(db.Text, nullable=True)
-    created_by_id = db.Column(
-        db.Integer,
-        db.ForeignKey('users.id', ondelete='SET NULL'),
-        nullable=True,
+    description: Mapped[Optional[str]] = mapped_column(String(255))
+    verified_at: Mapped[Optional[datetime]]
+    verification_error: Mapped[Optional[str]] = mapped_column(Text)
+    created_by_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey('users.id', ondelete='SET NULL'),
         index=True
     )
-    created_at = db.Column(db.DateTime, default=_utc_now, nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=_utc_now, index=True)
 
-    created_by = db.relationship('User', foreign_keys=[created_by_id])
+    created_by: Mapped[Optional[User]] = relationship(foreign_keys=[created_by_id])
 
     def __repr__(self):
         return f'<BackupRecord {self.id} {self.backup_type.value} {self.status.value}>'
@@ -110,3 +112,9 @@ class BackupRecord(db.Model):
         """Whether the archive file exists on disk."""
         from pathlib import Path
         return Path(self.file_path).exists()
+
+    @property
+    def archive_name(self) -> str:
+        """Base name of the archive file for display (no directory path)."""
+        from pathlib import Path
+        return Path(self.file_path).name

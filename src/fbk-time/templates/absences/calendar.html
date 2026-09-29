@@ -1,12 +1,18 @@
 {% extends "base.html" %}
 {% from "components/filters.html" import render as filter_panel %}
+{% from "components/legend.html" import render as legend %}
+{% from "components/export_panel.html" import render as export_panel %}
 
 {% block title %}Kalender - FBK-Time{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/absences.css') }}">
+{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Kalender</h1>
-    <nav><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav aria-label="Seitenaktionen"><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
 <nav class="page-nav page-nav-month" aria-label="Monatsnavigation">
@@ -33,50 +39,25 @@
 {{ filter_panel(filters, users, categories, url_for('absences.calendar', year=year, month=month), hidden={'year': year, 'month': month, 'week_start': request.args.get('week_start', '')}) }}
 
 <article>
-    <div class="calendar-container">
-        <table class="calendar" id="calendar">
-            <thead>
-                <tr>
-                    <th class="day-header">Mo</th>
-                    <th class="day-header">Di</th>
-                    <th class="day-header">Mi</th>
-                    <th class="day-header">Do</th>
-                    <th class="day-header">Fr</th>
-                    <th class="day-header calendar-weekend-col">Sa</th>
-                    <th class="day-header calendar-weekend-col">So</th>
-                </tr>
-            </thead>
-            <tbody id="calendar-body"></tbody>
-        </table>
-    </div>
+    <table class="calendar" id="calendar">
+        <thead>
+            <tr>
+                <th scope="col" class="day-header">Mo</th>
+                <th scope="col" class="day-header">Di</th>
+                <th scope="col" class="day-header">Mi</th>
+                <th scope="col" class="day-header">Do</th>
+                <th scope="col" class="day-header">Fr</th>
+                <th scope="col" class="day-header calendar-weekend-col">Sa</th>
+                <th scope="col" class="day-header calendar-weekend-col">So</th>
+            </tr>
+        </thead>
+        <tbody id="calendar-body"></tbody>
+    </table>
 </article>
 
-<article class="legend">
-    <strong>Legende:</strong>
-    {% for category in categories %}
-    <span class="category-badge category-{{ category.id }}">
-        {% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}
-        {{ 'A' if category.is_present else 'X' }}
-    </span>
-    {% endfor %}
-    <mark>Feiertag</mark>
-    <span class="legend-divider" role="separator" aria-orientation="vertical"></span>
-    <strong>A</strong> = Anwesend
-    <strong>X</strong> = Abwesend
-</article>
+{{ legend(categories) }}
 
-<article>
-    <strong>Export-Format</strong>
-    <div class="grid">
-        <select id="export-type">
-            <option value="pdf-list">PDF - Tabelle</option>
-            <option value="pdf-matrix">PDF - Kalender-Matrix</option>
-            <option value="ical">iCal-Datei</option>
-        </select>
-        <button type="button" id="export-btn" class="outline">Exportieren</button>
-        <div></div>
-    </div>
-</article>
+{{ export_panel() }}
 
 <nav aria-label="Abwesenheits-Ansichten">
     <div role="group">
@@ -93,7 +74,7 @@
     "year": {{ year }},
     "month": {{ month }},
     "today": "{{ today.isoformat() }}",
-    "urlWeekStart": {{ request.args.get('week_start', '')|tojson }},
+    "weekStart": {{ week_start.isoformat()|tojson }},
     "filters": {
         "userIds": {{ filters.user_ids|tojson }},
         "categoryIds": {{ filters.category_ids|tojson }},
@@ -112,6 +93,8 @@
             "categoryId": {{ occ.category.id }},
             "categoryName": {{ occ.category.name|tojson }},
             "categoryIcon": {{ (occ.category.icon or "")|tojson }},
+            {% set icon_stem = occ.category.icon|twemoji_stem %}
+            "categoryIconUrl": {{ (url_for('static', filename='img/twemoji/svg/' ~ icon_stem ~ '.svg') if icon_stem else "")|tojson }},
             "date": "{{ occ.date.isoformat() }}",
             "isHalfDayMorning": {{ 'true' if occ.is_half_day_morning else 'false' }},
             "isHalfDayAfternoon": {{ 'true' if occ.is_half_day_afternoon else 'false' }},

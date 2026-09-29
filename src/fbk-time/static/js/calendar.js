@@ -12,20 +12,6 @@
     var isWeekView = false;
 
     /**
-     * Get Monday of the week containing the given date.
-     * @param {Date} date - Any date in the week.
-     * @returns {Date} Monday of that week.
-     */
-    function getWeekStart(date) {
-        var d = new Date(date);
-        var day = d.getDay();
-        var diff = d.getDate() - day + (day === 0 ? -6 : 1);
-        d.setDate(diff);
-        d.setHours(0, 0, 0, 0);
-        return d;
-    }
-
-    /**
      * Format date as ISO string (YYYY-MM-DD).
      * @param {Date} date - Date to format.
      * @returns {string} Formatted date string.
@@ -113,10 +99,24 @@
     }
 
     /**
+     * Create an element with class name and optional text content.
+     * @param {string} tag - Tag name.
+     * @param {string} className - CSS class name.
+     * @param {string} [text] - Text content.
+     * @returns {HTMLElement} Created element.
+     */
+    function createEl(tag, className, text) {
+        var el = document.createElement(tag);
+        if (className) el.className = className;
+        if (text !== undefined) el.textContent = text;
+        return el;
+    }
+
+    /**
      * Render a single calendar cell.
      * @param {Date} date - Date for this cell.
      * @param {number} col - Column index (0-6, Mon-Sun).
-     * @returns {string} HTML string for the cell.
+     * @returns {HTMLTableCellElement} Table cell for the date.
      */
     function renderCell(date, col) {
         var dateStr = formatDateStr(date);
@@ -124,53 +124,80 @@
         var isToday = dateStr === calendarData.today;
         var isCurrentMonth = date.getMonth() + 1 === calendarData.month;
 
-        var classes = [];
-        if (!isCurrentMonth && !isWeekView) classes.push('day-other-month');
-        if (isWeekend) classes.push('day-weekend');
-        if (isToday) classes.push('day-today');
+        var cell = document.createElement('td');
+        if (!isCurrentMonth && !isWeekView) cell.classList.add('day-other-month');
+        if (isWeekend) cell.classList.add('day-weekend');
+        if (isToday) cell.classList.add('day-today');
+        cell.dataset.date = dateStr;
 
-        var html = '<td class="' + classes.join(' ') + '" data-date="' + dateStr + '">';
-        html += '<span class="day-number">' + date.getDate() + '</span>';
+        cell.appendChild(createEl('span', 'day-number', String(date.getDate())));
+
+        // The current day is marked visually only.
+        if (isToday) {
+            cell.appendChild(createEl('span', 'visually-hidden', 'Heute'));
+        }
 
         if (calendarData.holidays[dateStr]) {
-            var holidayName = window.FBKTime.escapeHtml(calendarData.holidays[dateStr]);
-            var holidayNameAttr = window.FBKTime.escapeAttr(calendarData.holidays[dateStr]);
-            html += '<span data-tooltip="' + holidayNameAttr + '"><mark class="absence-item"><small>' + holidayName + '</small></mark></span>';
+            var holidayWrap = document.createElement('span');
+            holidayWrap.dataset.tooltip = calendarData.holidays[dateStr];
+            var holidayMark = createEl('mark', 'absence-item');
+            holidayMark.appendChild(createEl('small', '', calendarData.holidays[dateStr]));
+            holidayWrap.appendChild(holidayMark);
+            cell.appendChild(holidayWrap);
         }
 
         var dayOccurrences = getOccurrencesForDate(dateStr);
         var maxShow = isWeekView ? 5 : 3;
         for (var i = 0; i < Math.min(dayOccurrences.length, maxShow); i++) {
             var occ = dayOccurrences[i];
-            var safeAbsenceId = parseInt(occ.absenceId, 10);
-            var safeCategoryId = parseInt(occ.categoryId, 10);
-            if (isNaN(safeAbsenceId) || isNaN(safeCategoryId)) continue;
-            var label = '';
+            var absenceId = parseInt(occ.absenceId, 10);
+            var categoryId = parseInt(occ.categoryId, 10);
+            if (isNaN(absenceId) || isNaN(categoryId)) continue;
 
-            var safeUserName = window.FBKTime.escapeHtml(occ.userName);
-            var safeCategoryIcon = window.FBKTime.escapeHtml(occ.categoryIcon);
+            var isInternal = typeof occ.detailUrl === 'string' && /^\/(?![\/\\])/.test(occ.detailUrl);
+            var link = createEl('a', 'absence-item category-' + categoryId);
+            link.setAttribute('href', isInternal ? occ.detailUrl : '#');
 
+            if (occ.categoryIconUrl) {
+                var iconSpan = createEl('span', 'category-icon');
+                var iconImg = document.createElement('img');
+                iconImg.src = occ.categoryIconUrl;
+                iconImg.alt = '';
+                iconSpan.appendChild(iconImg);
+                link.appendChild(iconSpan);
+            }
+
+            // The entry shows the category as colour and icon only.
+            link.appendChild(createEl('span', 'visually-hidden', occ.categoryName + ': '));
+
+            var repeatMark = '';
             if (isWeekView) {
-                if (occ.categoryIcon) label += '<span class="category-icon">' + safeCategoryIcon + '</span>';
-                label += '<span class="absence-name">' + safeUserName + '</span>';
+                link.appendChild(createEl('span', 'absence-name', occ.userName));
                 var meta = '';
                 if (occ.isHalfDayMorning) meta += '(VM) ';
                 else if (occ.isHalfDayAfternoon) meta += '(NM) ';
-                if (occ.isRecurring) meta += '🔁';
-                if (meta) label += '<span class="absence-meta">' + meta + '</span>';
+                if (meta) link.appendChild(createEl('span', 'absence-meta', meta));
+                repeatMark = '🔁';
             } else {
-                if (occ.categoryIcon) label += '<span class="category-icon">' + safeCategoryIcon + '</span> ';
-                label += safeUserName;
-                if (occ.isHalfDayMorning) label += ' (VM)';
-                else if (occ.isHalfDayAfternoon) label += ' (NM)';
-                if (occ.isRecurring) label += ' 🔁';
+                var text = occ.userName;
+                if (occ.isHalfDayMorning) text += ' (VM)';
+                else if (occ.isHalfDayAfternoon) text += ' (NM)';
+                link.appendChild(document.createTextNode(occ.categoryIconUrl ? ' ' + text : text));
+                repeatMark = ' 🔁';
             }
 
-            var isInternal = typeof occ.detailUrl === 'string' && /^\/[^/]/.test(occ.detailUrl);
-            var detailUrl = window.FBKTime.escapeAttr(isInternal ? occ.detailUrl : '#');
+            // The symbol alone carries the series information.
+            if (occ.isRecurring) {
+                var repeat = createEl('span', 'absence-meta', repeatMark);
+                repeat.setAttribute('aria-hidden', 'true');
+                link.appendChild(repeat);
+                link.appendChild(createEl('span', 'visually-hidden', ', Serie'));
+            }
 
-            var tooltipAttr = window.FBKTime.escapeAttr(occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (VM)' : occ.isHalfDayAfternoon ? ' (NM)' : '') + (occ.isPresent ? ' (A)' : ' (X)') + (occ.isRecurring ? ' (Serie)' : ''));
-            html += '<span data-tooltip="' + tooltipAttr + '"><a href="' + detailUrl + '" class="absence-item category-' + safeCategoryId + '">' + label + '</a></span>';
+            var wrap = document.createElement('span');
+            wrap.dataset.tooltip = occ.categoryName + ': ' + occ.userName + (occ.isHalfDayMorning ? ' (VM)' : occ.isHalfDayAfternoon ? ' (NM)' : '') + (occ.isPresent ? ' (A)' : ' (X)') + (occ.isRecurring ? ' (Serie)' : '');
+            wrap.appendChild(link);
+            cell.appendChild(wrap);
         }
         if (dayOccurrences.length > maxShow) {
             var moreLines = [];
@@ -183,12 +210,15 @@
                 if (hidden.isRecurring) line += ' (Serie)';
                 moreLines.push(line);
             }
-            var moreTooltip = window.FBKTime.escapeAttr(moreLines.join('\n'));
-            html += '<span class="absence-more" data-tooltip="' + moreTooltip + '">+' + (dayOccurrences.length - maxShow) + ' weitere</span>';
+            var more = createEl('span', 'absence-more', '+' + (dayOccurrences.length - maxShow) + ' weitere');
+            more.dataset.tooltip = moreLines.join('\n');
+            // Without a tab stop the hidden entries stay pointer-only.
+            more.setAttribute('tabindex', '0');
+            more.appendChild(createEl('span', 'visually-hidden', ': ' + moreLines.join(', ')));
+            cell.appendChild(more);
         }
 
-        html += '</td>';
-        return html;
+        return cell;
     }
 
     /**
@@ -207,14 +237,14 @@
         var prevMonth = new Date(year, month - 1, 0);
         var daysFromPrevMonth = prevMonth.getDate();
 
-        var html = '';
+        var fragment = document.createDocumentFragment();
         var dayCount = 1;
         var nextMonthDay = 1;
         var totalCells = startDayOfWeek + daysInMonth;
         var rows = Math.ceil(totalCells / 7);
 
         for (var row = 0; row < rows; row++) {
-            html += '<tr>';
+            var tr = document.createElement('tr');
             for (var col = 0; col < 7; col++) {
                 var cellIndex = row * 7 + col;
                 var date;
@@ -233,12 +263,12 @@
                     nextMonthDay++;
                 }
 
-                html += renderCell(date, col);
+                tr.appendChild(renderCell(date, col));
             }
-            html += '</tr>';
+            fragment.appendChild(tr);
         }
 
-        document.getElementById('calendar-body').innerHTML = html;
+        document.getElementById('calendar-body').replaceChildren(fragment);
     }
 
     /**
@@ -246,15 +276,14 @@
      * @returns {void}
      */
     function renderWeekView() {
-        var html = '<tr>';
+        var tr = document.createElement('tr');
         for (var col = 0; col < 5; col++) {
             var date = new Date(currentWeekStart);
             date.setDate(date.getDate() + col);
-            html += renderCell(date, col);
+            tr.appendChild(renderCell(date, col));
         }
-        html += '</tr>';
 
-        document.getElementById('calendar-body').innerHTML = html;
+        document.getElementById('calendar-body').replaceChildren(tr);
         document.getElementById('calendar').classList.add('calendar-week');
     }
 
@@ -263,6 +292,8 @@
      * @returns {void}
      */
     function renderCalendar() {
+        var restoreFocus = captureFocus();
+
         isWeekView = window.FBKTime.isMobile();
         updateNavVisibility();
         updateWeekStartInput();
@@ -274,6 +305,39 @@
         } else {
             renderMonthView();
         }
+
+        restoreFocus();
+    }
+
+    /**
+     * Remember which day cell holds focus so it can be restored after the
+     * body is rebuilt; a resize would otherwise drop focus to the document.
+     * @returns {Function} Callback that restores the focus position.
+     */
+    function captureFocus() {
+        var active = document.activeElement;
+        var cell = active && typeof active.closest === 'function'
+            ? active.closest('#calendar-body td[data-date]')
+            : null;
+
+        if (!cell) {
+            return function() {};
+        }
+
+        var dateStr = cell.dataset.date;
+        var focusables = cell.querySelectorAll('a[href], [tabindex="0"]');
+        var index = Array.prototype.indexOf.call(focusables, active);
+
+        return function() {
+            var target = document.querySelector('#calendar-body td[data-date="' + dateStr + '"]');
+            // Switching between month and week view drops most days; fall
+            // back to the first reachable entry instead of losing focus.
+            var scope = target || document.getElementById('calendar-body');
+            if (!scope) return;
+            var candidates = scope.querySelectorAll('a[href], [tabindex="0"]');
+            var next = (target && candidates[index]) || candidates[0];
+            if (next) next.focus();
+        };
     }
 
     /**
@@ -299,13 +363,13 @@
 
                 switch (type) {
                     case 'pdf-matrix':
-                        window.location.href = urls.matrix + '?week_start=' + weekStart + '&week_end=' + weekEndStr + extra;
+                        window.FBKTime.downloadFile(urls.matrix + '?week_start=' + weekStart + '&week_end=' + weekEndStr + extra);
                         break;
                     case 'pdf-list':
-                        window.location.href = urls.pdf + '?date_from=' + weekStart + '&date_to=' + weekEndStr + extra;
+                        window.FBKTime.downloadFile(urls.pdf + '?date_from=' + weekStart + '&date_to=' + weekEndStr + extra);
                         break;
                     case 'ical':
-                        window.location.href = urls.ical + '?date_from=' + weekStart + '&date_to=' + weekEndStr + extra;
+                        window.FBKTime.downloadFile(urls.ical + '?date_from=' + weekStart + '&date_to=' + weekEndStr + extra);
                         break;
                 }
             } else {
@@ -317,13 +381,13 @@
 
                 switch (type) {
                     case 'pdf-matrix':
-                        window.location.href = urls.matrix + '?week_start=' + firstDay + '&week_end=' + lastDay + extra;
+                        window.FBKTime.downloadFile(urls.matrix + '?week_start=' + firstDay + '&week_end=' + lastDay + extra);
                         break;
                     case 'pdf-list':
-                        window.location.href = urls.pdf + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
+                        window.FBKTime.downloadFile(urls.pdf + '?date_from=' + firstDay + '&date_to=' + lastDay + extra);
                         break;
                     case 'ical':
-                        window.location.href = urls.ical + '?date_from=' + firstDay + '&date_to=' + lastDay + extra;
+                        window.FBKTime.downloadFile(urls.ical + '?date_from=' + firstDay + '&date_to=' + lastDay + extra);
                         break;
                 }
             }
@@ -346,20 +410,19 @@
                 var tr = document.createElement('tr');
                 var td = document.createElement('td');
                 td.setAttribute('colspan', '7');
-                var mark = document.createElement('mark');
-                mark.className = 'text-negative';
-                mark.textContent = 'Fehler beim Laden der Kalenderdaten. Bitte Seite neu laden.';
-                td.appendChild(mark);
+                td.appendChild(createEl('mark', 'text-negative', 'Fehler beim Laden der Kalenderdaten. Bitte Seite neu laden.'));
                 tr.appendChild(td);
-                calendarBody.textContent = '';
-                calendarBody.appendChild(tr);
+                calendarBody.replaceChildren(tr);
             }
             return;
         }
 
-        currentWeekStart = calendarData.urlWeekStart
-            ? getWeekStart(new Date(calendarData.urlWeekStart))
-            : getWeekStart(new Date(calendarData.today));
+        var weekStartParts = calendarData.weekStart.split('-');
+        currentWeekStart = new Date(
+            parseInt(weekStartParts[0], 10),
+            parseInt(weekStartParts[1], 10) - 1,
+            parseInt(weekStartParts[2], 10)
+        );
 
         renderCalendar();
 

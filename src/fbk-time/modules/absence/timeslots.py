@@ -4,34 +4,27 @@ Pure functions that classify a date into a time slot and decide whether two
 slots overlap. No database access; used by the conflict detection layer.
 """
 
-from datetime import date, time
+from datetime import time
 from typing import Optional, Tuple, Union
 
 
-# Type alias for slot representation
 # 'all_day', 'morning', 'afternoon', or ('custom', start_time, end_time)
 SlotType = Union[str, Tuple[str, time, time]]
 
 
-def _get_slot_for_date(
-    current: date,
-    start_date: date,
-    end_date: date,
+def _slot_from_flags(
     is_all_day: bool,
     is_half_day_morning: bool,
     is_half_day_afternoon: bool,
     start_time: Optional[time],
     end_time: Optional[time]
 ) -> SlotType:
-    """Determine the slot type for a specific date within an absence.
+    """Determine the slot type from an absence's time flags.
 
-    For single-day absences, flags apply directly.
-    For multi-day absences, half-day flags apply to boundary days only.
+    The flags describe every day of the absence alike, so a multi-day
+    absence marked as morning covers the morning of each of its days.
 
     Args:
-        current: The date to check.
-        start_date: Absence start date.
-        end_date: Absence end date.
         is_all_day: All-day flag.
         is_half_day_morning: Morning half-day flag.
         is_half_day_afternoon: Afternoon half-day flag.
@@ -41,35 +34,17 @@ def _get_slot_for_date(
     Returns:
         Slot type: 'all_day', 'morning', 'afternoon', or ('custom', start, end).
     """
-    is_single_day = start_date == end_date
-    is_first_day = current == start_date
-    is_last_day = current == end_date
-
-    if is_single_day:
-        if is_half_day_morning:
-            return 'morning'
-        if is_half_day_afternoon:
-            return 'afternoon'
-        if not is_all_day and start_time and end_time:
-            return ('custom', start_time, end_time)
-        return 'all_day'
-
-    # Multi-day absence: half-day flags affect boundary days
-    # is_half_day_morning on multi-day: first day afternoon only
-    # is_half_day_afternoon on multi-day: last day morning only
-    if is_first_day and is_half_day_morning:
-        return 'afternoon'
-    if is_last_day and is_half_day_afternoon:
+    if is_half_day_morning:
         return 'morning'
-
+    if is_half_day_afternoon:
+        return 'afternoon'
+    if not is_all_day and start_time and end_time:
+        return ('custom', start_time, end_time)
     return 'all_day'
 
 
 def _get_slot_for_occurrence(occurrence: dict) -> SlotType:
     """Determine the slot type for an expanded occurrence.
-
-    For recurring absences, each occurrence is a single day.
-    For non-recurring, uses start_date/end_date from the dict.
 
     Args:
         occurrence: Dict with is_all_day, is_half_day_morning, etc.
@@ -77,12 +52,7 @@ def _get_slot_for_occurrence(occurrence: dict) -> SlotType:
     Returns:
         Slot type: 'all_day', 'morning', 'afternoon', or ('custom', start, end).
     """
-    start_date = occurrence.get('start_date', occurrence['date'])
-    end_date = occurrence.get('end_date', occurrence['date'])
-    current = occurrence['date']
-
-    return _get_slot_for_date(
-        current, start_date, end_date,
+    return _slot_from_flags(
         occurrence['is_all_day'],
         occurrence['is_half_day_morning'],
         occurrence['is_half_day_afternoon'],

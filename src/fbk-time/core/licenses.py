@@ -1,20 +1,38 @@
 """License management.
 
-Generates and caches dependency license information using pip-licenses.
-Uses smart caching: only regenerates when requirements.txt changes.
+Generates and caches dependency license information from the metadata of
+installed distributions. Uses smart caching: only regenerates when
+requirements.txt changes.
 """
 
 import json
 import logging
 import os
-import subprocess
-import sys
+import re
+import tempfile
+from email.message import Message
+from email.utils import getaddresses
+from importlib import metadata as importlib_metadata
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-# Allowed URL schemes (blocks javascript:, data:, etc.)
+# Blocks javascript:/data: URIs.
 ALLOWED_URL_SCHEMES = ('http://', 'https://')
+
+# Environment tooling, not application dependencies.
+EXCLUDED_DISTRIBUTIONS = frozenset({'pip', 'setuptools', 'wheel'})
+
+LICENSE_CLASSIFIER_PREFIX = 'License :: '
+OSI_CLASSIFIER_PREFIX = 'License :: OSI Approved :: '
+LICENSE_FILE_PATTERN = re.compile(r'^(LICEN[CS]E|COPYING)', re.IGNORECASE)
+# License texts are small; anything bigger is not one.
+LICENSE_FILE_MAX_BYTES = 1_000_000
+# Checked in order; Home-page is absent on PEP 621 projects.
+PROJECT_URL_LABELS = (
+    'homepage', 'home-page', 'home page',
+    'source', 'source code', 'repository', 'code', 'github',
+)
 
 
 def _sanitize_url(url: str | None) -> str | None:
@@ -69,8 +87,176 @@ def needs_regeneration() -> bool:
     return requirements_path.stat().st_mtime > licenses_path.stat().st_mtime
 
 
+def _canonical_name(name: str) -> str:
+    """Normalize a distribution name per PEP 503.
+
+    Duplicate installs of the same package (e.g. system package plus
+    virtualenv copy) may spell the name differently; canonical names make
+    them compare equal.
+
+    Args:
+        name: Distribution name as declared in its metadata.
+
+    Returns:
+        Canonical distribution name.
+    """
+    return re.sub(r'[-_.]+', '-', name).lower()
+
+
+def _is_vendored(dist: importlib_metadata.Distribution) -> bool:
+    """Check whether a distribution is vendored inside another package.
+
+    setuptools >= 71 puts its vendored dist-infos on sys.path once imported;
+    they would otherwise be listed as installed packages (or duplicates of
+    real ones).
+
+    Args:
+        dist: Installed distribution.
+
+    Returns:
+        True if the distribution lives directly in a _vendor directory.
+    """
+    return Path(str(dist.locate_file(''))).name == '_vendor'
+
+
+def _license_name(meta: Message) -> str:
+    """Resolve the license name of a distribution.
+
+    Checks the PEP 639 license expression, then trove classifiers, then the
+    legacy License field.
+
+    Args:
+        meta: Distribution metadata.
+
+    Returns:
+        License name, or 'Unknown' if the metadata declares none.
+    """
+    expression = meta.get('License-Expression')
+    if expression:
+        return expression
+
+    classifiers = [
+        c.removeprefix(OSI_CLASSIFIER_PREFIX).removeprefix(LICENSE_CLASSIFIER_PREFIX)
+        for c in meta.get_all('Classifier', [])
+        if c.startswith(LICENSE_CLASSIFIER_PREFIX)
+    ]
+    classifiers = [c for c in classifiers if c != 'OSI Approved']
+    if classifiers:
+        return '; '.join(classifiers)
+
+    license_field = (meta.get('License') or '').strip()
+    if license_field and license_field != 'UNKNOWN':
+        # Some distributions put the full license text into this field;
+        # only its first line qualifies as a name.
+        return license_field.splitlines()[0].strip()
+    return 'Unknown'
+
+
+def _author(meta: Message) -> str | None:
+    """Resolve the author from the Author field or Author-email names.
+
+    Args:
+        meta: Distribution metadata.
+
+    Returns:
+        Author name(s), or None if the metadata declares none.
+    """
+    author = (meta.get('Author') or '').strip()
+    if author and author != 'UNKNOWN':
+        return author
+
+    names = [name for name, _ in getaddresses([meta.get('Author-email') or '']) if name]
+    return ', '.join(names) or None
+
+
+def _homepage_url(meta: Message) -> str | None:
+    """Resolve the project homepage from Home-page or Project-URL entries.
+
+    Args:
+        meta: Distribution metadata.
+
+    Returns:
+        Homepage URL, or None if the metadata declares none.
+    """
+    url = (meta.get('Home-page') or '').strip()
+    if url and url != 'UNKNOWN':
+        return url
+
+    project_urls = {}
+    for entry in meta.get_all('Project-URL', []):
+        label, _, target = entry.partition(',')
+        project_urls.setdefault(label.strip().lower(), target.strip())
+
+    for label in PROJECT_URL_LABELS:
+        if project_urls.get(label):
+            return project_urls[label]
+    return None
+
+
+def _read_license_file(dist: importlib_metadata.Distribution, file) -> str | None:
+    """Read one bundled license file with containment and size checks.
+
+    File paths originate from the package's own RECORD and License-File
+    entries; refuse paths or symlinks escaping the distribution as well as
+    oversized files (defense in depth, the text is rendered in the application).
+
+    Args:
+        dist: Installed distribution.
+        file: Package path of the license file.
+
+    Returns:
+        File content, or None if the file is refused or unreadable.
+    """
+    name = dist.metadata.get('Name')
+    root = Path(str(dist.locate_file(''))).resolve()
+    try:
+        resolved = Path(str(file.locate())).resolve()
+        if not resolved.is_relative_to(root):
+            logger.warning("Refusing license file outside distribution %s: %s", name, file)
+            return None
+        if resolved.stat().st_size > LICENSE_FILE_MAX_BYTES:
+            logger.warning("Refusing oversized license file for %s: %s", name, file)
+            return None
+        text = resolved.read_text(encoding='utf-8', errors='replace')
+    except OSError as e:
+        logger.warning("Failed to read license file for %s: %s", name, e)
+        return None
+    return text.strip() or None
+
+
+def _license_text(dist: importlib_metadata.Distribution) -> str | None:
+    """Read the license files bundled in the distribution's dist-info.
+
+    Files declared via the PEP 639 License-File field take precedence over
+    the filename heuristic. Multiple files (e.g. dual-licensed packages) are
+    concatenated with a filename heading each.
+
+    Args:
+        dist: Installed distribution.
+
+    Returns:
+        License text, or None if no license file is bundled.
+    """
+    declared = {
+        Path(value).name for value in dist.metadata.get_all('License-File', [])
+    }
+    candidates = [
+        file for file in dist.files or []
+        if any(part.endswith('.dist-info') for part in file.parts)
+        and (file.name in declared or LICENSE_FILE_PATTERN.match(file.name))
+    ]
+    candidates.sort(key=lambda f: (f.name not in declared, str(f)))
+
+    sections = []
+    for file in candidates:
+        text = _read_license_file(dist, file)
+        if text:
+            sections.append(text if len(candidates) == 1 else f'--- {file.name} ---\n\n{text}')
+    return '\n\n'.join(sections) or None
+
+
 def generate_licenses() -> bool:
-    """Generate licenses.json from installed packages using pip-licenses.
+    """Generate licenses.json from the metadata of installed distributions.
 
     Returns:
         True if generation was successful, False otherwise.
@@ -78,60 +264,51 @@ def generate_licenses() -> bool:
     licenses_path = get_licenses_path()
     licenses_path.parent.mkdir(parents=True, exist_ok=True)
 
+    licenses_data = []
+    seen = set()
+    for dist in importlib_metadata.distributions():
+        # One unreadable dist-info (e.g. non-UTF-8 metadata of an old
+        # install) must not block application startup.
+        try:
+            meta = dist.metadata
+            name = meta.get('Name')
+            if not name or _is_vendored(dist):
+                continue
+            canonical = _canonical_name(name)
+            if canonical in EXCLUDED_DISTRIBUTIONS or canonical in seen:
+                continue
+            seen.add(canonical)
+
+            licenses_data.append({
+                'Name': name,
+                'License': _license_name(meta),
+                'Author': _author(meta),
+                'Description': (meta.get('Summary') or '').strip() or None,
+                'URL': _sanitize_url(_homepage_url(meta)),
+                'LicenseText': _license_text(dist),
+            })
+        except Exception as e:
+            logger.warning("Skipping distribution with unreadable metadata: %s", e)
+
+    licenses_data.sort(key=lambda x: x['Name'].lower())
+
+    # Unique temp file + rename so concurrent Gunicorn workers regenerating
+    # at startup never observe a half-written or interleaved file.
+    tmp_fd, tmp_name = tempfile.mkstemp(dir=licenses_path.parent, suffix='.tmp')
     try:
-        result = subprocess.run(
-            [
-                sys.executable,
-                '-m', 'piplicenses',
-                '--format=json',
-                '--with-urls',
-                '--with-authors',
-                '--with-description',
-                '--with-license-file',
-                '--no-license-path'
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60
-        )
-
-        if result.returncode != 0:
-            if 'No module named' in result.stderr:
-                logger.warning("pip-licenses not installed, skipping license generation")
-            else:
-                logger.error("pip-licenses failed: %s", result.stderr)
-            return False
-
-        licenses_data = json.loads(result.stdout)
-
-        for pkg in licenses_data:
-            pkg['URL'] = _sanitize_url(pkg.get('URL'))
-            pkg.pop('Version', None)
-
-        licenses_data.sort(key=lambda x: x.get('Name', '').lower())
-
-        # Write then rename so concurrent Gunicorn workers regenerating at
-        # startup never observe a half-written file.
-        tmp_path = Path(f'{licenses_path}.tmp')
-        with open(tmp_path, 'w', encoding='utf-8') as f:
+        with os.fdopen(tmp_fd, 'w', encoding='utf-8') as f:
             json.dump(licenses_data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, licenses_path)
-
-        logger.info("Generated licenses.json with %d packages", len(licenses_data))
-        return True
-
-    except subprocess.TimeoutExpired:
-        logger.error("pip-licenses timed out")
-        return False
-    except FileNotFoundError:
-        logger.warning("Python interpreter not found, skipping license generation")
-        return False
-    except json.JSONDecodeError as e:
-        logger.error("Failed to parse pip-licenses output: %s", e)
-        return False
+        os.replace(tmp_name, licenses_path)
     except OSError as e:
         logger.error("Failed to write licenses.json: %s", e)
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
         return False
+
+    logger.info("Generated licenses.json with %d packages", len(licenses_data))
+    return True
 
 
 def ensure_licenses_current() -> None:
@@ -175,13 +352,11 @@ def load_manual_licenses() -> list[dict]:
 
 
 def load_licenses() -> list[dict]:
-    """Load all licenses from auto-generated and manual JSON files.
-
-    Merges pip-licenses output with manually defined frontend/other licenses.
-    Returns combined list sorted alphabetically by package name.
+    """Load all licenses from the generated and the manual JSON file.
 
     Returns:
-        List of license dictionaries, or empty list if no files found.
+        Combined list of license dictionaries sorted alphabetically by
+        package name, or empty list if no files found.
     """
     auto_licenses = _load_json_file(get_licenses_path())
     manual_licenses = load_manual_licenses()

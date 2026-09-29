@@ -22,45 +22,54 @@
         bulkDeleteBtn = document.getElementById('bulk-delete-btn');
         clearSelectionBtn = document.getElementById('clear-selection-btn');
 
+        initExport();
+        initTruncationTooltips();
+
         if (!checkboxes.length) {
             return;
         }
 
         initCheckboxListeners();
         initBulkActions();
-        initExport();
-        initNameTooltips();
     }
 
     /**
-     * Attach a tooltip with the full name to any name cell whose label is
+     * Attach a tooltip with the full text to any cell whose label is
      * truncated, and remove it where the label fits. Mirrors the team overview
-     * behaviour; on the card layout the name is shown in full and gets none.
+     * behaviour; on the card layout labels are shown in full and get none.
      * @returns {void}
      */
-    function refreshNameTooltips() {
-        var cells = document.querySelectorAll('.list-name');
-        cells.forEach(function(cell) {
-            var label = cell.querySelector('span');
-            if (!label) return;
+    function refreshTruncationTooltips() {
+        var labels = document.querySelectorAll('.list-name span, .list-cards .list-truncate, .list-cards .category-badge');
+        labels.forEach(function(label) {
+            var cell = label.closest('td');
+            if (!cell) return;
             if (label.scrollWidth > label.clientWidth) {
-                cell.setAttribute('data-tooltip', label.textContent);
+                cell.setAttribute('data-tooltip', label.textContent.trim());
+                // A tab stop is only needed where the cell has no focusable
+                // child of its own; otherwise it just adds a dead station.
+                if (!cell.querySelector('a[href], button')) {
+                    cell.setAttribute('tabindex', '0');
+                }
             } else {
                 cell.removeAttribute('data-tooltip');
+                if (document.activeElement !== cell) {
+                    cell.removeAttribute('tabindex');
+                }
             }
         });
     }
 
     /**
-     * Wire up name tooltips on load and recompute them after viewport changes.
+     * Wire up truncation tooltips on load and recompute them after viewport changes.
      * @returns {void}
      */
-    function initNameTooltips() {
-        refreshNameTooltips();
+    function initTruncationTooltips() {
+        refreshTruncationTooltips();
         var resizeTimeout;
         window.addEventListener('resize', function() {
             clearTimeout(resizeTimeout);
-            resizeTimeout = setTimeout(refreshNameTooltips, 150);
+            resizeTimeout = setTimeout(refreshTruncationTooltips, 150);
         });
     }
 
@@ -101,13 +110,13 @@
 
             switch (type) {
                 case 'pdf-list':
-                    window.location.href = urlPdf + query;
+                    window.FBKTime.downloadFile(urlPdf + query);
                     break;
                 case 'pdf-matrix':
-                    window.location.href = urlMatrix + matrixQuery;
+                    window.FBKTime.downloadFile(urlMatrix + matrixQuery);
                     break;
                 case 'ical':
-                    window.location.href = urlIcal + query;
+                    window.FBKTime.downloadFile(urlIcal + query);
                     break;
             }
         });
@@ -216,20 +225,35 @@
             body: JSON.stringify({ ids: selectedIds })
         })
         .then(function(response) {
-            return response.json();
+            return response.json().then(function(data) {
+                return { ok: response.ok, status: response.status, data: data };
+            });
         })
-        .then(function(data) {
-            if (data.success) {
-                var count = (data.data && data.data.deleted) || 0;
-                var skipped = selectedIds.length - count;
-                var message = count + ' Abwesenheit' + (count !== 1 ? 'en' : '') + ' gelöscht.';
-                if (skipped > 0) {
-                    message += ' ' + skipped + ' übersprungen (keine Berechtigung).';
+        .then(function(result) {
+            if (result.status === 401 && result.data && result.data.redirect) {
+                window.location.href = result.data.redirect;
+                return;
+            }
+            if (result.ok && result.data.success) {
+                var counts = result.data.data;
+                var message = counts.deleted + ' Abwesenheit' + (counts.deleted !== 1 ? 'en' : '') + ' gelöscht.';
+                var skipped = [];
+                if (counts.forbidden > 0) {
+                    skipped.push(counts.forbidden + ' ohne Berechtigung');
                 }
-                Toast.store(message, 'success');
+                if (counts.not_found > 0) {
+                    skipped.push(counts.not_found + ' nicht mehr vorhanden');
+                }
+                if (counts.invalid > 0) {
+                    skipped.push(counts.invalid + ' ungültig');
+                }
+                if (skipped.length) {
+                    message += ' Übersprungen: ' + skipped.join(', ') + '.';
+                }
+                Toast.store(message, skipped.length ? 'warning' : 'success');
                 location.reload();
             } else {
-                Toast.error('Fehler: ' + (data.error || 'Unbekannter Fehler'));
+                Toast.error('Fehler: ' + (result.data.error || 'Unbekannter Fehler'));
                 bulkDeleteBtn.disabled = false;
                 bulkDeleteBtn.removeAttribute('aria-busy');
             }

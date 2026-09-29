@@ -2,6 +2,7 @@
 <details id="filter-panel">
     <summary><strong>Filter</strong></summary>
     <form method="GET">
+        <input type="hidden" name="filtered" value="1">
         {% for key, value in hidden.items() %}
         <input type="hidden" name="{{ key }}" value="{{ value }}">
         {% endfor %}
@@ -17,9 +18,9 @@
             </div>
             {% endif %}
             <div>
-                <label>Person</label>
+                <label id="filter-user-label">Person</label>
                 <details class="dropdown">
-                    <summary>{% if filters.user_ids %}{{ filters.user_ids|length }} ausgewählt{% else %}Alle{% endif %}</summary>
+                    <summary id="filter-user-summary" aria-labelledby="filter-user-label filter-user-summary">{% if filters.user_ids %}{{ filters.user_ids|length }} ausgewählt{% else %}Alle{% endif %}</summary>
                     <ul>
                         {% for user in users %}
                         <li>
@@ -33,9 +34,9 @@
                 </details>
             </div>
             <div>
-                <label>Kategorie</label>
+                <label id="filter-category-label">Kategorie</label>
                 <details class="dropdown">
-                    <summary>{% if filters.category_ids %}{{ filters.category_ids|length }} ausgewählt{% else %}Alle{% endif %}</summary>
+                    <summary id="filter-category-summary" aria-labelledby="filter-category-label filter-category-summary">{% if filters.category_ids %}{{ filters.category_ids|length }} ausgewählt{% else %}Alle{% endif %}</summary>
                     <ul>
                         {% for category in categories %}
                         <li>
@@ -49,10 +50,10 @@
                 </details>
             </div>
             <div>
-                <label>Vertretung</label>
+                <label id="filter-substitute-label">Vertretung</label>
                 <details class="dropdown">
-                    <summary>{% if filters.has_substitute == 'yes' %}Mit Vertretung{% elif filters.has_substitute == 'no' %}Ohne Vertretung{% else %}Alle{% endif %}</summary>
-                    <ul>
+                    <summary id="filter-substitute-summary" aria-labelledby="filter-substitute-label filter-substitute-summary">{% if filters.has_substitute == 'yes' %}Mit Vertretung{% elif filters.has_substitute == 'no' %}Ohne Vertretung{% else %}Alle{% endif %}</summary>
+                    <ul role="group" aria-labelledby="filter-substitute-label">
                         <li>
                             <label>
                                 <input type="radio" name="has_substitute" value="" {% if filters.has_substitute != 'yes' and filters.has_substitute != 'no' %}checked{% endif %}>

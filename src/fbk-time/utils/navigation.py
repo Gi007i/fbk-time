@@ -6,9 +6,11 @@ overview routes are accepted as an origin; anything else is discarded, which
 also prevents open redirects.
 """
 
-from urllib.parse import urljoin, urlparse, urlsplit
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlsplit, urlunsplit
 
 from flask import current_app, request, url_for
+from werkzeug.exceptions import HTTPException
+from werkzeug.routing import RoutingException
 
 
 # Endpoints that may act as a breadcrumb origin, mapped to their display label.
@@ -23,6 +25,15 @@ ORIGIN_LABELS = {
 }
 
 
+# Maps a user's stored start_page value to the endpoint shown after login.
+START_PAGE_ENDPOINTS = {
+    'dashboard': 'dashboard.index',
+    'calendar': 'absences.calendar',
+    'team': 'dashboard.team_overview',
+    'list': 'absences.list_absences',
+}
+
+
 def _endpoint_for_path(path: str | None) -> str | None:
     """Resolve an internal GET path to its endpoint, or None.
 
@@ -31,12 +42,17 @@ def _endpoint_for_path(path: str | None) -> str | None:
     """
     if not path or not path.startswith('/') or path.startswith('//'):
         return None
+    # urlsplit strips tab and newline, as browsers do. The caller forwards the
+    # raw value, so '/\t/host/' would pass the prefix check here and turn into
+    # a protocol-relative '//host/' in the browser.
+    if any(char in path for char in '\t\r\n'):
+        return None
     route = urlsplit(path).path
     try:
         adapter = current_app.url_map.bind('localhost')
         endpoint, _ = adapter.match(route, method='GET')
         return endpoint
-    except Exception:
+    except (HTTPException, RoutingException):
         return None
 
 
@@ -47,8 +63,11 @@ def _current_ref() -> str:
 
 
 def _valid_origin_ref() -> str | None:
-    """Return the ref to forward: an existing valid origin, else the current
-    page when it is itself an origin, else None."""
+    """Return the ref to forward, or None.
+
+    Prefers an existing valid origin, falling back to the current page when
+    that is itself an origin.
+    """
     current = request.args.get('ref')
     if current and _endpoint_for_path(current) in ORIGIN_LABELS:
         return current
@@ -78,9 +97,8 @@ def resolve_origin() -> dict | None:
 def origin_link(endpoint: str, **values) -> str:
     """Build a forward URL that carries the origin along.
 
-    Appends the forwarded ``ref`` when a valid origin exists, so the return
-    target survives navigation across detail/edit chains. Emits a plain URL
-    when there is no origin to carry (direct access).
+    The ``ref`` keeps the return target across detail/edit chains; without
+    a valid origin the URL stays plain.
     """
     ref = _valid_origin_ref()
     if ref:
@@ -91,14 +109,29 @@ def origin_link(endpoint: str, **values) -> str:
 def back_url(default_endpoint: str, **values) -> str:
     """Return the URL to jump back to.
 
-    The origin's URL when one is known (one-click return to where the user
-    came from), otherwise the given default target. Used for cancel buttons
-    and post-save/delete redirects.
+    The origin's URL when one is known, otherwise the default target.
     """
     origin = resolve_origin()
     if origin:
         return origin['url']
     return url_for(default_endpoint, **values)
+
+
+def back_url_focused(default_endpoint: str, row_id: int, **values) -> str:
+    """Return the back URL with the given overview row reopened and scrolled to.
+
+    Overview rows are collapsible, so a plain return leaves the row the user
+    just worked on collapsed and the page scrolled to the top.
+    """
+    parts = urlsplit(back_url(default_endpoint, **values))
+    # The origin may already carry an 'open' from an earlier return; appending
+    # a second one would leave the previously edited row expanded instead.
+    query = [(k, v) for k, v in parse_qsl(parts.query) if k != 'open']
+    query.append(('open', str(row_id)))
+    return urlunsplit((
+        parts.scheme, parts.netloc, parts.path,
+        urlencode(query), f'row-{row_id}'
+    ))
 
 
 def is_safe_redirect_url(target: str | None) -> bool:
@@ -113,6 +146,11 @@ def is_safe_redirect_url(target: str | None) -> bool:
     if not target:
         return False
 
+    # Browsers fold backslashes to slashes, turning '/\evil.com' into a
+    # protocol-relative redirect the netloc check below misses.
+    if '\\' in target:
+        return False
+
     ref_url = urlparse(request.host_url)
     test_url = urlparse(urljoin(request.host_url, target))
 
@@ -120,3 +158,13 @@ def is_safe_redirect_url(target: str | None) -> bool:
         test_url.scheme in ('http', 'https') and
         ref_url.netloc == test_url.netloc
     )
+
+
+def start_page_url(start_page: str | None) -> str:
+    """Return the post-login landing URL for a user's start_page preference.
+
+    Falls back to the dashboard for an unknown or missing value, so a stale
+    preference can never break the login redirect.
+    """
+    endpoint = START_PAGE_ENDPOINTS.get(start_page, 'dashboard.index')
+    return url_for(endpoint)

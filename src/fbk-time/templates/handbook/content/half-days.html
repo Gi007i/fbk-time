@@ -1,38 +1,42 @@
 <h1>Halbe Tage</h1>
 
-<p>Abwesenheiten, die einen Tag nur teilweise betreffen, werden als halbe Tage erfasst. Typische Anwendungsfälle sind Arzttermine, halbtägige Krankmeldungen oder kurze Abwesenheiten innerhalb eines Arbeitstages.</p>
+<p>Betrifft eine Abwesenheit nur einen Teil des Tages, erfassen Sie sie als halben Tag. Typisch sind Arzttermine, halbtägige Krankmeldungen oder kurze Abwesenheiten mitten im Arbeitstag.</p>
 
-<p>Beispiel: Sie haben am Dienstagnachmittag einen Arzttermin, arbeiten aber vormittags normal. Das erfassen Sie als halben Tag Nachmittag.</p>
+<p>Ein Beispiel: Am Dienstagnachmittag haben Sie einen Arzttermin, vormittags arbeiten Sie normal. Das tragen Sie als halben Tag Nachmittag ein.</p>
 
-<h2>Formularfeld Zeittyp</h2>
+<h2>Zeittyp wählen</h2>
 
-<p>Im Formular finden Sie unter <strong>Zeittyp</strong> vier Optionen. Bei eintägigen Einträgen gelten die Halbtags-Optionen für genau diesen Tag. Bei mehrtägigen Einträgen markieren sie den ersten oder letzten Tag der Serie als halben Tag.</p>
-
-<ul>
-<li><strong>Ganztags</strong> – der gesamte Tag gilt als abwesend.</li>
-<li><strong>Halbtags Vormittag</strong> – ausschließlich der Vormittag (VM).</li>
-<li><strong>Halbtags Nachmittag</strong> – ausschließlich der Nachmittag (NM).</li>
-<li><strong>Benutzerdefinierte Zeit</strong> – frei definierbare Start- und Endzeit innerhalb eines Tages.</li>
-</ul>
-
-<p>Für einen halben Tag am Beginn oder Ende eines mehrtägigen Zeitraums legen Sie einen separaten eintägigen Eintrag mit Halbtags Vormittag oder Halbtags Nachmittag an.</p>
-
-<h2>Kombination zweier halber Tage</h2>
-
-<p>Zwei halbe Tage am selben Datum tragen Sie als zwei getrennte Einträge ein, solange sich Vor- und Nachmittag nicht überschneiden. Ein VM-Eintrag plus ein NM-Eintrag ist zulässig.</p>
-
-<p>Die Anwendung prüft nur auf Überschneidung, nicht auf fachliche Sinnhaftigkeit. Zwei Einträge mit identischer Kategorie über Vor- und Nachmittag werden akzeptiert – sind aber als ganztägiger Eintrag einfacher. Sinnvolle Kombinationen sind beispielsweise:</p>
+<p>Das Formular bietet unter <strong>Zeittyp</strong> vier Optionen:</p>
 
 <ul>
-<li>VM Home Office + NM Arzttermin,</li>
-<li>nur VM Dienstreise (Nachmittag ohne Eintrag),</li>
-<li>VM Urlaub + NM Krank.</li>
+<li><strong>Ganztags</strong> – Sie sind den ganzen Tag abwesend.</li>
+<li><strong>Halbtags Vormittag</strong> – Sie sind nur vormittags abwesend, im Kalender gekennzeichnet mit <strong>(VM)</strong>.</li>
+<li><strong>Halbtags Nachmittag</strong> – Sie sind nur nachmittags abwesend, im Kalender gekennzeichnet mit <strong>(NM)</strong>.</li>
+<li><strong>Benutzerdefinierte Zeit</strong> – Sie geben Start- und Endzeit innerhalb eines Tages selbst an.</li>
 </ul>
 
-<h2>Darstellung</h2>
+<p>Die beiden Halbtags-Optionen gelten für jeden Tag des eingetragenen Zeitraums: bei einem eintägigen Eintrag also für diesen einen Tag, bei einem Eintrag über drei Tage für alle drei.</p>
 
-<p>Im Kalender erkennen Sie halbe Tage am Zusatz <strong>(VM)</strong> oder <strong>(NM)</strong> hinter dem Namen. In der Team-Übersicht sehen Sie ein zweigeteiltes Feld: Die betroffene Tageshälfte ist in der Kategoriefarbe gefüllt, die andere bleibt leer oder zeigt eine zweite Kategorie.</p>
+<p>Soll nur der erste oder der letzte Tag eines Zeitraums halb sein, teilen Sie den Zeitraum auf. Die vollen Tage tragen Sie als einen ganztägigen Eintrag ein, den halben Tag als separaten eintägigen Eintrag daneben.</p>
 
-<p>In der Listenansicht ist eine eigene Spalte <strong>Zeitraum</strong> vorhanden. Bei halben Tagen steht dort <strong>Vormittag</strong> oder <strong>Nachmittag</strong>, bei ganztägigen Einträgen <strong>Ganztags</strong>.</p>
+<h2>Zwei halbe Tage kombinieren</h2>
 
-<p>In exportierten Kalenderdateien (<code>.ics</code>-Format für Outlook/Thunderbird) erscheinen Halbtage als {{ cfg.half_day_morning_range }} bzw. {{ cfg.half_day_afternoon_range }}. Diese Zeiten helfen dem Kalenderprogramm bei der Einordnung – sie stehen nicht für tatsächliche Arbeitszeiten.</p>
+<p>Zwei halbe Tage am selben Datum tragen Sie als zwei getrennte Einträge ein. Solange sich Vor- und Nachmittag nicht überschneiden, funktioniert das: Ein VM-Eintrag neben einem NM-Eintrag ist in Ordnung.</p>
+
+<p>Die Anwendung prüft dabei nur die Überschneidung, nicht ob die Kombination fachlich Sinn ergibt. Zwei Einträge derselben Kategorie über Vor- und Nachmittag nimmt sie an – als ein ganztägiger Eintrag wären sie einfacher.</p>
+
+<p>Sinnvoll sind zum Beispiel diese drei Kombinationen:</p>
+
+<ul>
+<li>Sie arbeiten vormittags im Home Office und haben nachmittags einen Arzttermin.</li>
+<li>Sie sind vormittags auf Dienstreise, der Nachmittag bleibt ohne Eintrag.</li>
+<li>Sie nehmen vormittags Urlaub und sind nachmittags krank.</li>
+</ul>
+
+<h2>Halbe Tage in den Ansichten erkennen</h2>
+
+<p>Im Kalender steht hinter dem Namen der Zusatz <strong>(VM)</strong> oder <strong>(NM)</strong>. In der Team-Übersicht ist das Feld zweigeteilt: Die betroffene Tageshälfte ist in der Kategoriefarbe gefüllt, die andere bleibt leer oder zeigt eine zweite Kategorie.</p>
+
+<p>Die Listenansicht führt eine eigene Spalte <strong>Zeitraum</strong>. Dort steht bei halben Tagen <strong>Vormittag</strong> oder <strong>Nachmittag</strong>, bei ganztägigen Einträgen <strong>Ganztags</strong>.</p>
+
+<p>Wie Sie eine Kalenderdatei im Format <code>.ics</code> für Outlook oder Thunderbird erzeugen, beschreibt das Kapitel <strong>Exporte</strong>. In der Datei erscheinen halbe Tage als {{ cfg.half_day_morning_range }} oder {{ cfg.half_day_afternoon_range }} – das hilft dem Kalenderprogramm beim Einsortieren, tatsächliche Arbeitszeiten sind es nicht.</p>

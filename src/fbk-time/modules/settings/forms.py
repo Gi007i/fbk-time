@@ -22,10 +22,30 @@ from core.timezone import SUPPORTED_TIMEZONES
 
 _HHMM_PATTERN = re.compile(r'^(?:[01]\d|2[0-3]):[0-5]\d$')
 
+START_PAGE_CHOICES = [
+    ('dashboard', 'Dashboard'),
+    ('calendar', 'Kalender'),
+    ('team', 'Team-Übersicht'),
+    ('list', 'Liste')
+]
+
+VIEW_SCOPE_CHOICES = [
+    ('all', 'Alle Einträge'),
+    ('mine', 'Meine Einträge')
+]
+
 
 class SettingsForm(FlaskForm):
     """Application settings form."""
 
+    start_page = SelectField(
+        'Startseite',
+        choices=START_PAGE_CHOICES
+    )
+    view_scope = SelectField(
+        'Standardansicht',
+        choices=VIEW_SCOPE_CHOICES
+    )
     holiday_region = SelectField(
         'Feiertags-Region',
         choices=[
@@ -155,7 +175,7 @@ class AdminSettingsForm(FlaskForm):
             NumberRange(min=16, max=256, message='Wert muss zwischen 16 und 256 liegen.')
         ]
     )
-    password_require_uppercase = BooleanField('Grossbuchstaben erforderlich')
+    password_require_uppercase = BooleanField('Großbuchstaben erforderlich')
     password_require_lowercase = BooleanField('Kleinbuchstaben erforderlich')
     password_require_numbers = BooleanField('Zahlen erforderlich')
     password_require_symbols = BooleanField('Sonderzeichen erforderlich')
@@ -180,6 +200,14 @@ class AdminSettingsForm(FlaskForm):
         ]
     )
 
+    user_default_start_page = SelectField(
+        'Standard-Startseite für neue Benutzer',
+        choices=START_PAGE_CHOICES
+    )
+    user_default_view_scope = SelectField(
+        'Standardansicht für neue Benutzer',
+        choices=VIEW_SCOPE_CHOICES
+    )
     user_default_theme = SelectField(
         'Standard-Design für neue Benutzer',
         choices=[

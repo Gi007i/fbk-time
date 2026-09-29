@@ -1,21 +1,48 @@
-"""Recurrence service for absence management.
+"""RRULE handling and occurrence expansion for recurring absences.
 
-Provides RRULE pattern handling and occurrence generation for recurring absences.
-Uses python-dateutil (dependency of icalendar) for RRULE parsing and expansion.
+Uses python-dateutil, already a dependency of icalendar.
 """
 
 from datetime import date, datetime, timedelta
-from typing import Optional, Generator
+from typing import Generator, Optional, Union
 
-from dateutil.rrule import rrulestr
+from dateutil.relativedelta import relativedelta
+from dateutil.rrule import rrule, rrulestr
+from flask import current_app
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-from core.extensions import db
+from core.db import db
+from core.settings_manager import settings_manager
 from modules.absence.models import Absence, RecurrenceException
 from utils.helpers import format_date_for_user
 
 
+# Distinguishes "caller supplied no exception" from a resolved None.
+_UNRESOLVED = object()
+
+# Keeps IN(...) lists well below the SQLite host-parameter limit.
+_ID_CHUNK_SIZE = 500
+
+_PERIOD_DAYS = {'daily': 1, 'weekly': 7, 'biweekly': 14}
+
+RRULE_UNREADABLE = 'Das Serienmuster dieser Abwesenheit ist nicht lesbar.'
+
+_WEEKDAY_NAMES = {
+    'MO': 'Montag', 'TU': 'Dienstag', 'WE': 'Mittwoch',
+    'TH': 'Donnerstag', 'FR': 'Freitag', 'SA': 'Samstag', 'SU': 'Sonntag'
+}
+
+
 class RecurrenceService:
-    """Handle recurring absence patterns and occurrence expansion."""
+    """Handle recurring absence patterns and occurrence expansion.
+
+    Every stored RRULE comes from ``build_rrule_string``, so an unparsable rule
+    means corrupted data. Write paths then raise ``ValueError`` with the
+    user-facing ``RRULE_UNREADABLE`` and never delete exceptions on its basis;
+    read paths log the error and render only the series start, so one broken
+    record does not take down every overview.
+    """
 
     FREQUENCY_MAP = {
         'daily': 'DAILY',
@@ -26,10 +53,8 @@ class RecurrenceService:
     WEEKDAY_CODES = ['MO', 'TU', 'WE', 'TH', 'FR', 'SA', 'SU']
 
     @property
-    def max_future_date(self):
+    def max_future_date(self) -> date:
         """Return the latest allowed date based on planning horizon."""
-        from core.settings_manager import settings_manager
-        from dateutil.relativedelta import relativedelta
         months = settings_manager.get('limits_max_future_months')
         return date.today() + relativedelta(months=months)
 
@@ -37,17 +62,81 @@ class RecurrenceService:
         self, absence: Absence, occurrence_date: date
     ) -> Optional[RecurrenceException]:
         """Return the RecurrenceException for a given date, if any."""
-        return RecurrenceException.query.filter_by(
-            absence_id=absence.id,
-            exception_date=occurrence_date
+        return db.session.scalars(
+            select(RecurrenceException).filter_by(
+                absence_id=absence.id,
+                exception_date=occurrence_date
+            )
         ).first()
+
+    def build_rule(
+        self,
+        start_date: date,
+        rrule_string: str,
+        range_start: Optional[date] = None
+    ) -> rrule:
+        """Parse an RRULE for expansion from range_start onwards.
+
+        The anchor moves forward by whole periods (1, 7 or 14 days) to the
+        last one not after range_start, so expansion cost does not grow with
+        the series age; the rules built by ``build_rrule_string`` repeat
+        with that period, so every occurrence from range_start on is unchanged.
+
+        Args:
+            start_date: First day of the series.
+            rrule_string: RRULE as produced by ``build_rrule_string``.
+            range_start: Earliest date the caller expands; None keeps the
+                series start as anchor.
+
+        Raises:
+            ValueError: If the rule cannot be parsed or is not in the form
+                ``build_rrule_string`` produces.
+        """
+        parsed = self.validate_rrule(rrule_string)
+
+        anchor = start_date
+        if range_start is not None and range_start > start_date:
+            period = _PERIOD_DAYS[parsed['frequency']]
+            anchor += timedelta(
+                days=(range_start - start_date).days // period * period
+            )
+
+        dtstart = anchor.strftime('%Y%m%dT000000')
+        try:
+            return rrulestr(f"DTSTART:{dtstart}\nRRULE:{rrule_string}")
+        except (ValueError, TypeError) as error:
+            current_app.logger.error('Unparsable RRULE %r: %s', rrule_string, error)
+            raise ValueError(RRULE_UNREADABLE) from error
+
+    def validate_rrule(self, rrule_string: str) -> dict:
+        """Parse a stored RRULE and require the form build_rrule_string writes.
+
+        Anything else (other frequencies, COUNT, unknown weekdays) can only be
+        corrupted data and is rejected like an unparsable rule.
+
+        Args:
+            rrule_string: The stored RRULE string.
+
+        Returns:
+            Parsed components as returned by ``parse_rrule_string``.
+
+        Raises:
+            ValueError: RRULE_UNREADABLE if the rule is not canonical.
+        """
+        parsed = self.parse_rrule_string(rrule_string)
+        canonical = self.build_rrule_string(
+            parsed['frequency'], parsed['weekdays'], parsed['end_date']
+        )
+        if canonical != rrule_string:
+            current_app.logger.error('Non-canonical RRULE %r', rrule_string)
+            raise ValueError(RRULE_UNREADABLE)
+        return parsed
 
     def build_rrule_string(
         self,
         frequency: str,
         weekdays: Optional[list[str]] = None,
-        end_date: Optional[date] = None,
-        count: Optional[int] = None
+        end_date: Optional[date] = None
     ) -> str:
         """Build an RRULE string from UI parameters.
 
@@ -55,7 +144,6 @@ class RecurrenceService:
             frequency: 'daily', 'weekly', or 'biweekly'.
             weekdays: List of weekday codes ['MO', 'TU', ...] for weekly/biweekly.
             end_date: End date for the series.
-            count: Number of occurrences (alternative to end_date).
 
         Returns:
             RRULE string, e.g., "FREQ=WEEKLY;BYDAY=MO,WE,FR;UNTIL=20261231T235959".
@@ -77,8 +165,6 @@ class RecurrenceService:
 
         if end_date:
             parts.append(f"UNTIL={end_date.strftime('%Y%m%d')}T235959")
-        elif count:
-            parts.append(f"COUNT={count}")
 
         return ';'.join(parts)
 
@@ -89,13 +175,15 @@ class RecurrenceService:
             rrule_string: RRULE string to parse.
 
         Returns:
-            Dictionary with frequency, weekdays, end_date, count.
+            Dictionary with frequency, weekdays, end_date.
+
+        Raises:
+            ValueError: RRULE_UNREADABLE if the UNTIL value is not a valid date.
         """
         result = {
             'frequency': 'weekly',
             'weekdays': [],
-            'end_date': None,
-            'count': None
+            'end_date': None
         }
 
         if not rrule_string:
@@ -121,22 +209,53 @@ class RecurrenceService:
                 result['weekdays'] = value.split(',')
 
             elif key == 'UNTIL':
+                # DATE (YYYYMMDD) or DATE-TIME (YYYYMMDDTHHMMSS)
                 try:
-                    # Handle both DATE (YYYYMMDD) and DATE-TIME (YYYYMMDDTHHMMSS) formats
-                    date_part = value.split('T')[0] if 'T' in value else value
-                    result['end_date'] = date(
-                        int(date_part[:4]),
-                        int(date_part[4:6]),
-                        int(date_part[6:8])
+                    result['end_date'] = datetime.strptime(
+                        value.split('T')[0], '%Y%m%d'
+                    ).date()
+                except ValueError as error:
+                    current_app.logger.error(
+                        'Unparsable RRULE %r: %s', rrule_string, error
                     )
-                except (ValueError, IndexError):
-                    pass
+                    raise ValueError(RRULE_UNREADABLE) from error
 
-            elif key == 'COUNT':
-                try:
-                    result['count'] = int(value)
-                except ValueError:
-                    pass
+        return result
+
+    def load_exceptions(
+        self,
+        absences: list,
+        range_start: date,
+        range_end: date
+    ) -> dict[int, dict[date, RecurrenceException]]:
+        """Load the exceptions of all recurring absences for a range at once.
+
+        Args:
+            absences: Absence records; non-recurring ones are ignored.
+            range_start: First date of the range.
+            range_end: Last date of the range.
+
+        Returns:
+            Dict mapping each recurring absence ID to a dict of
+            exception date to RecurrenceException.
+        """
+        absence_ids = [a.id for a in absences if a.is_recurring and a.rrule]
+        result = {absence_id: {} for absence_id in absence_ids}
+
+        for offset in range(0, len(absence_ids), _ID_CHUNK_SIZE):
+            chunk = absence_ids[offset:offset + _ID_CHUNK_SIZE]
+            exceptions = db.session.scalars(
+                select(RecurrenceException).where(
+                    RecurrenceException.absence_id.in_(chunk),
+                    RecurrenceException.exception_date >= range_start,
+                    RecurrenceException.exception_date <= range_end
+                ).options(
+                    selectinload(RecurrenceException.modified_category),
+                    selectinload(RecurrenceException.modified_substitute)
+                )
+            )
+            for exc in exceptions:
+                result[exc.absence_id][exc.exception_date] = exc
 
         return result
 
@@ -144,47 +263,62 @@ class RecurrenceService:
         self,
         absence: Absence,
         range_start: date,
-        range_end: Optional[date] = None
+        range_end: Optional[date] = None,
+        exceptions_by_date: Optional[dict[date, RecurrenceException]] = None
     ) -> Generator[tuple[date, Optional[RecurrenceException]], None, None]:
         """Generate occurrence dates for a recurring absence within a date range.
+
+        This is a read path: an unparsable RRULE is logged and only the series
+        start is yielded (see the class docstring).
 
         Args:
             absence: The master recurring absence record.
             range_start: Start of the date range to generate occurrences.
             range_end: End of the date range (defaults to recurrence_end_date or max).
+            exceptions_by_date: Exceptions of this absence covering the range,
+                as returned by ``load_exceptions``. Loaded here when omitted.
 
         Yields:
             Tuple of (occurrence_date, exception_or_none).
             Deleted exceptions are skipped.
         """
         if range_end is None:
-            range_end = absence.recurrence_end_date or (
-                self.max_future_date
-            )
+            range_end = absence.recurrence_end_date or self.max_future_date
 
-        if not absence.is_recurring or not absence.rrule:
+        def exception_for(occurrence_date):
+            if exceptions_by_date is not None:
+                return exceptions_by_date.get(occurrence_date)
+            return self._get_exception(absence, occurrence_date)
+
+        # The series-start fallback must resolve the exception too: callers
+        # treat the yielded value as authoritative, so a placeholder None
+        # would hide a deletion or an override for that date.
+        rule = None
+        if absence.is_recurring and absence.rrule:
+            try:
+                rule = self.build_rule(
+                    absence.start_date, absence.rrule, range_start
+                )
+            except ValueError:
+                current_app.logger.error(
+                    'Absence %s: unreadable RRULE, showing series start only',
+                    absence.id
+                )
+
+        if rule is None:
             if range_start <= absence.start_date <= range_end:
-                yield (absence.start_date, None)
+                exception = exception_for(absence.start_date)
+                if not (exception and exception.exception_type == 'deleted'):
+                    yield (absence.start_date, exception)
             return
 
-        dtstart = absence.start_date.strftime('%Y%m%dT000000')
-        rrule_full = f"DTSTART:{dtstart}\nRRULE:{absence.rrule}"
+        if exceptions_by_date is None:
+            exceptions_by_date = {
+                exc.exception_date: exc
+                for exc in db.session.scalars(absence.exceptions.select())
+            }
 
-        try:
-            rule = rrulestr(rrule_full)
-        except (ValueError, TypeError):
-            if range_start <= absence.start_date <= range_end:
-                yield (absence.start_date, None)
-            return
-
-        exceptions_by_date = {}
-        for exc in absence.exceptions.all():
-            exceptions_by_date[exc.exception_date] = exc
-
-        effective_end = min(
-            range_end,
-            self.max_future_date
-        )
+        effective_end = min(range_end, self.max_future_date)
         if absence.recurrence_end_date:
             effective_end = min(effective_end, absence.recurrence_end_date)
 
@@ -204,7 +338,8 @@ class RecurrenceService:
     def get_occurrence_data(
         self,
         absence: Absence,
-        occurrence_date: date
+        occurrence_date: date,
+        exception: Union[RecurrenceException, None, object] = _UNRESOLVED
     ) -> Optional[dict]:
         """Get the effective data for a specific occurrence.
 
@@ -213,11 +348,16 @@ class RecurrenceService:
         Args:
             absence: The master recurring absence.
             occurrence_date: The specific date to get data for.
+            exception: The already-resolved exception for this date, as
+                yielded by ``expand_occurrences``; avoids one query per
+                occurrence when expanding a whole range. Loaded here when
+                omitted.
 
         Returns:
             Dictionary with merged absence data, or None if occurrence is deleted.
         """
-        exception = self._get_exception(absence, occurrence_date)
+        if exception is _UNRESOLVED:
+            exception = self._get_exception(absence, occurrence_date)
 
         if exception and exception.exception_type == 'deleted':
             return None
@@ -250,11 +390,14 @@ class RecurrenceService:
                 data['category_id'] = exception.modified_category_id
                 data['category'] = exception.modified_category
 
+            # An override replaces the series time window entirely.
             if exception.modified_time_type is not None:
                 time_type = exception.modified_time_type
                 data['is_all_day'] = time_type == 'all_day'
                 data['is_half_day_morning'] = time_type == 'morning'
                 data['is_half_day_afternoon'] = time_type == 'afternoon'
+                data['start_time'] = None
+                data['end_time'] = None
 
             if exception.modified_substitute_overridden:
                 data['substitute_id'] = exception.modified_substitute_id
@@ -266,7 +409,7 @@ class RecurrenceService:
         return data
 
     def is_valid_occurrence_date(self, absence: Absence, occurrence_date: date) -> bool:
-        """Check if a date is a valid occurrence in the recurring series.
+        """Check if a date is a valid, not deleted occurrence of the series.
 
         Args:
             absence: The master recurring absence.
@@ -274,26 +417,31 @@ class RecurrenceService:
 
         Returns:
             True if the date is a valid occurrence, False otherwise.
+
+        Raises:
+            ValueError: If the stored RRULE cannot be parsed.
         """
         if not absence.is_recurring or not absence.rrule:
             return occurrence_date == absence.start_date
 
-        for occ_date, _ in self.expand_occurrences(absence, occurrence_date, occurrence_date):
-            if occ_date == occurrence_date:
-                return True
+        effective_end = self.max_future_date
+        if absence.recurrence_end_date:
+            effective_end = min(effective_end, absence.recurrence_end_date)
+        if not absence.start_date <= occurrence_date <= effective_end:
+            return False
 
-        return False
+        if not self.is_date_in_rrule(absence, occurrence_date):
+            return False
+
+        exception = self._get_exception(absence, occurrence_date)
+        return not (exception and exception.exception_type == 'deleted')
 
     def is_date_in_rrule(self, absence: Absence, check_date: date) -> bool:
         """Check if a date is generated by the raw RRULE pattern.
 
-        Unlike :meth:`is_valid_occurrence_date`, this method ignores
-        exceptions entirely. A date with a 'deleted' exception still
-        returns True if the underlying RRULE would generate it.
-
-        Used by the orphan exception pruner: an exception is only
-        orphaned when its date is no longer produced by the new
-        recurrence pattern, regardless of the exception type.
+        Unlike :meth:`is_valid_occurrence_date`, exceptions are ignored, so a
+        deleted occurrence still counts. The orphan pruner relies on this: an
+        exception is orphaned only when the pattern no longer produces its date.
 
         Args:
             absence: The master recurring absence.
@@ -301,17 +449,14 @@ class RecurrenceService:
 
         Returns:
             True if the date is produced by the RRULE, False otherwise.
+
+        Raises:
+            ValueError: If the stored RRULE cannot be parsed.
         """
         if not absence.is_recurring or not absence.rrule:
             return check_date == absence.start_date
 
-        dtstart = absence.start_date.strftime('%Y%m%dT000000')
-        rrule_full = f"DTSTART:{dtstart}\nRRULE:{absence.rrule}"
-
-        try:
-            rule = rrulestr(rrule_full)
-        except (ValueError, TypeError):
-            return False
+        rule = self.build_rule(absence.start_date, absence.rrule, check_date)
 
         dt_start = datetime.combine(check_date, datetime.min.time())
         dt_end = datetime.combine(check_date, datetime.max.time())
@@ -374,17 +519,14 @@ class RecurrenceService:
         state for the occurrence with four mandatory keys:
 
             category_id (int):        The desired category.
-            time_type (str):          'all_day', 'morning', or 'afternoon'.
+            time_type (str):          'all_day', 'morning', 'afternoon', or
+                                      'custom_time' (keeps the series window).
             substitute_id (int|None): The desired substitute, or None.
             notes (str|None):         The desired notes, or None.
 
-        Each field is compared against the parent absence. Fields that
-        match the parent are not stored as overrides. Fields that
-        differ become active overrides with their override flags set.
-
-        If every field matches the parent after this comparison, any
-        existing modification exception for the date is removed so
-        that the occurrence inherits the parent cleanly.
+        Fields matching the parent are not stored as overrides. If every
+        field matches, an existing modification exception for the date is
+        removed so the occurrence inherits the parent cleanly.
 
         Args:
             absence: The master recurring absence.
@@ -464,22 +606,23 @@ class RecurrenceService:
 
     @staticmethod
     def parent_time_type(absence: Absence) -> str:
-        """Return the time_type enum value of the parent absence."""
+        """Return the time_type enum value of the parent absence.
+
+        Mirrors the slot classification: half-day flags win, a custom
+        window needs both times.
+        """
         if absence.is_half_day_morning:
             return 'morning'
         if absence.is_half_day_afternoon:
             return 'afternoon'
+        if not absence.is_all_day and absence.start_time and absence.end_time:
+            return 'custom_time'
         return 'all_day'
 
-    def validate_recurrence_end_date(
-        self,
-        start_date: date,
-        end_date: Optional[date]
-    ) -> date:
+    def validate_recurrence_end_date(self, end_date: Optional[date]) -> date:
         """Validate and constrain recurrence end date to the configured planning horizon.
 
         Args:
-            start_date: Start date of the recurring absence.
             end_date: Requested end date (may be None or beyond limit).
 
         Returns:
@@ -522,6 +665,35 @@ class RecurrenceService:
 
         return count
 
+    def describe_pattern(self, rrule_string: str) -> str:
+        """Describe the repetition of an RRULE without its end.
+
+        Args:
+            rrule_string: The RRULE string to describe.
+
+        Returns:
+            German description like "Jeden Montag und Freitag".
+
+        Raises:
+            ValueError: RRULE_UNREADABLE if the RRULE is not valid.
+        """
+        parsed = self.validate_rrule(rrule_string)
+
+        if parsed['frequency'] == 'daily':
+            return 'Täglich'
+
+        days = [_WEEKDAY_NAMES.get(d, d) for d in parsed['weekdays']]
+        if parsed['frequency'] == 'biweekly':
+            if days:
+                return f"Alle 2 Wochen am {' und '.join(days)}"
+            return 'Alle 2 Wochen'
+
+        if not days:
+            return 'Wöchentlich'
+        if len(days) == 1:
+            return f"Jeden {days[0]}"
+        return f"Jeden {', '.join(days[:-1])} und {days[-1]}"
+
     def get_recurrence_description(
         self,
         rrule_string: str,
@@ -534,40 +706,51 @@ class RecurrenceService:
             end_date: Optional end date to include in description.
 
         Returns:
-            German description like "Jeden Montag und Freitag".
+            German description like "Jeden Montag und Freitag bis 31.12.2026".
+
+        Raises:
+            ValueError: RRULE_UNREADABLE if the RRULE is not valid.
         """
-        parsed = self.parse_rrule_string(rrule_string)
+        desc = self.describe_pattern(rrule_string)
 
-        weekday_names = {
-            'MO': 'Montag', 'TU': 'Dienstag', 'WE': 'Mittwoch',
-            'TH': 'Donnerstag', 'FR': 'Freitag', 'SA': 'Samstag', 'SU': 'Sonntag'
-        }
-
-        if parsed['frequency'] == 'daily':
-            desc = 'Täglich'
-        elif parsed['frequency'] == 'biweekly':
-            if parsed['weekdays']:
-                days = [weekday_names.get(d, d) for d in parsed['weekdays']]
-                desc = f"Alle 2 Wochen am {' und '.join(days)}"
-            else:
-                desc = 'Alle 2 Wochen'
-        else:
-            if parsed['weekdays']:
-                days = [weekday_names.get(d, d) for d in parsed['weekdays']]
-                if len(days) == 1:
-                    desc = f"Jeden {days[0]}"
-                else:
-                    desc = f"Jeden {', '.join(days[:-1])} und {days[-1]}"
-            else:
-                desc = 'Wöchentlich'
-
-        effective_end = end_date or parsed.get('end_date')
+        effective_end = end_date or self.validate_rrule(rrule_string)['end_date']
         if effective_end:
             desc += f" bis {format_date_for_user(effective_end)}"
-        elif parsed.get('count'):
-            desc += f" ({parsed['count']} Termine)"
 
         return desc
+
+    def describe_series(self, absence: Absence) -> str:
+        """Describe a stored series for display.
+
+        This is a read path: an unparsable RRULE is logged and described as
+        unreadable instead of failing the page (see the class docstring).
+
+        Args:
+            absence: The recurring absence.
+
+        Returns:
+            German description of the pattern and its end.
+        """
+        try:
+            return self.get_recurrence_description(
+                absence.rrule, absence.recurrence_end_date
+            )
+        except ValueError:
+            current_app.logger.error(
+                'Absence %s: unreadable RRULE, pattern not described', absence.id
+            )
+            return 'Serienmuster nicht lesbar'
+
+    def describe_pattern_safe(self, rrule_string: str) -> str:
+        """Describe a pattern, reporting an unreadable one instead of raising.
+
+        Used for the old value in the history, so saving a repaired series is
+        not blocked by the corrupted rule it replaces.
+        """
+        try:
+            return self.describe_pattern(rrule_string)
+        except ValueError:
+            return 'nicht lesbar'
 
     def get_all_occurrences_for_range(
         self,
@@ -586,11 +769,14 @@ class RecurrenceService:
             List of occurrence dictionaries with date and absence data.
         """
         occurrences = []
+        exceptions = self.load_exceptions(absences, range_start, range_end)
 
         for absence in absences:
             if absence.is_recurring and absence.rrule:
-                for occ_date, exception in self.expand_occurrences(absence, range_start, range_end):
-                    occ_data = self.get_occurrence_data(absence, occ_date)
+                for occ_date, exception in self.expand_occurrences(
+                    absence, range_start, range_end, exceptions[absence.id]
+                ):
+                    occ_data = self.get_occurrence_data(absence, occ_date, exception)
                     if occ_data:
                         occurrences.append({
                             'date': occ_date,
@@ -628,10 +814,6 @@ class RecurrenceService:
                         'is_half_day_afternoon': absence.is_half_day_afternoon,
                         'start_time': absence.start_time,
                         'end_time': absence.end_time,
-                        # Span lets slot classification apply half-day flags to
-                        # boundary days only on multi-day absences.
-                        'start_date': absence.start_date,
-                        'end_date': absence.end_date,
                         'substitute_id': absence.substitute_id,
                         'substitute': absence.substitute,
                         'notes': absence.notes,
@@ -643,5 +825,4 @@ class RecurrenceService:
         return occurrences
 
 
-# Module-level instance for convenience
 recurrence_service = RecurrenceService()

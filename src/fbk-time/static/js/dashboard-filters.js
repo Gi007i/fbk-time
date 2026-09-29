@@ -27,6 +27,35 @@
         return visible;
     }
 
+    var ANNOUNCE_DELAY_MS = 400;
+
+    /**
+     * Report a filter result to a live region. Typing fires per keystroke,
+     * so the update is delayed and skipped when the text is unchanged;
+     * otherwise every character would produce its own announcement.
+     * @param {HTMLElement} region - The live region element.
+     * @returns {Function} Callback taking the visible count.
+     */
+    function announcer(region) {
+        var timer = null;
+
+        return function(count) {
+            if (!region) {
+                return;
+            }
+            // Cleared before the comparison: a pending timer may still hold
+            // an outdated value even when the current one is unchanged.
+            clearTimeout(timer);
+            var message = count + ' Treffer';
+            if (region.textContent === message) {
+                return;
+            }
+            timer = setTimeout(function() {
+                region.textContent = message;
+            }, ANNOUNCE_DELAY_MS);
+        };
+    }
+
     /**
      * Initialize filtering for the today section (absent and present lists).
      */
@@ -50,9 +79,12 @@
             }
         ];
 
+        var announce = announcer(document.getElementById('today-filter-status'));
+
         function apply() {
             var query = (search ? search.value : '').toLowerCase().trim();
             var category = categorySelect ? categorySelect.value : '';
+            var totalVisible = 0;
 
             lists.forEach(function(list) {
                 if (!list.ul) {
@@ -66,7 +98,10 @@
                 if (list.empty) {
                     list.empty.classList.toggle('hidden', visible !== 0);
                 }
+                totalVisible += visible;
             });
+
+            announce(totalVisible);
         }
 
         if (search) {
@@ -92,6 +127,7 @@
         var daySelect = document.getElementById('week-day');
         var categorySelect = document.getElementById('week-category');
         var noResults = document.getElementById('week-no-results');
+        var announce = announcer(document.getElementById('week-filter-status'));
 
         function apply() {
             var query = (search ? search.value : '').toLowerCase().trim();
@@ -133,6 +169,8 @@
             if (noResults) {
                 noResults.classList.toggle('hidden', totalVisible !== 0);
             }
+
+            announce(totalVisible);
         }
 
         if (search) {

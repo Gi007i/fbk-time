@@ -1,31 +1,39 @@
 <h1>Meine Einstellungen</h1>
 
-<p>Unter <strong>Meine Einstellungen</strong> legen Sie Ihre persönlichen Präferenzen fest. Die Werte gelten nur für Ihr eigenes Konto.</p>
+<p>Unter <strong>Meine Einstellungen</strong> richten Sie die Anwendung für sich selbst ein. Was Sie hier festlegen, gilt nur für Ihr eigenes Konto.</p>
 
-<h2>Darstellung</h2>
+<h2>Anzeige und Verhalten einstellen</h2>
 
-<p><strong>Farbschema.</strong> Hell, Dunkel oder Automatisch. Bei <em>Automatisch</em> folgt die Anwendung der Systemeinstellung Ihres Geräts.</p>
+<p><strong>Startseite.</strong> Hier legen Sie fest, welche Seite direkt nach der Anmeldung erscheint: <strong>Dashboard</strong>, <strong>Kalender</strong>, <strong>Team-Übersicht</strong> oder <strong>Liste</strong>. Rufen Sie beim Anmelden gezielt eine bestimmte Seite auf, öffnet sich weiterhin diese. Über den Eintrag <strong>Startseite</strong> im Benutzermenü erreichen Sie die gewählte Seite außerdem jederzeit.</p>
 
-<p><strong>Datumsformat.</strong> Deutsches Format (<code>24.04.2026</code>) oder ISO-Format (<code>2026-04-24</code>). Die Einstellung wirkt in allen Ansichten und Exporten.</p>
+<p><strong>Standardansicht.</strong> Damit bestimmen Sie, welche Einträge Kalender, Team-Übersicht und Listenansicht beim Öffnen zeigen: <strong>Alle Einträge</strong> für das ganze Team oder <strong>Meine Einträge</strong> für zunächst nur Ihre eigenen. Über den Filter stellen Sie das jederzeit um.</p>
 
-<p><strong>Einträge pro Seite.</strong> Wie viele Zeilen die Listenansicht vor einem Seitenumbruch zeigt. Verfügbar: {{ cfg.pagination_choices }} sowie <strong>Alle</strong> für eine vollständige Liste ohne Seitenumbruch. Voreingestellt sind {{ cfg.user_default_items_per_page }} Einträge.</p>
+<p><strong>Design.</strong> Sie wählen zwischen <strong>Hell</strong>, <strong>Dunkel</strong> und <strong>Automatisch</strong>. Bei <strong>Automatisch</strong> folgt die Anwendung der Systemeinstellung Ihres Geräts.</p>
 
-<h2>Feiertage</h2>
+<p><strong>Datumsformat.</strong> Zur Wahl stehen das deutsche Format <code>{{ cfg.date_example_german }}</code> und das ISO-Format <code>{{ cfg.date_example_iso }}</code>. Die Einstellung wirkt in allen Ansichten und Exporten.</p>
 
-<p><strong>Feiertags-Region.</strong> Legt fest, welche Feiertage im Kalender erscheinen. Zur Auswahl stehen bundesweite Feiertage, alle regionalen Feiertage zusammen, einzelne Bundesländer oder die Option, keine Feiertage anzuzeigen.</p>
+<p><strong>Einträge pro Seite.</strong> Diese Einstellung steuert, wie viele Zeilen die Listenansicht vor einem Seitenumbruch zeigt. Zur Wahl stehen {{ cfg.pagination_choices }} sowie <strong>Alle</strong> für eine vollständige Liste ohne Seitenumbruch. {% if cfg.user_default_items_per_page %}Voreingestellt sind {{ cfg.user_default_items_per_page }} Einträge.{% else %}Voreingestellt ist <strong>Alle</strong>.{% endif %}</p>
 
-<p>Die Feiertagsdaten sind in der Anwendung enthalten – ein Internetzugriff ist nicht nötig. Aktualisierungen kommen mit den Updates der Anwendung.</p>
+<h2>Welche Feiertage die Anwendung anzeigt</h2>
 
-<h2>Kategorien</h2>
+<p><strong>Feiertags-Region.</strong> Hier wählen Sie die Region, deren Feiertage die Anwendung einblendet – in Kalender und Team-Übersicht, auf dem Dashboard und im PDF-Export als Kalender-Matrix. Zur Wahl stehen bundesweite Feiertage, alle regionalen Feiertage zusammen, einzelne Bundesländer oder gar keine Feiertage.</p>
 
-<p><strong>Standard-Schriftfarbe für Kategorien.</strong> Welche Schriftfarbe beim Anlegen neuer Kategorien als Vorschlag dient. Pro Kategorie lässt sie sich weiterhin einzeln ändern.</p>
+<p>Die Feiertagsdaten bringt die Anwendung mit; einen Internetzugriff braucht sie dafür nicht. Aktualisierungen kommen mit den Updates der Anwendung.</p>
 
-<h2>Profil</h2>
+<h2>Schriftfarbe für neue Kategorien festlegen</h2>
 
-<p>Anzeigename und E-Mail-Adresse ändern Sie selbst unter <strong>Mein Profil</strong> (ebenfalls im Benutzermenü oben rechts). Das Passwort passen Sie dort im Abschnitt <strong>Sicherheit</strong> an.</p>
+<p><strong>Standard-Schriftfarbe für Kategorien.</strong> Diese Farbe schlägt die Anwendung vor, wenn Sie eine neue Kategorie anlegen. Wie Sie Kategorien anlegen, beschreibt das Kapitel <strong>Kategorien verwalten</strong>. Pro Kategorie ändern Sie sie weiterhin einzeln. Nur Manager und Admins sehen diesen Abschnitt, weil nur sie Kategorien anlegen.</p>
 
-<p>Den Benutzernamen können Sie nach dem Anlegen nicht mehr ändern.</p>
+<h2>Profil und Passwort ändern</h2>
+
+<p>Anzeigename und E-Mail-Adresse ändern Sie selbst unter <strong>Mein Profil</strong>, das Sie ebenfalls im Benutzermenü oben rechts finden. Das Passwort passen Sie dort im Abschnitt <strong>Sicherheit</strong> an.</p>
+
+<p>Liegt Ihre letzte Passworteingabe länger als 15 Minuten zurück oder hat <strong>Angemeldet bleiben</strong> Sie angemeldet, fragt die Anwendung beim Speichern einer neuen E-Mail-Adresse zuerst Ihr Passwort ab; danach tragen Sie die Adresse erneut ein. Mehr dazu steht im Kapitel <strong>Anmeldung und Passwort</strong>.</p>
+
+<p>Ebenfalls unter <strong>Mein Profil</strong> beenden Sie mit <strong>Alle anderen Sitzungen beenden</strong> jede weitere Sitzung Ihres Kontos, etwa nach dem Verlust eines Geräts. Ihre aktuelle Sitzung bleibt bestehen, das Passwort bleibt unverändert. Haben Sie beim Anmelden <strong>Angemeldet bleiben</strong> gewählt, gilt das danach auch auf diesem Gerät nicht mehr.</p>
+
+<p>Sie können den Benutzernamen nach dem Anlegen nicht mehr ändern.</p>
 
 <h2>Speichern</h2>
 
-<p>Änderungen werden erst nach Klick auf <strong>Speichern</strong> übernommen. Verlassen Sie die Seite ohne zu speichern, gehen Ihre Änderungen verloren.</p>
+<p>Erst wenn Sie auf <strong>Speichern</strong> klicken, übernimmt die Anwendung Ihre Änderungen. Verlassen Sie die Seite vorher, gehen sie verloren.</p>

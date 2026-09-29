@@ -1,8 +1,4 @@
-"""Gunicorn WSGI server configuration.
-
-Production-ready settings for running Flask with Gunicorn.
-Nginx reverse proxy architecture assumed.
-"""
+"""Gunicorn WSGI server configuration behind an Nginx reverse proxy."""
 
 import json
 from pathlib import Path
@@ -41,10 +37,8 @@ for log_path in (_access_log_path, _error_log_path):
 bind = f"{_host}:{_port}"
 backlog = 2048
 
-# Multi-device concurrent access with same account
 workers = 3
 worker_class = "sync"
-worker_connections = 1000
 timeout = 30
 keepalive = 2
 
@@ -71,10 +65,6 @@ proc_name = "fbk-time"
 worker_tmp_dir = "/dev/shm"
 tmp_upload_dir = None
 
-raw_env = [
-    'FLASK_ENV=production',
-]
-
 
 def when_ready(server):
     server.log.info("Gunicorn server started")
@@ -84,30 +74,21 @@ def worker_int(worker):
     worker.log.info("Worker process terminated")
 
 
-def pre_fork(server, worker):
-    pass
-
-
 def post_fork(server, worker):
     server.log.info(f"Worker {worker.pid} started")
     from app import app as application
-    from core.extensions import db
+    from core.db import db
     from core.backup import start_auto_discovery
     from core.scheduler import start_scheduler
 
-    # Discard connections inherited from the preloaded master. Sharing a
-    # SQLite connection across forked workers corrupts its lock state and
-    # raises "database is locked". close=False abandons the inherited
-    # connections without closing the underlying handles still used by the
-    # master, so each worker opens its own connections on first use.
+    # A SQLite connection shared across forks corrupts its lock state.
+    # close=False abandons the inherited connections without closing the
+    # master's handles.
     with application.app_context():
         db.engine.dispose(close=False)
 
-    # Start the scheduler inside the worker, not the preloaded master.
-    # The process-bound lock lets exactly one worker run the tasks.
+    # Threads start after the fork, never in the preloaded master; the
+    # scheduler's process-bound lock lets exactly one worker run the tasks.
     start_scheduler(application)
 
-    # Trigger backup auto-discovery inside the worker, not the preloaded
-    # master, so its daemon thread touches the database and logging only
-    # after the fork.
     start_auto_discovery(application)

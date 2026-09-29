@@ -17,6 +17,9 @@ sync:
     entrypoint: [""]
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+  # Exit code 75 marks a warning (GitHub unreachable, single push failed)
+  allow_failure:
+    exit_codes: [75]
   variables:
     GIT_STRATEGY: clone
     GIT_DEPTH: 0
@@ -28,7 +31,18 @@ sync:
       GITHUB_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/Gi007i/fbk-time.git"
       git remote add github "${GITHUB_URL}"
       git fetch origin main --tags
-      git fetch github main --tags || { echo "WARNING: GitHub unreachable"; exit 0; }
+      # A rejected token fails the job; an unreachable GitHub only warns, the next run catches up.
+      if ! FETCH_LOG=$(git fetch github main --tags 2>&1); then
+        echo "${FETCH_LOG}"
+        if echo "${FETCH_LOG}" | grep -qiE 'authentication failed|access denied|not found|returned error: 40[13]'; then
+          echo "ERROR: GitHub rejected GITHUB_TOKEN (expired, revoked or without access)"
+          exit 1
+        fi
+        echo "WARNING: GitHub unreachable, sync skipped"
+        exit 75
+      fi
+      echo "${FETCH_LOG}"
+      WARNINGS=0
 
       # Fast-forward main if behind (explicit origin to avoid ambiguity with github/main)
       git checkout -b main origin/main
@@ -49,10 +63,11 @@ sync:
       GITLAB_TAGS=$(git ls-remote --tags origin | awk '{print $2}' | sed 's|refs/tags/||' | grep -v '\^{}' || true)
       for tag in $(git tag -l 'v*'); do
         if ! echo "$GITLAB_TAGS" | grep -qx "$tag"; then
-          git push origin "$tag" && echo "Synced tag $tag" || echo "WARNING: Failed to push tag $tag"
+          git push origin "$tag" && echo "Synced tag $tag" || { echo "WARNING: Failed to push tag $tag"; WARNINGS=1; }
         fi
       done
       echo "Sync complete"
+      [ "${WARNINGS}" -eq 0 ] || exit 75
 
 prepare-release:
   stage: prepare
@@ -83,9 +98,10 @@ prepare-release:
       git checkout main
       git merge --squash "origin/${CI_COMMIT_BRANCH}"
 
-      # Replace placeholders
-      sed -i "s|__GITHUB_REPO_URL__|${GITHUB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml src/fbk-time/static/css/fbk-custom.css
-      sed -i "s|__GITLAB_REPO_URL__|${GITLAB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml src/fbk-time/static/css/fbk-custom.css
+      # Replace URL placeholders in README, pyproject and every CSS file
+      sed -i "s|__GITHUB_REPO_URL__|${GITHUB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml
+      sed -i "s|__GITLAB_REPO_URL__|${GITLAB_REPO_URL}|g" README.md src/fbk-time/pyproject.toml
+      find src/fbk-time/static/css -name '*.css' -exec sed -i -e "s|__GITHUB_REPO_URL__|${GITHUB_REPO_URL}|g" -e "s|__GITLAB_REPO_URL__|${GITLAB_REPO_URL}|g" {} +
       sed -i "s|__VERSION__|${VERSION}|g" src/fbk-time/pyproject.toml
 
       git add -A
@@ -103,7 +119,7 @@ prepare-release:
 
 release:
   stage: release
-  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  image: registry.gitlab.com/gitlab-org/cli:latest
   rules:
     - if: $CI_COMMIT_TAG =~ /^v/
   script:

@@ -1,14 +1,11 @@
-"""Holiday service.
+"""German holidays via the offline-capable holidays library."""
 
-Provides German holiday data using the holidays library (offline-capable).
-"""
-
-from datetime import date, timedelta
+from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 import holidays
 
-from flask_login import current_user
+from core.auth import current_user
 
 
 GERMAN_STATES = {
@@ -162,38 +159,6 @@ def is_holiday(check_date: date, region: Optional[str] = None) -> Tuple[bool, Op
     return False, None
 
 
-def count_working_days(
-    start_date: date,
-    end_date: date,
-    region: Optional[str] = None
-) -> int:
-    """Count working days in a date range (excludes weekends and holidays).
-
-    Args:
-        start_date: Start of the range.
-        end_date: End of the range.
-        region: Region code. Uses settings if None.
-
-    Returns:
-        Number of working days.
-    """
-    if start_date > end_date:
-        return 0
-
-    holidays_dict = get_holidays_for_range(start_date, end_date, region)
-    count = 0
-
-    current = start_date
-    while current <= end_date:
-        # Monday=0, Sunday=6
-        if current.weekday() < 5:
-            if current not in holidays_dict:
-                count += 1
-        current = current + timedelta(days=1)
-
-    return count
-
-
 def get_region_choices() -> List[Tuple[str, str]]:
     """Get list of region choices for form select field.
 
@@ -217,8 +182,5 @@ def _get_state_code(region: str) -> Optional[str]:
 
     if region in GERMAN_STATES:
         return GERMAN_STATES[region][1]
-
-    if region.startswith('DE-') and len(region) == 5:
-        return region[3:]
 
     return None

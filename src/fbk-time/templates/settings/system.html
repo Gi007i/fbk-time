@@ -27,7 +27,7 @@
 
             <div class="grid">
                 <label for="lockout_threshold">
-                    {{ form.lockout_threshold.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Nach wie vielen falschen Anmeldeversuchen wird das Konto gesperrt? Wert {{ form.lockout_threshold | field_range }}.">&#x24D8;</span>
+                    {{ form.lockout_threshold.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Nach wie vielen falschen Anmeldeversuchen wird das Konto vorübergehend gesperrt? Browser mit früherer erfolgreicher Anmeldung für diesen Benutzernamen sind ausgenommen. Wert {{ form.lockout_threshold | field_range }}.">&#x24D8;</span>
                     {{ form.lockout_threshold(id="lockout_threshold",
                        **{'aria-invalid': 'true' if form.lockout_threshold.errors else none}) }}
                     {% if form.lockout_threshold.errors %}
@@ -36,7 +36,7 @@
                 </label>
 
                 <label for="lockout_duration_minutes">
-                    {{ form.lockout_duration_minutes.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie lange bleibt das Konto nach Erreichen der Fehlversuch-Schwelle gesperrt? In Minuten, {{ form.lockout_duration_minutes | field_range }}.">&#x24D8;</span>
+                    {{ form.lockout_duration_minutes.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wie lange bleibt das Konto gesperrt, wenn „Fehlversuche bis Sperrung“ erreicht ist? In Minuten, {{ form.lockout_duration_minutes | field_range }}.">&#x24D8;</span>
                     {{ form.lockout_duration_minutes(id="lockout_duration_minutes",
                        **{'aria-invalid': 'true' if form.lockout_duration_minutes.errors else none}) }}
                     {% if form.lockout_duration_minutes.errors %}
@@ -47,7 +47,7 @@
 
             <label>
                 {{ form.lockout_delay_enabled(id="lockout_delay_enabled") }}
-                {{ form.lockout_delay_enabled.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: nach jedem Fehlversuch dauert die Antwort etwas länger – die Wartezeit verdoppelt sich von Versuch zu Versuch. Bremst automatische Angriffe, ohne das Konto direkt zu sperren.">&#x24D8;</span>
+                {{ form.lockout_delay_enabled.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Wenn aktiv: nach jedem Fehlversuch mit einem Benutzernamen dauert die nächste Annahme etwas länger – die Wartezeit verdoppelt sich von Versuch zu Versuch. Browser, in denen die Anmeldung mit diesem Benutzernamen schon einmal gelungen ist, sind davon ausgenommen.">&#x24D8;</span>
             </label>
 
             <div class="grid">
@@ -235,6 +235,26 @@
             <summary>Standardwerte für neue Benutzer</summary>
 
             <div class="grid">
+                <label for="user_default_start_page">
+                    {{ form.user_default_start_page.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Seite sehen neu angelegte Konten direkt nach der Anmeldung? Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
+                    {{ form.user_default_start_page(id="user_default_start_page",
+                       **{'aria-invalid': 'true' if form.user_default_start_page.errors else none}) }}
+                    {% if form.user_default_start_page.errors %}
+                    <small>{{ form.user_default_start_page.errors[0] }}</small>
+                    {% endif %}
+                </label>
+
+                <label for="user_default_view_scope">
+                    {{ form.user_default_view_scope.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Einträge sehen neu angelegte Konten in Kalender, Team-Übersicht und Liste zuerst? „Alle Einträge“ zeigt das ganze Team, „Meine Einträge“ nur die eigenen. Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
+                    {{ form.user_default_view_scope(id="user_default_view_scope",
+                       **{'aria-invalid': 'true' if form.user_default_view_scope.errors else none}) }}
+                    {% if form.user_default_view_scope.errors %}
+                    <small>{{ form.user_default_view_scope.errors[0] }}</small>
+                    {% endif %}
+                </label>
+            </div>
+
+            <div class="grid">
                 <label for="user_default_theme">
                     {{ form.user_default_theme.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welches Design ist für neu angelegte Konten voreingestellt? Jedes Konto kann das später in den Persönlichen Einstellungen ändern.">&#x24D8;</span>
                     {{ form.user_default_theme(id="user_default_theme",
@@ -274,18 +294,18 @@
                 </label>
             </div>
 
-            <label for="user_default_text_color">
-                {{ form.user_default_text_color.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Schriftfarbe ist beim Anlegen neuer Kategorien voreingestellt? Manager und Admins können den eigenen Wert in den Persönlichen Einstellungen anpassen.">&#x24D8;</span>
-                <div class="grid">
+            <div class="grid">
+                <label for="user_default_text_color">
+                    {{ form.user_default_text_color.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Welche Schriftfarbe ist beim Anlegen neuer Kategorien voreingestellt? Manager und Admins können den eigenen Wert in den Persönlichen Einstellungen anpassen.">&#x24D8;</span>
                     {{ form.user_default_text_color(id="user_default_text_color", type="color",
                        **{'aria-invalid': 'true' if form.user_default_text_color.errors else none}) }}
-                    <div></div>
-                    <div></div>
-                </div>
-                {% if form.user_default_text_color.errors %}
-                <small>{{ form.user_default_text_color.errors[0] }}</small>
-                {% endif %}
-            </label>
+                    {% if form.user_default_text_color.errors %}
+                    <small>{{ form.user_default_text_color.errors[0] }}</small>
+                    {% endif %}
+                </label>
+                <div></div>
+                <div></div>
+            </div>
         </details>
 
         <div class="grid">

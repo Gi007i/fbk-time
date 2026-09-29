@@ -3,12 +3,12 @@
 {% block title %}Ungültige Anfrage - FBK-Time{% endblock %}
 
 {% block content %}
-<center>
+<div class="center">
     <article>
-        <h1 class="text-negative">❌ 400</h1>
+        <h1 class="text-negative"><span aria-hidden="true">❌</span> 400<span class="visually-hidden"> – Ungültige Anfrage</span></h1>
         <p><strong>Ungültige Anfrage</strong></p>
         <small>Die Anfrage konnte nicht verarbeitet werden. Bitte prüfen Sie Ihre Eingabe.</small>
     </article>
-    <p><a href="{{ url_for('dashboard.index') }}" role="button">Zur Startseite</a></p>
-</center>
+    <p><a href="{{ url_for('dashboard.index') }}" role="button" class="outline">Zur Startseite</a></p>
+</div>
 {% endblock %}

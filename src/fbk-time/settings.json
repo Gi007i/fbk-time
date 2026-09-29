@@ -17,7 +17,7 @@
       "runtime_path": "data/run"
     },
     "backup": {
-      "directory": "/tmp/fbk-time-backups"
+      "directory": "/var/backups/fbk-time"
     },
     "settings_template_path": "data/settings-template.json",
     "security": {

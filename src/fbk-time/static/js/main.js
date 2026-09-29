@@ -50,27 +50,14 @@
     }
 
     /**
-     * Escape HTML special characters to prevent XSS.
-     * Uses textContent trick recommended by OWASP.
-     * @param {string} text - String to escape.
-     * @returns {string} Escaped for HTML text context; use escapeAttr for attribute values.
+     * Open a file export in a new tab.
+     * Safari renders PDFs in the current tab even when the response
+     * requests a download; a separate tab keeps the application open.
+     * @param {string} url - Same-origin export URL.
+     * @returns {void}
      */
-    function escapeHtml(text) {
-        if (typeof text !== 'string') return '';
-        var div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
-    }
-
-    /**
-     * Escape string for safe use in HTML attribute values.
-     * Escapes quotes in addition to HTML special characters.
-     * @param {string} text - String to escape.
-     * @returns {string} Escaped string safe for attribute contexts.
-     */
-    function escapeAttr(text) {
-        if (typeof text !== 'string') return '';
-        return escapeHtml(text).replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '&#10;');
+    function downloadFile(url) {
+        window.open(url, '_blank', 'noopener');
     }
 
     /**
@@ -97,7 +84,7 @@
     }
 
     /**
-     * Initialize form validation feedback.
+     * Disable submit buttons once a form is submitted.
      */
     function initForms() {
         var forms = document.querySelectorAll('form');
@@ -125,19 +112,23 @@
 
         confirmDialog = document.createElement('dialog');
         confirmDialog.id = 'confirm-dialog';
+        confirmDialog.setAttribute('aria-labelledby', 'confirm-dialog-title');
+        confirmDialog.setAttribute('aria-describedby', 'confirm-dialog-message');
 
         var article = document.createElement('article');
 
         var header = document.createElement('header');
         var closeBtn = document.createElement('button');
-        closeBtn.setAttribute('aria-label', 'Schließen');
+        closeBtn.setAttribute('aria-label', 'Dialog schließen');
         closeBtn.setAttribute('rel', 'prev');
         var heading = document.createElement('h3');
+        heading.id = 'confirm-dialog-title';
         heading.textContent = 'Bestätigung';
         header.appendChild(closeBtn);
         header.appendChild(heading);
 
         confirmMessageEl = document.createElement('p');
+        confirmMessageEl.id = 'confirm-dialog-message';
 
         var footer = document.createElement('footer');
         var cancelBtn = document.createElement('button');
@@ -258,7 +249,9 @@
         var url = button.dataset.url;
         if (!url) return;
 
-        fetch(url + '?check=1', {
+        // dataset.url may already carry a query string
+        var separator = url.indexOf('?') === -1 ? '?' : '&';
+        fetch(url + separator + 'check=1', {
             method: 'GET',
             headers: {
                 'X-Requested-With': 'XMLHttpRequest'
@@ -274,13 +267,10 @@
                 Toast.error('Fehler: ' + (result.data.error || 'Unbekannter Fehler'));
                 return;
             }
-            if (result.data.has_absences) {
+            if (result.data.data && result.data.data.has_absences) {
                 location.href = url;
             } else {
-                var message = button.getAttribute('data-confirm') || 'Wirklich löschen?';
-                showConfirmDialog(message, function() {
-                    executeAjaxAction(url, button);
-                });
+                confirmThenExecute(button, url, 'Wirklich löschen?');
             }
         })
         .catch(function(error) {
@@ -289,8 +279,20 @@
     }
 
     /**
+     * Ask for confirmation, then run the AJAX action of a button.
+     * @param {HTMLButtonElement} button - Button carrying data-confirm and data-confirm-label.
+     * @param {string} url - Endpoint URL.
+     * @param {string} fallbackMessage - Message when data-confirm is empty.
+     */
+    function confirmThenExecute(button, url, fallbackMessage) {
+        showConfirmDialog(button.getAttribute('data-confirm') || fallbackMessage, function() {
+            executeAjaxAction(url, button);
+        }, button.getAttribute('data-confirm-label'));
+    }
+
+    /**
      * Initialize AJAX actions via event delegation.
-     * Handles data-action="toggle" and data-action="delete" buttons.
+     * Handles data-action="toggle", "confirm" and "delete" buttons.
      */
     function initAjaxActions() {
         document.addEventListener('click', function(event) {
@@ -305,23 +307,20 @@
 
             if (action === 'toggle') {
                 executeAjaxAction(url, button);
+            } else if (action === 'confirm') {
+                confirmThenExecute(button, url, 'Wirklich ausführen?');
             } else if (action === 'delete') {
-                var isCategoryPage = location.pathname.includes('/categories');
-                if (isCategoryPage) {
+                if (location.pathname.includes('/categories')) {
                     handleCategoryDelete(button);
                 } else {
-                    var message = button.getAttribute('data-confirm') || 'Wirklich löschen?';
-                    var confirmLabel = button.getAttribute('data-confirm-label');
-                    showConfirmDialog(message, function() {
-                        executeAjaxAction(url, button);
-                    }, confirmLabel);
+                    confirmThenExecute(button, url, 'Wirklich löschen?');
                 }
             }
         });
     }
 
     /**
-     * Initialize confirmation dialogs for form-based delete actions.
+     * Initialize confirmation dialogs for form submit buttons.
      * Only handles buttons with data-confirm but without data-action.
      */
     function initFormConfirmations() {
@@ -336,50 +335,8 @@
 
             var message = button.getAttribute('data-confirm') || 'Wirklich löschen?';
             showConfirmDialog(message, function() {
-                form.submit();
-            });
-        });
-    }
-
-    /**
-     * Initialize table sorting functionality.
-     */
-    function initTableSorting() {
-        var sortableHeaders = document.querySelectorAll('th[data-sort]');
-
-        sortableHeaders.forEach(function(header) {
-            header.addEventListener('click', function() {
-                var table = header.closest('table');
-                var tbody = table.querySelector('tbody');
-                var rows = Array.from(tbody.querySelectorAll('tr'));
-                var column = header.getAttribute('data-sort');
-                var columnIndex = Array.from(header.parentNode.children).indexOf(header);
-                var isAscending = header.classList.contains('sort-asc');
-
-                rows.sort(function(a, b) {
-                    var aValue = a.children[columnIndex].textContent.trim();
-                    var bValue = b.children[columnIndex].textContent.trim();
-
-                    if (column === 'date') {
-                        return isAscending
-                            ? new Date(bValue) - new Date(aValue)
-                            : new Date(aValue) - new Date(bValue);
-                    }
-
-                    return isAscending
-                        ? bValue.localeCompare(aValue, 'de')
-                        : aValue.localeCompare(bValue, 'de');
-                });
-
-                sortableHeaders.forEach(function(h) {
-                    h.classList.remove('sort-asc', 'sort-desc');
-                });
-                header.classList.add(isAscending ? 'sort-desc' : 'sort-asc');
-
-                rows.forEach(function(row) {
-                    tbody.appendChild(row);
-                });
-            });
+                form.requestSubmit(button);
+            }, button.getAttribute('data-confirm-label'));
         });
     }
 
@@ -460,6 +417,7 @@
             if (!form.hasAttribute('data-ajax-form')) return;
 
             event.preventDefault();
+            clearAllFieldErrors(form);
 
             var submitBtn = form.querySelector('button[type="submit"]');
             if (submitBtn) {
@@ -512,6 +470,10 @@
 
                     if (result.data.redirect) {
                         location.href = result.data.redirect;
+                    } else if (submitBtn && document.activeElement === document.body) {
+                        // Only when nothing else took focus meanwhile: the
+                        // button lost it while it was disabled.
+                        submitBtn.focus({ preventScroll: true });
                     }
                 } else {
                     var errorMsg = result.data.error || 'Ein Fehler ist aufgetreten.';
@@ -523,17 +485,26 @@
                             var field = form.querySelector('[name="' + fieldName + '"]');
                             if (!field) return;
 
-                            // Skip inline error for checkbox/radio groups (Toast is sufficient)
-                            if (field.type === 'checkbox' || field.type === 'radio') return;
+                            if (field.type === 'checkbox' || field.type === 'radio') {
+                                showGroupError(field, result.data.errors[fieldName]);
+                                return;
+                            }
 
                             showFieldError(field, result.data.errors[fieldName]);
                         });
+                    }
+
+                    if (!focusFirstError(form) && submitBtn) {
+                        submitBtn.focus();
                     }
                 }
             })
             .catch(function(error) {
                 if (submitBtn) {
                     setButtonBusy(submitBtn, false);
+                    if (document.activeElement === document.body) {
+                        submitBtn.focus({ preventScroll: true });
+                    }
                 }
                 Toast.error('Fehler bei der Verbindung: ' + error.message);
             });
@@ -548,9 +519,18 @@
         initAjaxActions();
         initAjaxForms();
         initFormConfirmations();
-        initTableSorting();
         initFilterPanelState();
         initFilterSummaries();
+    }
+
+    /**
+     * Check that a navigation target is a same-origin path.
+     * Browsers treat a leading "//" or "/\" as a protocol-relative URL.
+     * @param {string} href - Navigation target.
+     * @returns {boolean} True for an internal absolute path.
+     */
+    function isInternalPath(href) {
+        return !!href && /^\/(?![\/\\])/.test(href);
     }
 
     /**
@@ -576,30 +556,72 @@
             var rect = target.getBoundingClientRect();
             var isAfternoon = (event.clientX - rect.left) > (rect.width / 2);
             var href = isAfternoon ? target.dataset.hrefAfternoon : target.dataset.hrefMorning;
-            if (href && href.startsWith('/') && !href.startsWith('//')) {
+            if (isInternalPath(href)) {
                 location.href = href;
             }
         } else {
             var href = target.dataset.href;
-            if (href && href.startsWith('/') && !href.startsWith('//')) {
+            if (isInternalPath(href)) {
                 location.href = href;
             }
         }
     });
 
     /**
-     * Handle auto-submit for form elements via event delegation.
-     * Elements with data-autosubmit attribute submit their parent form on change.
+     * Derive the id of a control's inline error node from its identity.
+     * @param {HTMLElement} el - Form field or fieldset carrying the error.
+     * @returns {string} Id for the error element.
      */
-    document.addEventListener('change', function(event) {
-        var target = event.target;
-        if (!target.hasAttribute('data-autosubmit')) return;
+    function errorIdFor(el) {
+        var key = el.id || el.getAttribute('name');
+        return key ? 'error-' + key : '';
+    }
 
-        var form = target.closest('form');
-        if (form) {
-            form.submit();
+    /**
+     * Add an id to a control's aria-describedby without dropping existing
+     * references such as hint texts.
+     * @param {HTMLElement} el - Control to annotate.
+     * @param {string} id - Id of the describing element.
+     */
+    function addDescribedBy(el, id) {
+        var tokens = (el.getAttribute('aria-describedby') || '').split(/\s+/)
+            .filter(function(token) { return token !== ''; });
+        if (tokens.indexOf(id) === -1) {
+            tokens.push(id);
+            el.setAttribute('aria-describedby', tokens.join(' '));
         }
-    });
+    }
+
+    /**
+     * Drop a single id from a control's aria-describedby.
+     * @param {HTMLElement} el - Control to update.
+     * @param {string} id - Id of the describing element.
+     */
+    function removeDescribedBy(el, id) {
+        var tokens = (el.getAttribute('aria-describedby') || '').split(/\s+/)
+            .filter(function(token) { return token !== '' && token !== id; });
+        if (tokens.length) {
+            el.setAttribute('aria-describedby', tokens.join(' '));
+        } else {
+            el.removeAttribute('aria-describedby');
+        }
+    }
+
+    /**
+     * Build the inline error node for a control.
+     * @param {HTMLElement} el - Control the error belongs to.
+     * @param {string} message - Error message to display.
+     * @returns {HTMLElement} The error element, linked to the control.
+     */
+    function buildFieldError(el, message) {
+        var small = document.createElement('small');
+        small.className = 'js-validation-error';
+        small.id = errorIdFor(el);
+        small.textContent = message;
+        el.setAttribute('aria-invalid', 'true');
+        addDescribedBy(el, small.id);
+        return small;
+    }
 
     /**
      * Show inline validation error for a form field.
@@ -608,11 +630,8 @@
      */
     function showFieldError(field, message) {
         clearFieldError(field);
-        field.setAttribute('aria-invalid', 'true');
 
-        var small = document.createElement('small');
-        small.className = 'js-validation-error';
-        small.textContent = message;
+        var small = buildFieldError(field, message);
 
         var insertAfter = field;
         var wrapper = field.closest('.emoji-picker-wrapper');
@@ -628,40 +647,13 @@
     }
 
     /**
-     * Show inline validation error for a fieldset (checkbox/radio group).
-     * @param {HTMLElement} fieldset - The fieldset element.
-     * @param {string} message - Error message to display.
-     */
-    function showFieldsetError(fieldset, message) {
-        clearFieldsetError(fieldset);
-        fieldset.setAttribute('aria-invalid', 'true');
-
-        var small = document.createElement('small');
-        small.className = 'js-validation-error';
-        small.textContent = message;
-        fieldset.appendChild(small);
-    }
-
-    /**
      * Clear inline validation error for a form field.
      * @param {HTMLElement} field - The form field element.
      */
     function clearFieldError(field) {
         field.removeAttribute('aria-invalid');
-        var label = field.closest('label');
-        if (label) {
-            var existing = label.querySelector('.js-validation-error');
-            if (existing) existing.remove();
-        }
-    }
-
-    /**
-     * Clear inline validation error for a fieldset.
-     * @param {HTMLElement} fieldset - The fieldset element.
-     */
-    function clearFieldsetError(fieldset) {
-        fieldset.removeAttribute('aria-invalid');
-        var existing = fieldset.querySelector('.js-validation-error');
+        removeDescribedBy(field, errorIdFor(field));
+        var existing = document.getElementById(errorIdFor(field));
         if (existing) existing.remove();
     }
 
@@ -674,12 +666,59 @@
         errors.forEach(function(el) { el.remove(); });
 
         var invalidFields = formEl.querySelectorAll('[aria-invalid="true"]');
-        invalidFields.forEach(function(el) { el.removeAttribute('aria-invalid'); });
+        invalidFields.forEach(function(el) {
+            el.removeAttribute('aria-invalid');
+            removeDescribedBy(el, errorIdFor(el));
+        });
+    }
+
+    /**
+     * Show a validation error for a checkbox or radio group on the fieldset
+     * that names it, so the message is tied to the group rather than to one
+     * of its options.
+     * @param {HTMLElement} field - One control of the group.
+     * @param {string} message - Error message to display.
+     */
+    function showGroupError(field, message) {
+        var group = field.closest('fieldset');
+        if (!group || !errorIdFor(group)) {
+            showFieldError(field, message);
+            return;
+        }
+        clearFieldError(group);
+        // Placed after the fieldset, not inside it: only there does the
+        // framework render it like every other field error.
+        var small = buildFieldError(group, message);
+        if (group.nextSibling) {
+            group.parentNode.insertBefore(small, group.nextSibling);
+        } else {
+            group.parentNode.appendChild(small);
+        }
+    }
+
+    /**
+     * Move focus to the first control reported as invalid, so the error is
+     * not left behind while focus sits at the top of the page.
+     * @param {HTMLElement} formEl - The form element.
+     * @returns {boolean} True when focus was moved.
+     */
+    function focusFirstError(formEl) {
+        var target = formEl.querySelector('[aria-invalid="true"]');
+        if (!target) {
+            return false;
+        }
+        if (target.tagName === 'FIELDSET') {
+            target = target.querySelector('input, select, textarea') || target;
+        }
+        if (typeof target.focus !== 'function') {
+            return false;
+        }
+        target.focus();
+        return true;
     }
 
     /**
      * Check if a date string is within valid range (current year ± 50).
-     * Matches backend validation in request_validators.py.
      * @param {string} dateStr - Date string in YYYY-MM-DD format.
      * @returns {boolean} True if date is valid and within range.
      */
@@ -697,18 +736,12 @@
     }
 
     window.FBKTime = window.FBKTime || {};
-    window.FBKTime.MOBILE_BREAKPOINT = MOBILE_BREAKPOINT;
     window.FBKTime.isMobile = isMobile;
     window.FBKTime.buildFilterQuery = buildFilterQuery;
-    window.FBKTime.escapeHtml = escapeHtml;
-    window.FBKTime.escapeAttr = escapeAttr;
+    window.FBKTime.downloadFile = downloadFile;
     window.FBKTime.getCSRFToken = getCSRFToken;
     window.FBKTime.showConfirmDialog = showConfirmDialog;
-    window.FBKTime.showFieldError = showFieldError;
-    window.FBKTime.showFieldsetError = showFieldsetError;
     window.FBKTime.clearFieldError = clearFieldError;
-    window.FBKTime.clearFieldsetError = clearFieldsetError;
-    window.FBKTime.clearAllFieldErrors = clearAllFieldErrors;
     window.FBKTime.isDateInValidRange = isDateInValidRange;
 
     if (document.readyState === 'loading') {

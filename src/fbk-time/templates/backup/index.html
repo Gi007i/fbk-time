@@ -5,41 +5,45 @@
 {% block content %}
 <div class="grid page-header">
     <h1>Datensicherung</h1>
-    <nav><ul><li>
+    <nav aria-label="Seitenaktionen"><ul><li>
         <form action="{{ url_for('backup.sync') }}" method="post">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <button class="outline">Sync</button>
+            <button type="submit" class="outline">Sync</button>
         </form>
     </li></ul></nav>
 </div>
 
+{% if overdue %}
+<p role="alert"><mark>Geplante Sicherung ausgeblieben.</mark> Fällig war sie am {{ overdue.due_at|format_date(include_time=True) }}.{% if overdue.last_at %} Die letzte geplante Sicherung stammt vom {{ overdue.last_at|format_date(include_time=True) }}.{% else %} Bisher gibt es keine geplante Sicherung.{% endif %} Prüfen Sie das Systemlog und den Speicherort.</p>
+{% endif %}
+
 <details>
     <summary><strong>Übersicht</strong></summary>
     <figure>
-        <table>
+        <table class="detail-table">
             <tbody>
                 <tr>
-                    <th>Sicherungen gesamt</th>
+                    <th scope="row">Sicherungen gesamt</th>
                     <td>{{ stats.total }}</td>
                 </tr>
                 <tr>
-                    <th>Verifiziert</th>
+                    <th scope="row">Verifiziert</th>
                     <td>{{ stats.verified }}</td>
                 </tr>
                 <tr>
-                    <th>Beschädigt</th>
+                    <th scope="row">Beschädigt</th>
                     <td>{{ stats.corrupted }}</td>
                 </tr>
                 <tr>
-                    <th>Gesamtgröße</th>
+                    <th scope="row">Gesamtgröße</th>
                     <td>{{ stats.total_size_mb }} MB</td>
                 </tr>
                 <tr>
-                    <th>Speicherort</th>
+                    <th scope="row">Speicherort</th>
                     <td><code>{{ backup_dir }}</code></td>
                 </tr>
                 <tr>
-                    <th>Format</th>
+                    <th scope="row">Format</th>
                     <td><code>.tar.gz</code>-Archive</td>
                 </tr>
             </tbody>
@@ -51,18 +55,18 @@
     <summary><strong>Manuelle Sicherung</strong></summary>
     <form method="POST" action="{{ url_for('backup.create') }}">
         {{ form.hidden_tag() }}
-        <label for="description">
-            {{ form.description.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Optionaler Kurztext zur späteren Identifikation der Sicherung (z.B. Anlass oder Kontext). Maximal 255 Zeichen.">&#x24D8;</span>
-            <div class="grid">
+        <div class="grid">
+            <label for="description">
+                {{ form.description.label.text }} <span class="info-tip" data-placement="right" data-tooltip="Optionaler Kurztext zur späteren Identifikation der Sicherung (z.B. Anlass oder Kontext). Maximal 255 Zeichen.">&#x24D8;</span>
                 {{ form.description(id="description", placeholder='Optionale Beschreibung',
                    **{'aria-invalid': 'true' if form.description.errors else none}) }}
-                <div></div>
-                <div></div>
-            </div>
-            {% if form.description.errors %}
-            <small class="field-error">{{ form.description.errors[0] }}</small>
-            {% endif %}
-        </label>
+                {% if form.description.errors %}
+                <small>{{ form.description.errors[0] }}</small>
+                {% endif %}
+            </label>
+            <div></div>
+            <div></div>
+        </div>
         <div class="grid">
             <button type="submit" class="outline">Sicherung starten</button>
             <div></div>
@@ -78,37 +82,37 @@
     <details>
         <summary>
             <strong>#{{ record.id }} - {{ record.created_at|format_date(include_time=True) if record.created_at else '-' }}</strong>
-            {% if record.status.value == 'verified' %}<ins>{{ record.status.label }}</ins>
+            {% if record.status.value == 'verified' %}<span class="status-on">{{ record.status.label }}</span>
             {% elif record.status.value == 'corrupted' %}<mark>{{ record.status.label }}</mark>
             {% else %}<small>{{ record.status.label }}</small>{% endif %}
         </summary>
 
         <figure>
-            <table>
+            <table class="detail-table">
                 <tbody>
                     <tr>
-                        <th>ID</th>
+                        <th scope="row">ID</th>
                         <td>#{{ record.id }}</td>
                     </tr>
                     <tr>
-                        <th>Typ</th>
+                        <th scope="row">Typ</th>
                         <td>{{ record.backup_type.label }}</td>
                     </tr>
                     <tr>
-                        <th>Status</th>
+                        <th scope="row">Status</th>
                         <td>{{ record.status.label }}</td>
                     </tr>
                     <tr>
-                        <th>Größe</th>
+                        <th scope="row">Größe</th>
                         <td>{{ record.file_size_mb }} MB</td>
                     </tr>
                     <tr>
-                        <th>Beschreibung</th>
+                        <th scope="row">Beschreibung</th>
                         <td>{{ record.description or '-' }}</td>
                     </tr>
                     <tr>
-                        <th>Archivdatei</th>
-                        <td>{% if record.archive_exists %}<ins>vorhanden</ins>{% else %}<mark>fehlt</mark>{% endif %}</td>
+                        <th scope="row">Archivdatei</th>
+                        <td>{{ record.archive_name }}{% if not record.archive_exists %} <mark>fehlt</mark>{% endif %}</td>
                     </tr>
                 </tbody>
             </table>
@@ -146,9 +150,9 @@
 
         {% for p in range(1, pagination.total_pages + 1) %}
             {% if p == pagination.page %}
-            <span class="current">{{ p }}</span>
+            <span class="current" aria-current="page">{{ p }}</span>
             {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
-            <a href="{{ url_for('backup.index', page=p) }}">{{ p }}</a>
+            <a href="{{ url_for('backup.index', page=p) }}"><span class="visually-hidden">Seite </span>{{ p }}</a>
             {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
             <span>...</span>
             {% endif %}

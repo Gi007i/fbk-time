@@ -1,49 +1,55 @@
 {% extends "base.html" %}
+{% from "components/category_icon.html" import category_icon %}
 
 {% block title %}Kategorie löschen - FBK-Time{% endblock %}
 
 {% block content %}
 {% from "components/breadcrumb.html" import render as breadcrumb %}
 {% if origin %}
-{{ breadcrumb([origin, {'label': category.name, 'url': origin_url('categories.detail', id=category.id)}, {'label': 'Löschen'}]) }}
+{{ breadcrumb([origin, {'label': category.name}, {'label': 'Löschen'}]) }}
 {% endif %}
 
-<hgroup>
-    <h1>Kategorie löschen</h1>
-    <p>
-        <span class="category-badge category-{{ category.id }}">{% if category.icon %}<span class="category-icon">{{ category.icon }}</span> {% endif %}{{ category.name }}</span>
-    </p>
-</hgroup>
+<h1>Kategorie löschen</h1>
+<p>
+    <span class="category-badge category-{{ category.id }}">{% if category.icon %}{{ category_icon(category.icon) }} {% endif %}{{ category.name }}</span>
+</p>
 
 <article>
     {% if absences_count > 0 %}
     <form method="POST" action="{{ origin_url('categories.delete', id=category.id) }}">
         {{ form.hidden_tag() }}
 
-        <fieldset>
+        {% set action_error = (form.action.errors or form.new_category_id.errors)|first %}
+        {% set chosen_action = form.action.data if other_categories and form.action.data in ('transfer', 'delete_all') else ('transfer' if other_categories else 'delete_all') %}
+        <fieldset{% if action_error %} aria-invalid="true" aria-describedby="error-action"{% endif %}>
             <legend>Was möchten Sie tun?</legend>
 
+            {% if other_categories %}
             <label>
-                <input type="radio" name="action" value="transfer" checked>
+                <input type="radio" name="action" value="transfer"{% if chosen_action == 'transfer' %} checked{% endif %}>
                 Abwesenheiten übertragen an:
             </label>
-            <select name="new_category_id">
+            <select name="new_category_id" aria-label="Zielkategorie für die Übertragung">
                 {% for cat in other_categories %}
-                <option value="{{ cat.id }}">{{ cat.name }}</option>
+                <option value="{{ cat.id }}"{% if form.new_category_id.data == cat.id %} selected{% endif %}>{{ cat.name }}</option>
                 {% endfor %}
             </select>
+            {% endif %}
 
             <label>
-                <input type="radio" name="action" value="delete_all">
+                <input type="radio" name="action" value="delete_all"{% if chosen_action == 'delete_all' %} checked{% endif %}>
                 Alle {{ absences_count }} Abwesenheit(en) unwiderruflich löschen
             </label>
         </fieldset>
+        {% if action_error %}
+        <small id="error-action">{{ action_error }}</small>
+        {% endif %}
 
         <hr>
 
         <div class="grid">
             <button type="submit" class="outline contrast">Kategorie löschen</button>
-            <button type="button" data-href="{{ back_url('categories.detail', id=category.id) }}" class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url_focused('categories.list_categories', category.id) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>
@@ -53,12 +59,13 @@
 
     <form method="POST" action="{{ origin_url('categories.delete', id=category.id) }}">
         {{ form.hidden_tag() }}
+        <input type="hidden" name="action" value="delete_empty">
 
         <hr>
 
         <div class="grid">
             <button type="submit" class="outline contrast">Kategorie löschen</button>
-            <button type="button" data-href="{{ back_url('categories.detail', id=category.id) }}" class="outline secondary">Abbrechen</button>
+            <button type="button" data-href="{{ back_url_focused('categories.list_categories', category.id) }}" class="outline secondary">Abbrechen</button>
             <div></div>
         </div>
     </form>

@@ -6,7 +6,9 @@ with proper handling of absence relationships.
 
 from typing import Optional, Tuple
 
-from core.extensions import db
+from sqlalchemy import delete, func, select, update
+
+from core.db import db
 from .models import Category
 from modules.absence.models import Absence
 
@@ -23,36 +25,45 @@ def get_category_or_404(category_id: int) -> Category:
     Raises:
         404: If category not found.
     """
-    return Category.query.get_or_404(category_id)
+    return db.get_or_404(Category, category_id)
 
 
 def get_categories_list(
-    show_inactive: bool = False,
+    status_filter: Optional[str] = None,
     page: int = 1,
     per_page: int = 0
 ) -> Tuple[list[Category], int]:
-    """Get paginated list of categories.
+    """Get paginated list of categories with filters.
 
     Args:
-        show_inactive: Include inactive categories.
+        status_filter: Filter by state ('active', 'inactive' or 'all').
         page: Page number.
         per_page: Items per page (0 = all).
 
     Returns:
         Tuple of (categories, total_count).
-    """
-    query = Category.query
-    if not show_inactive:
-        query = query.filter(Category.active == True)
 
-    total = query.count()
+    Raises:
+        ValueError: If status_filter holds an unknown value.
+    """
+    query = select(Category)
+
+    if status_filter == 'active':
+        query = query.where(Category.active == True)
+    elif status_filter == 'inactive':
+        query = query.where(Category.active == False)
+    elif status_filter and status_filter != 'all':
+        raise ValueError(f'Unknown status filter: {status_filter}')
+
+    total = db.session.scalar(
+        select(func.count()).select_from(query.subquery())
+    )
     query = query.order_by(Category.sort_order, Category.name)
 
     if per_page > 0:
         offset = (page - 1) * per_page
-        categories = query.offset(offset).limit(per_page).all()
-    else:
-        categories = query.all()
+        query = query.offset(offset).limit(per_page)
+    categories = db.session.scalars(query).all()
 
     return categories, total
 
@@ -82,7 +93,9 @@ def create_category(
     Returns:
         Tuple of (Category instance or None, error_message or None).
     """
-    existing = Category.query.filter_by(name=name.strip()).first()
+    existing = db.session.scalars(
+        select(Category).filter_by(name=name.strip())
+    ).first()
     if existing:
         return None, 'Eine Kategorie mit diesem Namen existiert bereits.'
 
@@ -128,9 +141,11 @@ def update_category(
     Returns:
         Tuple of (success, error_message).
     """
-    existing = Category.query.filter(
-        Category.name == name.strip(),
-        Category.id != category.id
+    existing = db.session.scalars(
+        select(Category).where(
+            Category.name == name.strip(),
+            Category.id != category.id
+        )
     ).first()
 
     if existing:
@@ -157,7 +172,9 @@ def get_absence_count(category_id: int) -> int:
     Returns:
         Number of absences using this category.
     """
-    return Absence.query.filter_by(category_id=category_id).count()
+    return db.session.scalar(
+        select(func.count()).select_from(Absence).filter_by(category_id=category_id)
+    )
 
 
 def delete_category_with_absences(category: Category) -> str:
@@ -169,12 +186,36 @@ def delete_category_with_absences(category: Category) -> str:
     Returns:
         Success message.
     """
-    absences_count = Absence.query.filter_by(category_id=category.id).count()
+    from modules.absence.models import RecurrenceException
+    from modules.absence.history import track_occurrence_category_transfer
+
+    absences_count = get_absence_count(category.id)
+    name = category.name
 
     if absences_count > 0:
-        Absence.query.filter_by(category_id=category.id).delete()
+        db.session.execute(
+            delete(Absence).filter_by(category_id=category.id)
+        )
 
-    name = category.name
+    # Overrides on series of *other* categories survive the delete above. The
+    # FK clears their category id but leaves the override flag set, which
+    # would render an occurrence without an effective category. Dropping the
+    # override lets it fall back to the category of its series.
+    orphaned_overrides = db.session.scalars(
+        select(RecurrenceException).where(
+            RecurrenceException.modified_category_id == category.id
+        )
+    ).all()
+    for override in orphaned_overrides:
+        track_occurrence_category_transfer(
+            override.absence_id,
+            override.exception_date,
+            name,
+            override.absence.category.name
+        )
+        override.modified_category_id = None
+        override.modified_category_overridden = False
+
     db.session.delete(category)
 
     if absences_count > 0:
@@ -202,17 +243,45 @@ def transfer_absences_and_delete(
     if not target_category:
         return False, 'Zielkategorie nicht gefunden.'
 
-    absences_count = Absence.query.filter_by(category_id=category.id).count()
-    Absence.query.filter_by(category_id=category.id).update(
-        {'category_id': target_category_id}
+    from modules.absence.models import RecurrenceException
+    from modules.absence.history import (
+        track_category_transfer,
+        track_occurrence_category_transfer,
     )
 
-    name = category.name
+    old_name = category.name
+    new_name = target_category.name
+
+    affected_ids = db.session.scalars(
+        select(Absence.id).filter_by(category_id=category.id)
+    ).all()
+    absences_count = len(affected_ids)
+    for absence_id in affected_ids:
+        track_category_transfer(absence_id, old_name, new_name)
+    db.session.execute(
+        update(Absence)
+        .filter_by(category_id=category.id)
+        .values(category_id=target_category_id)
+    )
+
+    # Occurrence overrides must follow the transfer; FK SET NULL would
+    # strip the category from a modified occurrence (category is mandatory).
+    affected_exceptions = db.session.scalars(
+        select(RecurrenceException).where(
+            RecurrenceException.modified_category_id == category.id
+        )
+    ).all()
+    for exception in affected_exceptions:
+        track_occurrence_category_transfer(
+            exception.absence_id, exception.exception_date, old_name, new_name
+        )
+        exception.modified_category_id = target_category_id
+
     db.session.delete(category)
 
     message = (
-        f'{absences_count} Abwesenheit(en) nach "{target_category.name}" übertragen, '
-        f'Kategorie "{name}" gelöscht.'
+        f'{absences_count} Abwesenheit(en) nach "{new_name}" übertragen, '
+        f'Kategorie "{old_name}" gelöscht.'
     )
     return True, message
 
@@ -240,25 +309,10 @@ def get_categories_excluding(exclude_id: int) -> list[Category]:
     Returns:
         List of categories ordered by name.
     """
-    return Category.query.filter(
-        Category.id != exclude_id
-    ).order_by(Category.name).all()
+    return db.session.scalars(
+        select(Category)
+        .where(Category.id != exclude_id)
+        .order_by(Category.name)
+    ).all()
 
 
-def get_all_categories_ordered() -> list[Category]:
-    """Get all categories ordered by sort_order.
-
-    Returns:
-        List of all categories.
-    """
-    return Category.query.order_by(Category.sort_order).all()
-
-
-def add_absence_counts_to_categories(categories: list[Category]) -> None:
-    """Add absence_count attribute to each category.
-
-    Args:
-        categories: List of Category instances to annotate.
-    """
-    for cat in categories:
-        cat.absence_count = cat.absences.count()

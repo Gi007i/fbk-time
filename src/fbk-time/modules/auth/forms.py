@@ -1,14 +1,14 @@
 """Authentication forms.
 
-Provides login and registration forms with CSRF protection.
+Provides login, re-authentication and registration forms with CSRF
+protection.
 """
 
 from flask_wtf import FlaskForm
 from wtforms import StringField, PasswordField, BooleanField
 from wtforms.validators import DataRequired, Length, EqualTo, Optional, ValidationError
 
-from utils.validators import validate_password_strength, EmailFormat
-from modules.user.services import username_exists, email_exists
+from utils.validators import validate_password_strength, EmailFormat, SafeText, UsernameFormat
 
 
 class LoginForm(FlaskForm):
@@ -30,6 +30,17 @@ class LoginForm(FlaskForm):
     remember = BooleanField('Angemeldet bleiben')
 
 
+class ReauthenticateForm(FlaskForm):
+    """Password confirmation before a sensitive action."""
+
+    password = PasswordField(
+        'Passwort',
+        validators=[
+            DataRequired(message='Passwort ist erforderlich.')
+        ]
+    )
+
+
 class RegistrationForm(FlaskForm):
     """User self-registration form."""
 
@@ -37,14 +48,16 @@ class RegistrationForm(FlaskForm):
         'Benutzername',
         validators=[
             DataRequired(message='Benutzername ist erforderlich.'),
-            Length(min=2, max=80, message='Benutzername muss 2-80 Zeichen lang sein.')
+            Length(min=3, max=80, message='Benutzername muss 3-80 Zeichen lang sein.'),
+            UsernameFormat()
         ]
     )
     name = StringField(
         'Vollständiger Name',
         validators=[
             DataRequired(message='Name ist erforderlich.'),
-            Length(min=2, max=100, message='Name muss 2-100 Zeichen lang sein.')
+            Length(min=2, max=100, message='Name muss 2-100 Zeichen lang sein.'),
+            SafeText(message='Name enthält ungültige Zeichen.')
         ]
     )
     email = StringField(
@@ -74,17 +87,6 @@ class RegistrationForm(FlaskForm):
         is_valid, error_msg = validate_password_strength(field.data)
         if not is_valid:
             raise ValidationError(error_msg)
-
-    def validate_username(self, field):
-        """Check if username is already taken."""
-        if username_exists(field.data):
-            raise ValidationError('Registrierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben.')
-
-    def validate_email(self, field):
-        """Check if email is already taken."""
-        if field.data:
-            if email_exists(field.data):
-                raise ValidationError('Registrierung fehlgeschlagen. Bitte überprüfen Sie Ihre Eingaben.')
 
 
 class ChangePasswordForm(FlaskForm):

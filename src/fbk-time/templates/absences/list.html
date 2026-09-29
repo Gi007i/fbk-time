@@ -1,19 +1,25 @@
 {% extends "base.html" %}
+{% from "components/category_icon.html" import category_icon %}
 {% from "components/filters.html" import render as filter_panel %}
+{% from "components/export_panel.html" import render as export_panel %}
 
 {% block title %}Abwesenheiten - FBK-Time{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/absences.css') }}">
+{% endblock %}
 
 {% block content %}
 <div class="grid page-header">
     <h1>Liste</h1>
-    <nav><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
+    <nav aria-label="Seitenaktionen"><ul><li><a href="{{ origin_url('absences.create') }}" role="button" class="outline">Neu</a></li></ul></nav>
 </div>
 
 {{ filter_panel(filters, users, categories, url_for('absences.list_absences'), with_date_range=True) }}
 
-<nav class="bulk-actions-bar hidden">
+<nav class="bulk-actions-bar hidden" aria-label="Sammelaktionen">
     <ul>
-        <li><strong id="selection-count">0</strong> ausgewählt</li>
+        <li><span role="status"><strong id="selection-count">0</strong> ausgewählt</span></li>
         <li><button type="button" id="bulk-delete-btn" class="outline">Löschen</button></li>
         <li><button type="button" id="clear-selection-btn" class="outline secondary">Auswahl aufheben</button></li>
     </ul>
@@ -22,39 +28,44 @@
 {% if occurrences %}
 <figure>
     <table class="striped list-cards">
+        <caption class="visually-hidden">Abwesenheiten im gewählten Zeitraum</caption>
         <thead>
             <tr>
-                <th><input type="checkbox" id="select-all"></th>
-                <th>Person</th>
-                <th class="list-mobile-col">Kategorie</th>
-                <th class="list-desktop-col">Kategorie</th>
-                <th class="list-desktop-col">Typ</th>
-                <th>Datum</th>
-                <th class="list-desktop-col">Zeitraum</th>
-                <th class="list-desktop-col">Vertretung</th>
-                <th class="list-desktop-col">Serie</th>
-                <th class="list-desktop-col">Aktionen</th>
+                <th scope="col"><input type="checkbox" id="select-all" aria-label="Alle Einträge auswählen"></th>
+                <th scope="col">Person</th>
+                <th scope="col" class="list-mobile-col">Kategorie</th>
+                <th scope="col" class="list-desktop-col">Kategorie</th>
+                <th scope="col" class="list-desktop-col">Typ</th>
+                <th scope="col">Datum</th>
+                <th scope="col" class="list-desktop-col">Zeitraum</th>
+                <th scope="col" class="list-desktop-col">Vertretung</th>
+                <th scope="col" class="list-desktop-col">Serie</th>
+                <th scope="col" class="list-desktop-col">Aktionen</th>
             </tr>
         </thead>
         <tbody>
             {% for occ in occurrences %}
-            <tr data-href="{% if occ.is_recurring %}{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}{% else %}{{ origin_url('absences.detail', id=occ.absence.id) }}{% endif %}">
+            {% set detail_url = origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) if occ.is_recurring else origin_url('absences.detail', id=occ.absence.id) %}
+            <tr data-href="{{ detail_url }}">
                 <td>
+                    {% if current_user.is_manager or occ.user.id == current_user.id %}
                     <input type="checkbox" data-bulk-item
+                           aria-label="{{ occ.user.name }}, {{ occ.date|format_date }} auswählen"
                            value="{{ occ.absence.id }}{% if occ.is_recurring %}:{{ occ.date.isoformat() }}{% endif %}">
+                    {% endif %}
                 </td>
-                <td class="list-name"><span>{{ occ.user.name }}</span></td>
-                <td class="list-mobile-col" data-label="Kategorie">{{ occ.category.name }} ({{ 'A' if occ.category.is_present else 'X' }})</td>
+                <td class="list-name"><span><a class="row-link" href="{{ detail_url }}">{{ occ.user.name }}</a></span></td>
+                <td class="list-mobile-col" data-label="Kategorie">{{ occ.category.name }} ({% if occ.category.is_present %}A<span class="visually-hidden">nwesend</span>{% else %}X<span class="visually-hidden">, abwesend</span>{% endif %})</td>
                 <td class="list-desktop-col">
                     <span class="category-badge category-{{ occ.category.id }}">
-                        {% if occ.category.icon %}<span class="category-icon">{{ occ.category.icon }}</span> {% endif %}{{ occ.category.name }}
+                        {% if occ.category.icon %}{{ category_icon(occ.category.icon) }} {% endif %}{{ occ.category.name }}
                     </span>
                 </td>
                 <td class="list-desktop-col">
                     {% if occ.category.is_present %}
-                    <span class="text-positive">A</span>
+                    <span class="text-positive">A<span class="visually-hidden">nwesend</span></span>
                     {% else %}
-                    <span class="text-negative">X</span>
+                    <span class="text-negative">X<span class="visually-hidden">, abwesend</span></span>
                     {% endif %}
                 </td>
                 <td data-label="Datum">{{ occ.date|format_date }}</td>
@@ -67,7 +78,7 @@
                     Ganztags
                     {% endif %}
                 </td>
-                <td class="list-desktop-col">{{ occ.substitute.name if occ.substitute else '-' }}</td>
+                <td class="list-desktop-col"><span class="list-truncate">{{ occ.substitute.name if occ.substitute else '-' }}</span></td>
                 <td class="list-desktop-col">
                     {% if occ.is_recurring %}
                     <mark>Serie{% if occ.is_exception %} (geändert){% endif %}</mark>
@@ -76,11 +87,7 @@
                     {% endif %}
                 </td>
                 <td class="list-desktop-col">
-                    {% if occ.is_recurring %}
-                    <a href="{{ origin_url('absences.occurrence_detail', id=occ.absence.id, date_str=occ.date.isoformat()) }}" role="button" class="outline">Details</a>
-                    {% else %}
-                    <a href="{{ origin_url('absences.detail', id=occ.absence.id) }}" role="button" class="outline">Details</a>
-                    {% endif %}
+                    <a href="{{ detail_url }}">Details<span class="visually-hidden"> zu {{ occ.user.name }}, {{ occ.date|format_date }}</span></a>
                 </td>
             </tr>
             {% endfor %}
@@ -88,28 +95,28 @@
     </table>
 </figure>
 
-<p><small><strong>A</strong> = Anwesend | <strong>X</strong> = Abwesend</small></p>
+<p><small><strong>A</strong> = Anwesend <span aria-hidden="true">|</span> <strong>X</strong> = Abwesend</small></p>
 
 {% if pagination.total_pages > 1 %}
 <nav class="pagination" aria-label="Seitennavigation">
     {% if pagination.has_prev %}
-    <a href="{{ url_for('absences.list_absences', page=pagination.page-1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_ids, category_id=filters.category_ids, has_substitute=filters.has_substitute) }}">&laquo; Zurück</a>
+    <a href="{{ filter_url('absences.list_absences', page=pagination.page-1, date_from=filters.date_from, date_to=filters.date_to) }}">&laquo; Zurück</a>
     {% else %}
     <span>&laquo; Zurück</span>
     {% endif %}
 
     {% for p in range(1, pagination.total_pages + 1) %}
         {% if p == pagination.page %}
-        <span class="current">{{ p }}</span>
+        <span class="current" aria-current="page">{{ p }}</span>
         {% elif p == 1 or p == pagination.total_pages or (p >= pagination.page - 2 and p <= pagination.page + 2) %}
-        <a href="{{ url_for('absences.list_absences', page=p, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_ids, category_id=filters.category_ids, has_substitute=filters.has_substitute) }}">{{ p }}</a>
+        <a href="{{ filter_url('absences.list_absences', page=p, date_from=filters.date_from, date_to=filters.date_to) }}"><span class="visually-hidden">Seite </span>{{ p }}</a>
         {% elif p == pagination.page - 3 or p == pagination.page + 3 %}
         <span>...</span>
         {% endif %}
     {% endfor %}
 
     {% if pagination.has_next %}
-    <a href="{{ url_for('absences.list_absences', page=pagination.page+1, date_from=filters.date_from, date_to=filters.date_to, user_id=filters.user_ids, category_id=filters.category_ids, has_substitute=filters.has_substitute) }}">Weiter &raquo;</a>
+    <a href="{{ filter_url('absences.list_absences', page=pagination.page+1, date_from=filters.date_from, date_to=filters.date_to) }}">Weiter &raquo;</a>
     {% else %}
     <span>Weiter &raquo;</span>
     {% endif %}
@@ -122,18 +129,7 @@
 {% endif %}
 
 {% if occurrences %}
-<article>
-    <strong>Export-Format</strong>
-    <div class="grid">
-        <select id="export-type">
-            <option value="pdf-list">PDF - Tabelle</option>
-            <option value="pdf-matrix">PDF - Kalender-Matrix</option>
-            <option value="ical">iCal-Datei</option>
-        </select>
-        <button type="button" id="list-export-btn" class="outline">Exportieren</button>
-        <div></div>
-    </div>
-</article>
+{{ export_panel(button_id='list-export-btn') }}
 
 <div id="list-export-data" class="hidden"
      data-date-from="{{ filters.date_from }}"

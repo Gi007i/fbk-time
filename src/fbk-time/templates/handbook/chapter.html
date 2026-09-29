@@ -19,8 +19,8 @@
     <aside>
         <nav aria-label="Kapitelübersicht">
             {% for section, chapters in sections %}
-            <h6>{{ section }}</h6>
-            <ul>
+            <p class="handbook-menu-section" id="handbook-section-{{ loop.index }}">{{ section }}</p>
+            <ul aria-labelledby="handbook-section-{{ loop.index }}">
                 {% for chapter in chapters %}
                 <li>
                     <a href="{{ url_for('handbook.chapter', slug=chapter.slug) }}"

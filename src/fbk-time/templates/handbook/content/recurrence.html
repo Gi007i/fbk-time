@@ -1,33 +1,37 @@
 <h1>Serientermine</h1>
 
-<p>Regelmäßig wiederkehrende Abwesenheiten legen Sie als Serie an. So erfassen Sie z.B. einen wöchentlichen Home-Office-Tag in einem Schritt.</p>
+<p>Kehrt eine Abwesenheit regelmäßig wieder, legen Sie sie als Serie an. Einen wöchentlichen Home-Office-Tag erfassen Sie damit in einem einzigen Schritt.</p>
 
 <h2>Serie anlegen</h2>
 
-<p>Aktivieren Sie im Anlageformular die Option <strong>Wiederholen</strong>. Die zugehörigen Felder werden daraufhin eingeblendet.</p>
+<p>Aktivieren Sie im Anlageformular die Option <strong>Wiederholen</strong>. Die Anwendung blendet daraufhin die zugehörigen Felder ein.</p>
 
-<p><strong>Wiederholungsmuster.</strong> Täglich, wöchentlich oder zweiwöchentlich.</p>
+<p><strong>Wiederholungsart.</strong> Sie wählen zwischen <strong>Täglich</strong>, <strong>Wöchentlich</strong> und <strong>Alle 2 Wochen</strong>. <strong>Täglich</strong> passt, wenn eine Abwesenheit innerhalb eines festen Zeitraums durchgehend gilt – etwa bei einer mehrwöchigen Schulung oder einer längeren Krankmeldung.</p>
 
-<p><strong>Wochentage</strong> (bei wöchentlich und zweiwöchentlich). Auswahl der Wochentage, an denen die Abwesenheit eintritt. Mehrfachauswahl ist zulässig.</p>
+<p><strong>An Wochentagen.</strong> Bei <strong>Wöchentlich</strong> und <strong>Alle 2 Wochen</strong> legen Sie hier fest, an welchen Tagen die Abwesenheit eintritt. Sie dürfen mehrere Tage auswählen.</p>
 
-<p><strong>Täglich.</strong> Geeignet für durchgehend geltende Abwesenheiten innerhalb eines festen Zeitraums, etwa mehrwöchige Schulungen oder längere Krankmeldungen.</p>
+<p><strong>Serie endet am.</strong> Lassen Sie das Feld leer, läuft die Serie bis zu der Obergrenze, die ein Admin festgelegt hat – derzeit {{ cfg.limits_max_future_months }} Monate ab heute. Danach müssen Sie die Serie verlängern.</p>
 
-<p><strong>Enddatum der Serie.</strong> Geben Sie kein Enddatum an, läuft die Serie bis zur vom Admin festgelegten Obergrenze (standardmäßig {{ cfg.limits_max_future_months }} Monate ab heute). Danach müssen Sie die Serie verlängern.</p>
+<h2>Warum Serien ein Ende brauchen</h2>
 
-<h2>Begrenzung der Serienlänge</h2>
-
-<p>Die Begrenzung ist Absicht. Eine Serie ohne Enddatum erzeugt sehr viele Einzeltermine, die bei späteren Änderungen alle mitgezogen werden müssen. Ein überschaubarer Zeitraum vereinfacht die Pflege.</p>
+<p>Die Begrenzung ist Absicht. Eine Serie ohne Enddatum erzeugt sehr viele Einzeltermine, und bei einer späteren Änderung zieht die Anwendung sie alle mit. Ein überschaubarer Zeitraum hält die Pflege einfach.</p>
 
 <h2>Einzelnen Termin ändern</h2>
 
-<p>Weicht ein einzelner Tag vom Muster ab, klicken Sie im Kalender oder in der Listenansicht auf den Eintrag an diesem Tag und ändern Sie das gewünschte Feld. Die Änderung wirkt ausschließlich auf diesen Tag; die übrige Serie bleibt unverändert.</p>
+<p>Weicht ein einzelner Tag vom Muster ab, klicken Sie im Kalender oder in der Listenansicht auf den Eintrag an diesem Tag und ändern das gewünschte Feld. Zur Wahl stehen <strong>Kategorie</strong>, <strong>Zeittyp</strong>, <strong>Vertretung</strong> und <strong>Notizen</strong>. Beim <strong>Zeittyp</strong> wählen Sie zwischen <strong>Ganztags</strong>, <strong>Halbtags Vormittag</strong> und <strong>Halbtags Nachmittag</strong>. Hat die Serie eine eigene Uhrzeit, steht zusätzlich <strong>Uhrzeit der Serie</strong> zur Wahl; damit behält der Termin das Zeitfenster der Serie. Eine abweichende Uhrzeit für einen einzelnen Termin gibt es nicht. Das Datum liegt durch die Serie fest.</p>
 
-<p>Abweichend bearbeitete Termine lassen sich später auf die Serienvorgabe zurücksetzen. Einzeln gelöschte Termine sind ebenfalls wiederherstellbar, solange die Serie besteht.</p>
+<p>Die Änderung wirkt nur auf diesen einen Tag, die übrige Serie bleibt unberührt.</p>
 
-<p>Einzeln angepasste Termine werden automatisch entfernt, wenn der betreffende Tag nicht mehr zur Serie gehört (z.B. nachdem Sie das Enddatum vorgezogen haben).</p>
+<p>Über die Schaltfläche <strong>Wiederherstellen</strong> setzen Sie einen abweichend bearbeiteten Termin wieder auf die Serienvorgabe.</p>
+
+<p>Einen einzeln gelöschten Termin holen Sie nicht auf diesem Weg zurück, denn seine Detailansicht ist nicht mehr erreichbar. Sie finden ihn stattdessen im Abschnitt <strong>Gelöschte Termine</strong> der Serien-Detailansicht und stellen ihn dort wieder her. Liegt inzwischen ein anderer Eintrag auf demselben Tag, lehnt die Anwendung das ab. Ist dagegen die Vertretung der Serie an diesem Tag selbst abwesend, stellt die Anwendung den Termin wieder her und zeigt einen Warnhinweis. Einzelheiten zu diesem Vertretungskonflikt beschreibt das Kapitel <strong>Vertretungen</strong>.</p>
+
+<p>Gehört ein Tag nicht mehr zur Serie, etwa weil Sie das Enddatum vorgezogen haben, entfernt die Anwendung den einzeln angepassten oder gelöschten Termin dieses Tages automatisch und vermerkt das in der <strong>Änderungshistorie</strong>.</p>
 
 <h2>Gesamte Serie bearbeiten oder löschen</h2>
 
-<p>Änderungen an den Grunddaten der Serie (Muster, Wochentage, Enddatum, Kategorie, Vertretung) nehmen Sie in der Serien-Detailansicht vor – sie wirken auf alle künftigen Termine. Einzeln angepasste Termine behalten ihre abweichenden Einstellungen, bis Sie sie auf die Serienvorgabe zurücksetzen.</p>
+<p>Die Grunddaten der Serie ändern Sie in der Serien-Detailansicht: Wiederholungsart, Wochentage, Serienende, Kategorie und Vertretung. Was Sie dort ändern, wirkt auf alle Termine der Serie – auch auf die bereits vergangenen. Ändern Sie heute die Kategorie einer seit Januar laufenden Serie, erscheinen auch die Januar-Termine in der neuen Kategorie.</p>
 
-<p>Beim Löschen der gesamten Serie werden alle Termine entfernt, einschließlich der zuvor abweichend bearbeiteten Tage.</p>
+<p>Einzeln angepasste Termine behalten dabei ihre abweichenden Einstellungen, bis Sie sie auf die Serienvorgabe zurücksetzen.</p>
+
+<p>Löschen Sie die gesamte Serie, entfernt die Anwendung alle Termine – auch die Tage, die Sie zuvor abweichend bearbeitet haben.</p>
