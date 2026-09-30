@@ -297,6 +297,28 @@ def _settings_complete(settings_path: Path) -> bool:
     return not _missing_system_settings(settings_path)
 
 
+def _settings_write_problem(settings_path: Path, backup_dir: Path) -> str | None:
+    """Return why settings.json cannot be updated, or None if it can.
+
+    Checked before the schema commit, so a known write problem does not
+    leave the database upgraded while settings.json stays behind.
+    """
+    for directory in (settings_path.parent, backup_dir):
+        if not os.access(directory, os.W_OK | os.X_OK):
+            return f'No write access to {directory}'
+
+    with open(settings_path, 'r', encoding='utf-8') as fh:
+        node = json.load(fh)
+    for path, _default in REQUIRED_SYSTEM_SETTINGS:
+        parents = ('system',) + path[:-1]
+        current = node
+        for depth, key in enumerate(parents):
+            current = current.get(key, {})
+            if not isinstance(current, dict):
+                return f'{".".join(parents[:depth + 1])} is not an object'
+    return None
+
+
 def _ensure_system_settings(
     settings_path: Path,
     backup_dir: Path,
@@ -335,11 +357,15 @@ def _ensure_system_settings(
 
     original_mode = settings_path.stat().st_mode & 0o777
     tmp_path = settings_path.with_name(settings_path.name + '.tmp')
-    with open(tmp_path, 'w', encoding='utf-8') as fh:
-        json.dump(data, fh, indent=2)
-        fh.write('\n')
-    os.chmod(tmp_path, original_mode)
-    os.replace(tmp_path, settings_path)
+    try:
+        with open(tmp_path, 'w', encoding='utf-8') as fh:
+            json.dump(data, fh, indent=2)
+            fh.write('\n')
+        os.chmod(tmp_path, original_mode)
+        os.replace(tmp_path, settings_path)
+    except OSError:
+        tmp_path.unlink(missing_ok=True)
+        raise
 
     for name, default in inserted.items():
         logger.success(f'Added {name} = {default} to settings.json')
@@ -751,6 +777,13 @@ def cmd_upgrade(
         logger.success('Database and settings already on the v1.6.0 layout')
         return True
 
+    if not settings_done:
+        problem = _settings_write_problem(settings_path, backup_dir)
+        if problem:
+            logger.error(f'settings.json cannot be updated: {problem}')
+            logger.info('Nothing was changed, no backup was written.')
+            return False
+
     if not force:
         confirmation = input('Continue with upgrade? [y/N] ').strip().lower()
         if confirmation != 'y':
@@ -769,7 +802,15 @@ def cmd_upgrade(
             'idle_warning_seconds, backup.directory) are set manually.'
         )
     else:
-        _ensure_system_settings(settings_path, backup_dir, logger)
+        try:
+            _ensure_system_settings(settings_path, backup_dir, logger)
+        except OSError as exc:
+            logger.error(f'Updating settings.json failed: {exc}')
+            logger.info(
+                'The database schema is already upgraded. Fix the cause and '
+                'run the upgrade again; it then only completes settings.json.'
+            )
+            return False
 
     logger.section(f'v{TARGET_VERSION} Upgrade Successful')
     logger.success(f'Installation upgraded to v{TARGET_VERSION}.')

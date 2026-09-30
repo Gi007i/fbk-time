@@ -105,6 +105,7 @@ def team_overview():
     users = data['users']
     all_users = data['all_users']
     categories = data['categories']
+    legend_categories = data['legend_categories']
     matrix = data['matrix']
     month_start = data['month_start']
     month_end = data['month_end']
@@ -179,6 +180,7 @@ def team_overview():
         month_days=month_days,
         matrix=matrix,
         categories=categories,
+        legend_categories=legend_categories,
         filters=filters,
         holidays=holidays,
         today=today,

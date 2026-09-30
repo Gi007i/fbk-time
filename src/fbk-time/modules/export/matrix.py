@@ -22,10 +22,13 @@ from core.db import db
 from core.timezone import get_app_timezone
 from modules.auth.models import User, UserRole, UserStatus
 from modules.category.helpers import twemoji_stem
-from modules.category.models import Category
 from modules.holidays.services import get_holidays_for_month
 from modules.absence.recurrence import recurrence_service
-from modules.absence.services import filter_occurrences
+from modules.absence.services import (
+    filter_occurrences,
+    get_active_categories,
+    get_legend_categories,
+)
 from utils.helpers import format_date_for_user
 from .pdf import HalfDayCell, ICON_MAX_SIDE
 from .services import build_absence_query
@@ -255,28 +258,6 @@ def _build_matrix_page(
     elements.append(table)
 
 
-def _legend_categories(occurrences):
-    """Collect the categories to explain in the legend.
-
-    Inactive categories still appear in the matrix through existing
-    absences, so every category that occurs is listed next to the active ones.
-
-    Args:
-        occurrences: Rendered occurrence dicts.
-
-    Returns:
-        Categories without duplicates, ordered by sort order and name.
-    """
-    by_id = {
-        cat.id: cat
-        for cat in db.session.scalars(select(Category).filter_by(active=True)).all()
-    }
-    for occ in occurrences:
-        if occ['category'] is not None:
-            by_id[occ['category'].id] = occ['category']
-    return sorted(by_id.values(), key=lambda cat: (cat.sort_order, cat.name))
-
-
 def _build_legend(elements, styles, available_width, categories):
     """Build category legend and presence hint.
 
@@ -481,7 +462,12 @@ def export_team_matrix_pdf(
                 continue
         matrix[key] = occ
 
-    legend_categories = _legend_categories(occurrences)
+    # Merging a half day moves a category into the afternoon slot.
+    legend_categories = get_legend_categories(get_active_categories(), (
+        category
+        for entry in matrix.values()
+        for category in (entry['category'], entry.get('category_afternoon'))
+    ))
     month_chunks = _split_into_months(week_start, week_end)
     use_monthly_pages = len(month_chunks) > 1
 

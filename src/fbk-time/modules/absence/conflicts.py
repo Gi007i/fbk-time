@@ -73,13 +73,16 @@ def check_absence_conflicts(
     is_recurring = bool(rrule_str)
     range_end = (recurrence_end_date or end_date) if is_recurring else end_date
 
-    new_dates = list(_expand_new_entry_dates(
+    new_dates = _expand_new_entry_dates(
         start_date, end_date, rrule_str, recurrence_end_date
-    ))
+    )
+    series_exceptions = _get_edited_series_exceptions(
+        exclude_absence_id, rrule_str, start_date, range_end
+    )
+    new_slots = _get_new_entry_slots(new_dates, time_flags, series_exceptions)
 
     conflicting_dates = _get_user_conflict_dates_with_slots(
-        user_id, start_date, range_end, new_dates,
-        exclude_absence_id, time_flags
+        user_id, start_date, range_end, new_slots, exclude_absence_id
     )
 
     if conflicting_dates:
@@ -89,13 +92,15 @@ def check_absence_conflicts(
         )
 
     if substitute_id:
-        new_slots = _get_new_entry_slots(new_dates, time_flags)
+        covered_slots = _slots_covered_by_substitute(
+            new_slots, series_exceptions, substitute_id
+        )
 
         substitute_absent_slots = get_user_absent_slots(
             substitute_id, start_date, range_end, exclude_absence_id
         )
         substitute_conflicts = _dates_with_slot_overlap(
-            new_slots, substitute_absent_slots
+            covered_slots, substitute_absent_slots
         )
         if substitute_conflicts:
             result.add_warning(
@@ -107,7 +112,7 @@ def check_absence_conflicts(
             substitute_id, start_date, range_end, exclude_absence_id
         )
         assignment_conflicts = _dates_with_slot_overlap(
-            new_slots, _group_assignment_slots(existing_assignments)
+            covered_slots, _group_assignment_slots(existing_assignments)
         )
         if assignment_conflicts:
             result.add_warning(
@@ -121,7 +126,7 @@ def check_absence_conflicts(
         cross_slots = _group_assignment_slots(
             a for a in cross_assignments if a['user_id'] == substitute_id
         )
-        cross_conflicts = _dates_with_slot_overlap(new_slots, cross_slots)
+        cross_conflicts = _dates_with_slot_overlap(covered_slots, cross_slots)
         if cross_conflicts:
             result.add_warning(
                 'Kreuzvertretung erkannt: Die Personen vertreten sich gegenseitig '
@@ -189,9 +194,11 @@ def validate_time_slot_overlap(
         'is_half_day_afternoon': is_half_day_afternoon,
         'start_time': start_time,
         'end_time': end_time
-    })
+    }, _get_edited_series_exceptions(
+        exclude_absence_id, rrule_str, start_date, range_end
+    ))
 
-    for new_date in new_dates:
+    for new_date in new_slots:
         if new_date not in occurrences_by_date:
             continue
 
@@ -230,13 +237,40 @@ def _format_conflict_dates(dates) -> str:
     )
 
 
+def _get_edited_series_exceptions(
+    exclude_absence_id: Optional[int],
+    rrule_str: Optional[str],
+    range_start: date,
+    range_end: date
+) -> dict:
+    """Return the stored exceptions of the series being edited, by date.
+
+    Exceptions whose date stays in the pattern survive the save, so they
+    shape the occurrences the edited series will actually have.
+    """
+    if not (rrule_str and exclude_absence_id):
+        return {}
+    absence = db.session.get(Absence, exclude_absence_id)
+    if absence is None:
+        return {}
+    return recurrence_service.load_exceptions(
+        [absence], range_start, range_end
+    ).get(absence.id, {})
+
+
 def _get_new_entry_slots(
     new_dates: List[date],
-    time_flags: Optional[dict]
+    time_flags: Optional[dict],
+    exceptions_by_date: Optional[dict] = None
 ) -> dict:
-    """Map each date of the new entry to its time slot."""
+    """Map each date of the new entry to its time slot.
+
+    Deleted occurrences are left out; a modified time type wins over the
+    series flags.
+    """
     if not time_flags:
         time_flags = {'is_all_day': True}
+    exceptions_by_date = exceptions_by_date or {}
 
     slot = _slot_from_flags(
         time_flags.get('is_all_day', True),
@@ -245,7 +279,35 @@ def _get_new_entry_slots(
         time_flags.get('start_time'),
         time_flags.get('end_time')
     )
-    return {occ_date: slot for occ_date in new_dates}
+    slots = {}
+    for occ_date in new_dates:
+        exception = exceptions_by_date.get(occ_date)
+        if exception is not None and exception.exception_type == 'deleted':
+            continue
+        if exception is not None and exception.modified_time_type is not None:
+            slots[occ_date] = exception.modified_time_type
+        else:
+            slots[occ_date] = slot
+    return slots
+
+
+def _slots_covered_by_substitute(
+    new_slots: dict,
+    exceptions_by_date: dict,
+    substitute_id: int
+) -> dict:
+    """Keep the dates the given substitute covers, dropping overrides to others."""
+    covered = {}
+    for occ_date, slot in new_slots.items():
+        exception = exceptions_by_date.get(occ_date)
+        if (
+            exception is not None
+            and exception.modified_substitute_overridden
+            and exception.modified_substitute_id != substitute_id
+        ):
+            continue
+        covered[occ_date] = slot
+    return covered
 
 
 def _dates_with_slot_overlap(
@@ -312,9 +374,8 @@ def _get_user_conflict_dates_with_slots(
     user_id: int,
     start_date: date,
     range_end: date,
-    new_dates: List[date],
-    exclude_absence_id: Optional[int],
-    time_flags: Optional[dict]
+    new_slots: dict,
+    exclude_absence_id: Optional[int]
 ) -> set:
     """Get dates with actual time slot conflicts for user.
 
@@ -326,9 +387,8 @@ def _get_user_conflict_dates_with_slots(
         start_date: Start date of new absence.
         range_end: End of range to load existing occurrences for
             (recurrence_end_date for series, end_date otherwise).
-        new_dates: List of dates for new absence.
+        new_slots: Time slot of the new absence per date.
         exclude_absence_id: Absence ID to exclude (for edits).
-        time_flags: Time slot info (is_all_day, is_half_day_morning, etc.).
 
     Returns:
         Set of dates with actual time slot conflicts.
@@ -346,7 +406,6 @@ def _get_user_conflict_dates_with_slots(
             _get_slot_for_occurrence(occ)
         )
 
-    new_slots = _get_new_entry_slots(new_dates, time_flags)
     return _dates_with_slot_overlap(new_slots, existing_slots_by_date)
 
 

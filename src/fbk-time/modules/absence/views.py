@@ -29,6 +29,7 @@ from .services import (
     restore_occurrence,
     get_active_users_for_form,
     get_active_categories,
+    get_legend_categories,
     get_substitute_choices,
     get_absences_list,
     default_list_range,
@@ -172,6 +173,9 @@ def calendar():
 
     users = get_active_users_for_form()
     categories = get_active_categories()
+    legend_categories = get_legend_categories(
+        categories, (occ['category'] for occ in expanded_occurrences)
+    )
 
     return render_template(
         'absences/calendar.html',
@@ -182,6 +186,7 @@ def calendar():
         holidays=holidays,
         users=users,
         categories=categories,
+        legend_categories=legend_categories,
         filters=filters,
         today=today,
         week_start=week_start,

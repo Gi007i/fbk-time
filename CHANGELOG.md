@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.1] - 2026-09-30
+
+### Fixed
+- Serie bearbeiten: Zeitkonflikt durch gelöschte oder geänderte Termine der Serie
+- Legende ohne deaktivierte Kategorien, deren Einträge angezeigt werden
+- Upgrade-Skript von v1.6.0 brach bei nicht beschreibbarer `settings.json` nach der Datenbankänderung ab; nachgezogen, Schemaänderungen unverändert
+
 ## [2.0.0] - 2026-09-29
 
 ### Added

@@ -9,7 +9,7 @@ from sqlalchemy.orm import selectinload
 from core.db import db
 from modules.absence.models import Absence
 from modules.absence.recurrence import recurrence_service
-from modules.absence.services import filter_occurrences
+from modules.absence.services import filter_occurrences, get_legend_categories
 from modules.absence.timeslots import occurrence_slot, slots_overlap
 from modules.auth.models import User, UserRole, UserStatus
 from modules.category.models import Category
@@ -465,8 +465,8 @@ def get_team_overview_data(
             has_substitute) shared with the calendar and list views.
 
     Returns:
-        Dict with users, all_users, categories, matrix, month_start and
-        month_end.
+        Dict with users, all_users, categories, legend_categories, matrix,
+        month_start and month_end.
     """
     filters = filters or {}
     user_ids = filters.get('user_ids')
@@ -523,10 +523,17 @@ def get_team_overview_data(
         matched_user_ids = {user_id for user_id, _ in matrix}
         users = [user for user in users if user.id in matched_user_ids]
 
+    legend_categories = get_legend_categories(categories, (
+        category
+        for entry in matrix.values()
+        for category in (entry['category'], entry['category_afternoon'])
+    ))
+
     return {
         'users': users,
         'all_users': all_users,
         'categories': categories,
+        'legend_categories': legend_categories,
         'matrix': matrix,
         'month_start': month_start,
         'month_end': month_end

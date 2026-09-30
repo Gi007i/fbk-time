@@ -2,7 +2,7 @@
 
 from calendar import monthrange
 from datetime import date
-from typing import Literal, Optional, Tuple
+from typing import Iterable, Literal, Optional, Tuple
 
 from flask import current_app, abort
 from sqlalchemy import func, select
@@ -695,6 +695,30 @@ def get_active_categories() -> list[Category]:
     return db.session.scalars(
         select(Category).filter_by(active=True).order_by(Category.sort_order)
     ).all()
+
+
+def get_legend_categories(
+    active_categories: Iterable[Category],
+    shown_categories: Iterable
+) -> list[Category]:
+    """Collect the categories to explain in a legend.
+
+    Inactive categories still appear through existing absences, so every
+    category that occurs is listed next to the active ones.
+
+    Args:
+        active_categories: All active categories.
+        shown_categories: Categories of the displayed entries; None is ignored.
+
+    Returns:
+        Categories without duplicates, ordered by sort order and name.
+    """
+    by_id = {cat.id: cat for cat in active_categories}
+    for category in shown_categories:
+        if category is not None:
+            by_id[category.id] = category
+    # The column is nullable; None would not compare with an int.
+    return sorted(by_id.values(), key=lambda cat: (cat.sort_order or 0, cat.name))
 
 
 def get_substitute_choices(exclude_user_id: Optional[int] = None) -> list[User]:
